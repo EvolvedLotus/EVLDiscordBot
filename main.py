@@ -10,13 +10,13 @@ bot = commands.Bot(command_prefix='/', intents=discord.Intents.all())
 client = discord.Client(intents=discord.Intents.all())
 
 # Required role ID to execute commands
-required_role_id = 943552706319114333
+required_role_id = 000000000000000000
 
 # Category ID where channels will be created
-category_id = 975448514198929408
+category_id = 000000000000000000
 
 # Category ID where channels will be sent to archive
-file_category_id = 975470536169758812
+file_category_id = 000000000000000000
 
 # Dictionary that stores information about ongoing tasks
 # The key is the name of the channel and the value is a tuple with the channel ID, the creation time, and the role name
@@ -116,14 +116,16 @@ async def close_task(ctx, name: str):
         if role in member.roles:
             await member.remove_roles(role)
 
-    # Move the channel to the specified category and delete the role
-    category = bot.get_channel(975470536169758812)
-    await channel.edit(category=category)
+    # Delete the channel
+    await channel.delete()
+
+    # Delete the role
     await role.delete()
 
     # Remove the task from the tasks dictionary
     del tasks[name]
 
-    await ctx.send(f'Task {name} closed and moved to the specified category successfully.')
+    await ctx.send(f'Task {name} closed and deleted successfully.')
 
-bot.run("YOUR_BOT_TOKEN")
+
+bot.run("YOUR_DISCORD_BOT_TOKEN_HERE")
