@@ -62,10 +62,10 @@ async def countdown(channel, expiration_time):
         formatted_time = str(time_remaining).split('.')[0]
         await channel.send(f'⏳ Remaining time: {formatted_time}')
 
-        if time_remaining.total_seconds() % 7200 == 0:
+        if time_remaining.total_seconds() % 600 == 0:
             await channel.send("Complete to earn rewards!")
 
-        await asyncio.sleep(600)
+        await asyncio.sleep(1800)
 
 @bot.event
 async def on_message(message):
@@ -122,34 +122,30 @@ async def close_task(ctx, name: str):
 
     worksheet = gc.open_by_key(spreadsheet_id).sheet1
 
-    # Verificar si la hoja ya tiene encabezados de columna
     if len(worksheet.get("A1:F1")) == 0:
-        # Agregar encabezados de columna
         headers = ["Task name", "URL", "Description", "Reward", "Username", ]
         worksheet.append_row(headers)
         
-        # Obtener el rango de celdas para los encabezados
         header_range = worksheet.range('A1:F1')
 
-        # Aplicar formato de color de fondo
         format_cell_range(worksheet, header_range, CellFormat(backgroundColor=(1, 0.8, 0.4)))
 
-    # Obtener los datos del usuario que completó la tarea
     users_completed = ", ".join(users_completed)
     payment_value = task_data["Reward"]
     total_payment = len(users_completed.split(", ")) * float(payment_value)
 
-    # Agregar los datos del usuario a la hoja de cálculo
     row_data = [name, task_data["URL"], task_data["Description"], payment_value, ctx.author.name, datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')]
     worksheet.append_row(row_data)
 
-    # Actualizar la columna de pagos
     payment_column = worksheet.find("Reward").col
     worksheet.update_cell(len(worksheet.col_values(payment_column)), payment_column, total_payment)
 
     del tasks[name]
 
     await ctx.send(f'The {name} task was closed successfully ✅')
+
+    await channel.delete()
+    await role.delete()
 
 
 bot.run("YOUR_DISCORD_BOT_TOKEN_HERE")
