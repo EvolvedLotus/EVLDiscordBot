@@ -7,7 +7,9 @@ a certain task of any scope.
 
 # How to use this bot
 
-First we need to create a bot on the [Discord developer site](https://discord.com/developers/applications). 
+Create an API on Google Cloud Console to use the Spreadsheet API. Go to [their platform here](https://console.cloud.google.com/) and use [this tutorial](https://handsondataviz.org/google-sheets-api-key.html) to get your API running and download your JSON file with the requested keys.
+
+We need to create a bot on the [Discord developer site](https://discord.com/developers/applications). 
 We need administrator permissions for this bot given the nature of the tasks it performs. 
 
 All the detailed steps to create your bot can be followed in the [documentation for discord.py](https://discordpy.readthedocs.io/en/stable/discord.html).
@@ -21,7 +23,11 @@ in order to give your bot the proper instructions:
 
 `file_category_id` : Category ID where finished tasks (channels) will be sent. Think on this like a "File" or "Folder".
 
+`spreadsheet_id` = Place here the route of your Google credentials for the service account.
+
 `YOUR_BOT_TOKEN`: With the token you got From Discord developer site. It will look similar to this one `MTHer23sAat2.GEa2Kc.nq8hbnz53Lvk7rLQlpM1NX9XN7i09_WH4OKPfo`
+
+NOTE: Install the requirements with the following command `pip install -r requirements.txt`
 
 # Commands
 
@@ -66,12 +72,10 @@ task.
 # Better practices & some features
 – You can use the commands in a private channel
 
-– Chronometer works as intended. It will be sending messages each 10 minutes on each task remembering users to do the task.
+– Chronometer works as intended. It will be sending messages each two hours on each task remembering users to do the task. Modify this time at your liking on `if time_remaining.total_seconds() % 7200 == 0...`
 
 # Known bugs or missing features
 – Must be always online while tasks are open because it won't recognize the channels if the bot is turned off.
-
-– The creation for a persistent database is pending. This for keeping external registry about community tasks.
 
 – Discord native commands aren't enabled in this version, so all the the commands should be sent in a complete sentence.
 
