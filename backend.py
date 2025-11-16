@@ -97,16 +97,41 @@ def set_bot_ready():
 app = Flask(__name__, static_folder='.')
 
 # Configure CORS for security - allow frontend origins
+# Only allow production domains, no localhost
+allowed_origins = []
+
+# Add Railway public domain if available
+railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
+if railway_domain:
+    railway_url = f"https://{railway_domain}"
+    allowed_origins.append(railway_url)
+
+# Add Netlify domain if API_BASE_URL is set (extract domain)
+api_base_url = os.getenv('API_BASE_URL')
+if api_base_url:
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(api_base_url)
+        netlify_domain = f"{parsed.scheme}://{parsed.netloc}"
+        if netlify_domain not in allowed_origins:
+            allowed_origins.append(netlify_domain)
+    except:
+        pass
+
+# If no production domains found, allow all origins (for development)
+if not allowed_origins:
+    allowed_origins = ['*']
+
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:5000", "http://127.0.0.1:5000", "http://localhost:3000", "http://127.0.0.1:3000"],
+        "origins": allowed_origins,
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "X-Admin-Token", "Cache-Control"],
         "supports_credentials": True,
         "expose_headers": ["Content-Type", "X-CSRFToken"]
     },
     r"/api/stream": {
-        "origins": ["http://localhost:5000", "http://127.0.0.1:5000", "http://localhost:3000", "http://127.0.0.1:3000"],
+        "origins": allowed_origins,
         "methods": ["GET"],
         "allow_headers": ["Cache-Control"],
         "supports_credentials": False,
