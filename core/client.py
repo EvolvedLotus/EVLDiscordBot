@@ -5,7 +5,6 @@ Discord client initialization and configuration
 import discord
 from discord.ext import commands
 import os
-from dotenv import load_dotenv
 from .data_manager import DataManager
 
 # Global data manager instance
@@ -14,8 +13,14 @@ data_manager = DataManager()
 def create_bot() -> commands.Bot:
     """Create and configure the Discord bot"""
 
-    # Load environment variables
-    load_dotenv()
+    # Load environment variables (only for local development)
+    if os.getenv('ENVIRONMENT') != 'production':
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass  # dotenv not installed in production
+
     TOKEN = os.getenv('DISCORD_TOKEN')
 
     if not TOKEN:
@@ -49,8 +54,15 @@ async def get_prefix(bot, message):
 
 def get_token() -> str:
     """Get Discord bot token from environment"""
-    load_dotenv()
+    # Load environment variables (only for local development)
+    if os.getenv('ENVIRONMENT') != 'production':
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass  # dotenv not installed in production
+
     token = os.getenv('DISCORD_TOKEN')
     if not token:
-        raise ValueError("DISCORD_TOKEN not found in .env file")
+        raise ValueError("DISCORD_TOKEN not found in environment variables")
     return token

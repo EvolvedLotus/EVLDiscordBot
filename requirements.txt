@@ -1,25 +1,30 @@
 # Core Framework
-flask>=2.3.3
+flask>=3.0.0
 flask-cors>=4.0.0
-werkzeug>=2.3.7
+werkzeug>=3.0.0
 
 # Discord Integration
 discord.py>=2.3.2
 aiohttp>=3.9.0
 
+# Database
+supabase>=2.0.0
+
 # Authentication & Security
+flask-jwt-extended>=4.6.0
 PyJWT>=2.8.0
-bcrypt>=4.0.1
+bcrypt>=4.1.0
 cryptography>=41.0.0
-
-# Environment & Configuration
-python-dotenv>=1.0.0
-
-# System Monitoring
-psutil>=5.9.0
 
 # Date/Time Handling
 python-dateutil>=2.8.2
+pytz>=2023.3
 
-# Optional but Recommended
+# Environment & Configuration (ONLY for local development)
+# python-dotenv>=1.0.0  # Commented out - not needed in production
+
+# System Monitoring (optional for production)
+# psutil>=5.9.0  # Commented out - not needed in production
+
+# Production WSGI Server
 gunicorn>=21.2.0

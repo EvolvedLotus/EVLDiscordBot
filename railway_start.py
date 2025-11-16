@@ -8,7 +8,6 @@ import os
 import sys
 import asyncio
 import logging
-from dotenv import load_dotenv
 
 # Setup logging
 logging.basicConfig(
@@ -17,8 +16,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (only for local development)
+if os.getenv('ENVIRONMENT') != 'production':
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass  # dotenv not installed in production
 
 # Verify token exists
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')

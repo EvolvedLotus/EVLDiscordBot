@@ -9,7 +9,6 @@ import threading
 from datetime import datetime, timedelta, timezone
 import subprocess
 import logging
-from dotenv import load_dotenv
 from collections import defaultdict
 import jwt
 import hashlib
@@ -20,7 +19,13 @@ import discord
 from discord import Embed
 from discord.ui import View, Button
 
-load_dotenv()
+# Load environment variables (only for local development)
+if os.getenv('ENVIRONMENT') != 'production':
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass  # dotenv not installed in production
 
 # Import data manager for server-specific data access
 try:
@@ -118,7 +123,9 @@ COMMANDS_FILE = os.path.join(DATA_DIR, 'commands.json')
 TASKS_FILE = os.path.join(DATA_DIR, 'tasks.json')
 
 # JWT Configuration
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', secrets.token_hex(32))
+JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
+if not JWT_SECRET_KEY:
+    raise ValueError("JWT_SECRET_KEY environment variable not set")
 JWT_ALGORITHM = 'HS256'
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 30
 JWT_REFRESH_TOKEN_EXPIRE_DAYS = 7

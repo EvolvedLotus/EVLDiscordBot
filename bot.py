@@ -6,7 +6,6 @@ import threading
 from datetime import datetime
 import discord
 from discord.ext import commands, tasks
-from dotenv import load_dotenv
 import os
 
 # Import components
@@ -21,8 +20,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-load_dotenv()
+# Load environment variables (only for local development)
+if os.getenv('ENVIRONMENT') != 'production':
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass  # dotenv not installed in production
+
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 
 if not DISCORD_TOKEN:
