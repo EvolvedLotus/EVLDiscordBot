@@ -130,20 +130,27 @@ This is where your Discord bot will run continuously.
     - Authorize Railway to access your GitHub account
     - Complete account setup
 
-[ ] Step 3.2: Create New Project
-    - Click "New Project"
+[ ] Step 3.2: Create Your Own Repository
+    - Create a NEW GitHub repository for your Discord bot (do NOT fork existing repos)
+    - Repository name: your-bot-name (e.g., my-discord-bot)
+    - Make it public or private (your choice)
+    - Upload ALL the bot files to this new repository
+    - Push to GitHub: git add . && git commit -m "Initial commit" && git push origin main
+
+[ ] Step 3.4: Create Railway Project
+    - Click "New Project" in Railway
     - Select "Deploy from GitHub repo"
     - Authorize Railway to access your repositories
-    - Select your Discord bot repository: ___________________________
+    - Select your NEW repository (the one you just created)
     - Railway will automatically detect it's a Python project
 
-[ ] Step 3.3: Configure Build Settings
+[ ] Step 3.5: Configure Build Settings
     Railway auto-detects Python. Verify these settings:
     - Build Command: pip install -r requirements.txt
     - Start Command: python bot.py
     (Railway will detect these automatically from your code)
 
-[ ] Step 3.4: Add Environment Variables
+[ ] Step 3.6: Add Environment Variables
     In Railway Dashboard, go to Variables tab and add:
 
     DISCORD_TOKEN=[paste from Section 2.2]
@@ -156,29 +163,29 @@ This is where your Discord bot will run continuously.
     ADMIN_PASSWORD=[Your admin password - will be hashed]
     ENVIRONMENT=production
 
-[ ] Step 3.5: Deploy Bot
+[ ] Step 3.7: Deploy Bot
     - Railway automatically deploys after you add environment variables
     - Wait 2-3 minutes for initial deployment
     - Check "Deployments" tab for build logs
     - Look for "Deployment successful" message
 
-[ ] Step 3.6: Verify Bot is Online
+[ ] Step 3.8: Verify Bot is Online
     - Go to your Discord server
     - Bot should now show as "Online" (green status)
     - Try running: /help
     - Bot should respond immediately
 
-[ ] Step 3.7: Monitor Resource Usage
+[ ] Step 3.9: Monitor Resource Usage
     - Railway gives $5 credit per month (renews monthly)
     - Check usage in Railway Dashboard > Metrics
     - A small Discord bot typically uses $2-3/month
     - Set up billing alerts if needed
 
-[ ] Step 3.8: Copy Railway URLs
+[ ] Step 3.10: Copy Railway URLs
     RAILWAY_PROJECT_URL=https://railway.app/project/[your-project-id]
     RAILWAY_BOT_URL=[Your bot's deployment URL from Railway]
 
-[ ] Step 3.9: Enable Automatic Restarts
+[ ] Step 3.11: Enable Automatic Restarts
     - Railway automatically restarts your bot if it crashes
     - This is enabled by default - no configuration needed
     - You can view restart history in the Deployments tab
