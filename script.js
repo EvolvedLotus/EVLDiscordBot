@@ -1,5 +1,13 @@
 // Discord Bot CMS Dashboard JavaScript
 
+// API Configuration - UPDATE THIS WITH YOUR RAILWAY BACKEND URL
+const API_BASE_URL = 'https://your-railway-app.railway.app'; // Replace with your actual Railway URL
+
+// Helper function to build API URLs
+function apiUrl(endpoint) {
+    return `${API_BASE_URL}${endpoint}`;
+}
+
 // Global variables
 let currentTab = 'overview';
 let botStatus = 'offline';
@@ -105,7 +113,7 @@ async function login(event) {
     try {
         showLoginError(''); // Clear any previous errors
 
-        const response = await fetch('/api/auth/login', {
+        const response = await fetch(apiUrl('/api/auth/login'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -156,7 +164,7 @@ async function logout() {
     try {
         // Call logout endpoint if available
         if (authToken) {
-            await fetch('/api/auth/logout', {
+            await fetch(apiUrl('/api/auth/logout'), {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${authToken}`
@@ -190,7 +198,7 @@ async function validateToken() {
     }
 
     try {
-        const response = await fetch('/api/auth/validate', {
+        const response = await fetch(apiUrl('/api/auth/validate'), {
             headers: {
                 'Authorization': `Bearer ${authToken}`
             }
@@ -219,7 +227,7 @@ async function refreshAccessToken() {
     }
 
     try {
-        const response = await fetch('/api/auth/refresh', {
+        const response = await fetch(apiUrl('/api/auth/refresh'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -379,7 +387,7 @@ async function loadTabData(tabName) {
 // Load overview data
 async function loadOverviewData() {
     try {
-        const response = await fetch('/api/status');
+        const response = await fetch(apiUrl('/api/status'));
         const data = await response.json();
 
         // Update dashboard content with overview data
@@ -427,7 +435,7 @@ async function loadOverviewData() {
 async function loadLogs() {
     try {
         const logLevel = document.getElementById('log-level').value;
-        const response = await fetch(`/api/logs?level=${logLevel}`);
+        const response = await fetch(apiUrl(`/api/logs?level=${logLevel}`));
         const logs = await response.json();
 
         const logContainer = document.getElementById('logs-content');
@@ -447,7 +455,7 @@ async function loadLogs() {
 // Load commands
 async function loadCommands() {
     try {
-        const response = await fetch('/api/commands');
+        const response = await fetch(apiUrl('/api/commands'));
         const commands = await response.json();
 
         const commandList = document.getElementById('command-list');
@@ -524,7 +532,7 @@ async function loadSettings() {
         let html = '<div class="settings-sections">';
 
         // Global Settings
-        const globalResponse = await fetch('/api/settings');
+        const globalResponse = await fetch(apiUrl('/api/settings'));
         const globalSettings = await globalResponse.json();
 
         html += `
@@ -640,7 +648,7 @@ async function restartBot() {
 async function clearLogs() {
     if (confirm('Are you sure you want to clear all logs?')) {
         try {
-            const response = await fetch('/api/logs', { method: 'DELETE' });
+            const response = await fetch(apiUrl('/api/logs'), { method: 'DELETE' });
             if (response.ok) {
                 alert('Logs cleared');
                 loadLogs();
@@ -656,7 +664,7 @@ async function clearLogs() {
 
 async function exportData() {
     try {
-        const response = await fetch('/api/export');
+        const response = await fetch(apiUrl('/api/export'));
         const data = await response.json();
 
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -685,7 +693,7 @@ async function addCommand() {
     }
 
     try {
-        const result = await fetch('/api/commands', {
+        const result = await fetch(apiUrl('/api/commands'), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -736,7 +744,7 @@ async function saveSettings() {
 
     try {
         // Save global settings
-        const globalResponse = await fetch('/api/settings', {
+        const globalResponse = await fetch(apiUrl('/api/settings'), {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
@@ -2922,7 +2930,7 @@ async function updateBotStatus() {
     const streamingUrl = document.getElementById('streaming-url').value.trim();
 
     try {
-        const response = await fetch('/api/bot/status', {
+        const response = await fetch(apiUrl('/api/bot/status'), {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
@@ -2951,7 +2959,7 @@ async function updateBotStatus() {
 // Load servers list
 async function loadServers() {
     try {
-        const response = await fetch('/api/servers');
+        const response = await fetch(apiUrl('/api/servers'));
         const data = await response.json();
         servers = data.servers || [];
 
@@ -3064,7 +3072,7 @@ function initRealtimeUpdates() {
     updateConnectionStatus('connecting', `Attempting to connect... (${reconnectAttempts + 1}/${maxReconnectAttempts})`);
 
     // Build SSE URL with authentication and filters
-    let sseUrl = '/api/stream';
+    let sseUrl = apiUrl('/api/stream');
     const params = new URLSearchParams();
 
     // Add server filter if selected
@@ -5900,7 +5908,7 @@ async function setBotStatus(status) {
 // Update bot status display
 async function updateBotStatusDisplay() {
     try {
-        const response = await fetch('/api/status');
+        const response = await fetch(apiUrl('/api/status'));
         const data = await response.json();
 
         const statusElement = document.getElementById('current-bot-status');
