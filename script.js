@@ -1,7 +1,9 @@
 // Discord Bot CMS Dashboard JavaScript
 
-// API Configuration - UPDATE THIS WITH YOUR RAILWAY BACKEND URL
-const API_BASE_URL = 'https://your-railway-app.railway.app'; // Replace with your actual Railway URL
+// API Configuration - Uses environment variable from Netlify
+const API_BASE_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:3000'  // Local development
+    : (process.env.API_BASE_URL || 'https://your-railway-app.railway.app'); // Production
 
 // Helper function to build API URLs
 function apiUrl(endpoint) {
