@@ -6,6 +6,10 @@
   functions = "functions"
   publish = "."
 
+# Environment variables for the frontend
+[build.environment]
+  API_BASE_URL = "https://your-railway-app.railway.app"
+
 [[redirects]]
   # Redirect all non-file requests to index.html for SPA routing
   from = "/*"
