@@ -1,0 +1,29 @@
+{
+  "users": {
+    "125383879928889345": {
+      "balance": 100,
+      "total_earned": 100,
+      "total_spent": 0,
+      "created_at": "2025-11-15T13:44:02.224044",
+      "is_active": false,
+      "left_at": "2025-11-16T01:50:03.207302"
+    }
+  },
+  "inventory": {},
+  "shop_items": {
+    "cookie": {
+      "name": "🍪 Cookie",
+      "description": "A delicious cookie",
+      "price": 100,
+      "category": "consumable",
+      "stock": -1,
+      "is_active": true,
+      "channel_id": "1438926551046557867",
+      "message_id": "1438959948183633950"
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "total_currency": 0
+  }
+}

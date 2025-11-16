@@ -1,0 +1,59 @@
+{
+  "users": {
+    "1000": {
+      "balance": 0,
+      "total_earned": 0,
+      "total_spent": 0,
+      "created_at": "2025-11-14T02:26:59.762843",
+      "is_active": false,
+      "left_at": "2025-11-16T01:50:03.211460"
+    },
+    "272800672397656075": {
+      "balance": 5500,
+      "total_earned": 6300,
+      "total_spent": 800,
+      "last_daily": "2025-11-14T11:00:59.093332",
+      "created_at": "2025-11-14T02:27:14.349963"
+    },
+    "1155751362764742676": {
+      "balance": 3000,
+      "total_earned": 3000,
+      "total_spent": 0,
+      "created_at": "2025-11-14T02:35:53.237884"
+    },
+    "1188963432402260039": {
+      "balance": 0,
+      "total_earned": 100,
+      "total_spent": 100,
+      "last_daily": "2025-11-15T21:37:52.350164Z",
+      "created_at": "2025-11-15T16:37:05.100624"
+    }
+  },
+  "inventory": {
+    "272800672397656075": {
+      "cookie": 1
+    },
+    "1188963432402260039": {
+      "cookie": 1
+    }
+  },
+  "shop_items": {
+    "cookie": {
+      "name": "\ud83c\udf6a Cookie",
+      "description": "A delicious cookie",
+      "price": 100,
+      "category": "consumable",
+      "stock": -1,
+      "is_active": true,
+      "channel_id": "1438926597808722092",
+      "message_id": "1438959978122711182",
+      "metadata": {
+        "sales_count": 2
+      }
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "total_currency": 8600
+  }
+}

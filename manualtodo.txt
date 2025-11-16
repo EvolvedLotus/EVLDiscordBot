@@ -1,0 +1,390 @@
+=====================================
+MANUAL CONFIGURATION TODO
+=====================================
+Complete ALL steps below BEFORE running automated deployment.
+DO NOT skip any steps. Check each box as you complete it.
+
+=====================================
+SECTION 1: SUPABASE DATABASE SETUP
+=====================================
+
+[ ] Step 1.1: Create Supabase Project
+    - Go to: https://supabase.com/dashboard
+    - Click "New Project"
+    - Project Name: taskbot_production
+    - Database Password: [CREATE A STRONG PASSWORD - SAVE THIS SECURELY]
+    - Region: Choose closest to your users (e.g., us-east-1)
+    - Click "Create new project"
+    - Wait for project to be ready (2-3 minutes)
+
+[ ] Step 1.2: Copy Supabase Credentials
+    - Go to Project Settings > API
+    - Copy these values (keep them secure - you'll need them later):
+
+    SUPABASE_URL=https://[your-project-id].supabase.co
+    SUPABASE_ANON_KEY=[your-anon-key]
+
+    - Go to Project Settings > API > Service Role (⚠️ KEEP SECRET)
+
+    SUPABASE_SERVICE_ROLE_KEY=[your-service-role-key]
+
+[ ] Step 1.3: Apply Database Schema
+    - In Supabase Dashboard, go to SQL Editor
+    - Click "New Query"
+    - Copy the ENTIRE SQL schema from dorn.txt (the complete schema after "Complete Production SQL Schema Generated Above")
+    - Paste it into the SQL Editor
+    - Click "Run" (or press Ctrl+Enter)
+    - Verify no errors appear in the results
+    - Check "Table Editor" tab to confirm all tables were created
+
+[ ] Step 1.4: Verify Database Setup
+    - Go to Table Editor in Supabase Dashboard
+    - Confirm these tables exist (you should see all 14 tables):
+      [ ] guilds
+      [ ] users
+      [ ] shop_items
+      [ ] inventory
+      [ ] tasks
+      [ ] user_tasks
+      [ ] transactions
+      [ ] announcements
+      [ ] task_announcements
+      [ ] embeds
+      [ ] embed_templates
+      [ ] admin_users
+      [ ] cache
+      [ ] sessions
+
+=====================================
+SECTION 2: DISCORD BOT SETUP
+=====================================
+
+[ ] Step 2.1: Create/Access Discord Application
+    - Go to: https://discord.com/developers/applications
+    - Click "New Application" OR select existing bot application
+    - Application Name: Task Bot Production
+    - Click "Create" (if new) or proceed to existing app
+
+[ ] Step 2.2: Configure Bot Settings
+    - Go to "Bot" tab (left sidebar)
+    - Click "Reset Token" (if existing) or view token
+    - Copy the token (⚠️ KEEP THIS SECRET):
+
+    DISCORD_TOKEN=[your-bot-token]
+
+    - Scroll to "Privileged Gateway Intents"
+    - Enable these intents (required for the bot to work):
+      [ ] Server Members Intent
+      [ ] Message Content Intent
+      [ ] Presence Intent (if needed)
+    - Click "Save Changes"
+
+[ ] Step 2.3: Copy Application ID
+    - Go to "General Information" tab
+    - Copy the Application ID:
+
+    DISCORD_APPLICATION_ID=[your-application-id]
+
+[ ] Step 2.4: Set Bot Permissions
+    - Go to "Bot" tab
+    - Under "Bot Permissions" section, enable:
+      [ ] Read Messages/View Channels
+      [ ] Send Messages
+      [ ] Send Messages in Threads
+      [ ] Embed Links
+      [ ] Attach Files
+      [ ] Read Message History
+      [ ] Use Slash Commands
+      [ ] Manage Messages (optional - for cleaning up bot messages)
+      [ ] Manage Roles (optional - for task completion rewards)
+      [ ] Add Reactions (optional)
+    - Click "Save Changes"
+
+[ ] Step 2.5: Generate Invite Link
+    - Go to "OAuth2" > "URL Generator" tab
+    - Select Scopes:
+      [ ] bot
+      [ ] applications.commands
+    - Select Permissions (same as Step 2.4 above)
+    - Copy the Generated URL at the bottom
+    - Open the URL in a new browser tab
+    - Select your Discord server from the dropdown
+    - Click "Authorize"
+    - Complete the CAPTCHA if required
+
+[ ] Step 2.6: Verify Bot Joined Server
+    - Check your Discord server
+    - The bot should appear in the member list (may show as offline initially)
+    - Try running a simple command like /help to test
+
+=====================================
+SECTION 3: RAILWAY.APP SETUP (Discord Bot Hosting)
+=====================================
+
+Railway.app provides TRUE 24/7 hosting with $5 FREE credit per month.
+This is where your Discord bot will run continuously.
+
+[ ] Step 3.1: Create Railway Account
+    - Go to: https://railway.app
+    - Click "Login with GitHub"
+    - Authorize Railway to access your GitHub account
+    - Complete account setup
+
+[ ] Step 3.2: Create New Project
+    - Click "New Project"
+    - Select "Deploy from GitHub repo"
+    - Authorize Railway to access your repositories
+    - Select your Discord bot repository: ___________________________
+    - Railway will automatically detect it's a Python project
+
+[ ] Step 3.3: Configure Build Settings
+    Railway auto-detects Python. Verify these settings:
+    - Build Command: pip install -r requirements.txt
+    - Start Command: python bot.py
+    (Railway will detect these automatically from your code)
+
+[ ] Step 3.4: Add Environment Variables
+    In Railway Dashboard, go to Variables tab and add:
+
+    DISCORD_TOKEN=[paste from Section 2.2]
+    DISCORD_APPLICATION_ID=[paste from Section 2.3]
+    SUPABASE_URL=[paste from Section 1.2]
+    SUPABASE_ANON_KEY=[paste from Section 1.2]
+    SUPABASE_SERVICE_ROLE_KEY=[paste from Section 1.2]
+    JWT_SECRET_KEY=[Generate with command from Section 4.6]
+    ADMIN_USERNAME=[Your admin username]
+    ADMIN_PASSWORD=[Your admin password - will be hashed]
+    ENVIRONMENT=production
+
+[ ] Step 3.5: Deploy Bot
+    - Railway automatically deploys after you add environment variables
+    - Wait 2-3 minutes for initial deployment
+    - Check "Deployments" tab for build logs
+    - Look for "Deployment successful" message
+
+[ ] Step 3.6: Verify Bot is Online
+    - Go to your Discord server
+    - Bot should now show as "Online" (green status)
+    - Try running: /help
+    - Bot should respond immediately
+
+[ ] Step 3.7: Monitor Resource Usage
+    - Railway gives $5 credit per month (renews monthly)
+    - Check usage in Railway Dashboard > Metrics
+    - A small Discord bot typically uses $2-3/month
+    - Set up billing alerts if needed
+
+[ ] Step 3.8: Copy Railway URLs
+    RAILWAY_PROJECT_URL=https://railway.app/project/[your-project-id]
+    RAILWAY_BOT_URL=[Your bot's deployment URL from Railway]
+
+[ ] Step 3.9: Enable Automatic Restarts
+    - Railway automatically restarts your bot if it crashes
+    - This is enabled by default - no configuration needed
+    - You can view restart history in the Deployments tab
+
+=====================================
+IMPORTANT RAILWAY NOTES
+=====================================
+
+✅ ADVANTAGES:
+   TRUE 24/7 hosting (no sleeping)
+   $5/month FREE credit (renews monthly)
+   Automatic deployments from GitHub
+   Automatic crash recovery
+   Simple dashboard interface
+   Built-in metrics and logging
+
+⚠️ MONITORING:
+   Check Railway Dashboard monthly for usage
+   Bot typically uses $2-3/month
+   $5 credit is usually more than enough
+   If you exceed $5, Railway will charge your payment method
+
+🔄 AUTOMATIC DEPLOYS:
+   Every git push to main/master triggers auto-deploy
+   Railway rebuilds and restarts your bot
+   Zero-downtime deployments
+   View deployment logs in Dashboard
+
+📊 LOGS:
+   View real-time logs in Railway Dashboard > Logs tab
+   Logs persist for 7 days on free plan
+   Use logs to debug any bot issues
+
+=====================================
+SECTION 4: NETLIFY SETUP
+=====================================
+
+[ ] Step 4.1: Create Netlify Account
+    - Go to: https://app.netlify.com/signup
+    - Sign up with GitHub (recommended) or email
+    - Authorize Netlify to access your GitHub account
+    - Complete account setup
+
+[ ] Step 4.2: Connect Repository
+    - Click "Add new site" > "Import an existing project"
+    - Choose "GitHub" as the source
+    - Authorize Netlify if prompted
+    - Select your repository: [your-github-username]/task-bot-discord
+    - Click "Continue"
+
+[ ] Step 4.3: Configure Build Settings
+    - Build command: Leave blank (will be updated after code transformation)
+    - Publish directory: Leave blank (will be updated after code transformation)
+    - Click "Deploy site"
+    - Wait for initial deployment (it may fail - that's expected at this stage)
+    - Note the temporary Netlify URL (will be updated later)
+
+[ ] Step 4.4: Copy Netlify Site URL
+    - After deployment attempt, go to Site Settings > Domain management
+    - Copy the site URL (it will look like: https://random-name.netlify.app)
+
+    NETLIFY_SITE_URL=https://[your-site-name].netlify.app
+    NETLIFY_FUNCTIONS_URL=https://[your-site-name].netlify.app/.netlify/functions
+
+[ ] Step 4.5: Configure Environment Variables
+    - In Netlify Dashboard, go to Site Settings > Environment Variables
+    - Click "Add a variable" for EACH of the following:
+    - Set Scope to "All scopes" for each variable
+
+    Key: DISCORD_TOKEN
+    Value: [paste from Section 2.2]
+    Scopes: All scopes
+
+    Key: DISCORD_APPLICATION_ID
+    Value: [paste from Section 2.3]
+    Scopes: All scopes
+
+    Key: SUPABASE_URL
+    Value: [paste from Section 1.2]
+    Scopes: All scopes
+
+    Key: SUPABASE_ANON_KEY
+    Value: [paste from Section 1.2]
+    Scopes: All scopes
+
+    Key: SUPABASE_SERVICE_ROLE_KEY
+    Value: [paste from Section 1.2]
+    Scopes: All scopes
+
+    Key: JWT_SECRET_KEY
+    Value: [Generate a secure random string - see instructions below]
+    Scopes: All scopes
+
+    Key: ADMIN_USERNAME
+    Value: admin
+    Scopes: All scopes
+
+    Key: ADMIN_PASSWORD
+    Value: [Choose a strong password - will be hashed automatically]
+    Scopes: All scopes
+
+    Key: ENVIRONMENT
+    Value: production
+    Scopes: All scopes
+
+[ ] Step 4.6: Generate JWT Secret
+    Run this command in your terminal to generate a secure JWT secret:
+
+    Windows (PowerShell):
+    [System.Web.Security.Membership]::GeneratePassword(64, 10)
+
+    Mac/Linux:
+    openssl rand -hex 32
+
+    OR Python:
+    python -c "import secrets; print(secrets.token_hex(32))"
+
+    Copy the generated string and use it as the JWT_SECRET_KEY value above.
+
+=====================================
+SECTION 5: VERIFICATION CHECKLIST
+=====================================
+
+Before proceeding to automated deployment, verify:
+
+Database:
+[ ] Supabase project created and active
+[ ] All 14 tables created successfully (check Table Editor)
+[ ] No SQL errors during schema application
+[ ] Can access Supabase dashboard without issues
+
+Discord:
+[ ] Bot application created in Discord Developer Portal
+[ ] All required intents enabled (Server Members, Message Content)
+[ ] Bot token copied correctly (keep it secure!)
+[ ] Application ID copied correctly
+[ ] Bot invited to at least one test server
+[ ] Bot appears in server member list
+[ ] Test command works (try /help)
+
+Railway (Discord Bot):
+[ ] Railway account created
+[ ] Repository connected to Railway
+[ ] All environment variables added to Railway
+[ ] Bot deployed successfully
+[ ] Bot shows ONLINE in Discord (green status)
+[ ] /help command works
+
+Netlify (Dashboard):
+[ ] Repository connected successfully
+[ ] Site created (even if initial deploy failed)
+[ ] ALL environment variables added (count: 9 variables)
+[ ] JWT_SECRET_KEY generated and added
+[ ] ADMIN_PASSWORD set (strong password chosen)
+[ ] Site URL noted for later reference
+
+Security:
+[ ] No credentials visible in any public locations
+[ ] SUPABASE_SERVICE_ROLE_KEY kept completely secret
+[ ] DISCORD_TOKEN kept completely secret
+[ ] JWT_SECRET_KEY generated securely
+[ ] This manualtodo.txt file will be deleted after deployment
+
+=====================================
+SECTION 6: IMPORTANT SECURITY NOTES
+=====================================
+
+⚠️  CRITICAL SECURITY REMINDERS:
+
+NEVER commit manualtodo.txt to git after filling it in
+NEVER share your filled manualtodo.txt file
+NEVER share your SUPABASE_SERVICE_ROLE_KEY
+NEVER share your DISCORD_TOKEN
+Store passwords in a secure password manager
+This file will be automatically deleted after deployment
+Keep a backup of credentials in a secure location (not in code!)
+
+CREDENTIAL STORAGE CHECKLIST:
+[ ] Password manager set up (recommended: Bitwarden, 1Password, or LastPass)
+[ ] SUPABASE_URL saved securely
+[ ] SUPABASE_ANON_KEY saved securely
+[ ] SUPABASE_SERVICE_ROLE_KEY saved securely (⚠️ MOST IMPORTANT)
+[ ] DISCORD_TOKEN saved securely
+[ ] DISCORD_APPLICATION_ID saved
+[ ] JWT_SECRET_KEY saved securely
+[ ] ADMIN_USERNAME and ADMIN_PASSWORD saved
+[ ] RAILWAY_PROJECT_URL saved
+[ ] NETLIFY_SITE_URL saved
+
+PLATFORM ENVIRONMENT VARIABLES:
+[ ] Railway has all 9 bot environment variables
+[ ] Netlify has all 9 dashboard environment variables
+[ ] Both platforms use SAME credentials (Supabase, Discord, etc.)
+
+=====================================
+SECTION 7: READY FOR DEPLOYMENT
+=====================================
+
+[ ] I have completed ALL steps above
+[ ] I have verified ALL checkboxes are checked
+[ ] I have backed up my credentials securely
+[ ] I understand this file will be deleted after deployment
+[ ] I am ready to proceed with automated code transformation
+
+If all boxes are checked, save this file and proceed to the next phase.
+
+=====================================
+END OF MANUAL CONFIGURATION
+=====================================

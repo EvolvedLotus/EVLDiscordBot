@@ -1,0 +1,129 @@
+{
+  "users": {
+    "123456789012345678": {
+      "balance": 2000,
+      "total_earned": 3000,
+      "total_spent": 1000,
+      "last_daily": null,
+      "created_at": "2025-11-14T01:58:33.564461",
+      "stats": {
+        "purchases": 0,
+        "trades_completed": 0,
+        "daily_streak": 0
+      }
+    },
+    "123456789012345679": {
+      "balance": 0,
+      "total_earned": 0,
+      "total_spent": 0,
+      "last_daily": null,
+      "created_at": "2025-11-14T01:58:33.585753",
+      "stats": {
+        "purchases": 0,
+        "trades_completed": 0,
+        "daily_streak": 0
+      }
+    },
+    "123456789012345680": {
+      "balance": 100,
+      "total_earned": 100,
+      "total_spent": 0,
+      "last_daily": null,
+      "created_at": "2025-11-14T01:58:33.616762",
+      "stats": {
+        "purchases": 0,
+        "trades_completed": 0,
+        "daily_streak": 0
+      }
+    },
+    "123456789012345681": {
+      "balance": 200,
+      "total_earned": 200,
+      "total_spent": 0,
+      "last_daily": null,
+      "created_at": "2025-11-14T01:58:33.626478",
+      "stats": {
+        "purchases": 0,
+        "trades_completed": 0,
+        "daily_streak": 0
+      }
+    },
+    "123456789012345682": {
+      "balance": 300,
+      "total_earned": 300,
+      "total_spent": 0,
+      "last_daily": null,
+      "created_at": "2025-11-14T01:58:33.637500",
+      "stats": {
+        "purchases": 0,
+        "trades_completed": 0,
+        "daily_streak": 0
+      }
+    },
+    "123456789012345683": {
+      "balance": 75,
+      "total_earned": 100,
+      "total_spent": 25,
+      "last_daily": null,
+      "created_at": "2025-11-14T01:58:33.647143",
+      "stats": {
+        "purchases": 0,
+        "trades_completed": 0,
+        "daily_streak": 0
+      }
+    },
+    "123456789012345684": {
+      "balance": 500,
+      "total_earned": 500,
+      "total_spent": 0,
+      "last_daily": null,
+      "created_at": "2025-11-14T01:58:33.664439",
+      "stats": {
+        "purchases": 0,
+        "trades_completed": 0,
+        "daily_streak": 0
+      }
+    }
+  },
+  "inventory": {
+    "123456789012345678": {},
+    "123456789012345679": {
+      "cookie": {
+        "quantity": 7,
+        "acquired_at": "2025-11-14T01:58:33.589531"
+      },
+      "role_color": {
+        "quantity": 4,
+        "acquired_at": "2025-11-14T01:58:33.592824"
+      }
+    },
+    "123456789012345680": {},
+    "123456789012345681": {},
+    "123456789012345682": {},
+    "123456789012345683": {},
+    "123456789012345684": {}
+  },
+  "shop_items": {
+    "cookie": {
+      "name": "\ud83c\udf6a Cookie",
+      "description": "A delicious cookie",
+      "price": 100,
+      "category": "consumable",
+      "stock": -1,
+      "is_active": true
+    },
+    "role_color": {
+      "name": "\ud83c\udfa8 Custom Role Color",
+      "description": "Change your role color",
+      "price": 500,
+      "category": "cosmetic",
+      "stock": -1,
+      "is_active": true
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "last_backup": "2025-11-14T01:58:33.564454",
+    "total_currency_in_circulation": 3175
+  }
+}

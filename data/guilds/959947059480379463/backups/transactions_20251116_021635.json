@@ -1,0 +1,24 @@
+[
+  {
+    "id": "txn_1763149567171",
+    "user_id": "764719348824670239",
+    "amount": 100,
+    "balance_before": 0,
+    "balance_after": 100,
+    "type": "admin_adjustment",
+    "description": "Test admin modification",
+    "timestamp": "2025-11-14T14:46:07.171855",
+    "source": "cms"
+  },
+  {
+    "id": "txn_1763149599182",
+    "user_id": "764719348824670239",
+    "amount": 50,
+    "balance_before": 100,
+    "balance_after": 150,
+    "type": "admin_adjustment",
+    "description": "Testing SSE broadcast",
+    "timestamp": "2025-11-14T14:46:39.182354",
+    "source": "cms"
+  }
+]

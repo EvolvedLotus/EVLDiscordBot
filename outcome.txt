@@ -1,0 +1,1236 @@
+# Task Bot Discord - ACTUAL CODEBASE FUNCTIONALITY
+
+## What This Codebase Actually Does
+
+### Application Overview
+- **Purpose**: Multi-server Discord economy bot with comprehensive web dashboard for server administrators
+- **Technology Stack**: Python, Discord.py, Flask, JSON file storage, Server-Sent Events, JWT authentication
+- **Key Features**: Currency system, task management, shop system, transaction logging, announcements, embeds, real-time dashboard, user management, atomic operations
+
+### Core Components
+- **Discord Bot (bot.py)**: Main Discord bot instance with event handlers, cog loading, and guild initialization
+- **Web Dashboard (backend.py)**: Comprehensive Flask REST API with JWT authentication, real-time SSE updates, and full CRUD operations
+- **Data Manager (core/data_manager.py)**: Advanced centralized JSON file storage with caching, atomic transactions, and event broadcasting
+- **Transaction Manager (core/transaction_manager.py)**: Complete currency transaction logging with indexing, validation, and integrity checking
+- **Shop Manager (core/shop_manager.py)**: Full item inventory management with stock tracking, Discord message sync, and purchase validation
+- **Cache Manager (core/cache_manager.py)**: Distributed cache invalidation system for multi-instance deployments
+- **Embed Builder (core/embed_builder.py)**: Rich embed creation and management system
+- **Announcement Manager (core/announcement_manager.py)**: Advanced announcement system with pinning and scheduling
+- **Currency Cog (cogs/currency.py)**: Complete Discord slash commands for economy features with atomic balance updates
+- **Tasks Cog (cogs/tasks.py)**: Advanced task creation, claiming, and completion system with proof submission
+- **Admin Cog (cogs/admin.py)**: Server administration and configuration commands
+- **Announcements Cog (cogs/announcements.py)**: Announcement posting and management
+- **Embeds Cog (cogs/embeds.py)**: Custom embed creation and posting
+
+## Database Schema
+
+### Currency Data Structure (per server)
+```json
+{
+  "users": {
+    "user_id": {
+      "balance": 150,
+      "total_earned": 150,
+      "total_spent": 0,
+      "created_at": "2025-11-14T14:46:07.171675",
+      "last_daily": "2025-11-14T14:46:07.171675Z",
+      "is_active": true
+    }
+  },
+  "inventory": {
+    "user_id": {
+      "item_id": 2
+    }
+  },
+  "shop_items": {
+    "item_id": {
+      "name": "🍪 Cookie",
+      "description": "A delicious cookie",
+      "price": 100,
+      "category": "consumable",
+      "stock": -1,
+      "is_active": true,
+      "channel_id": "1438926554708185138",
+      "message_id": "1438959951623225527",
+      "created_at": "2025-11-14T14:46:07.171675",
+      "metadata": {
+        "sales_count": 0
+      }
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "total_currency": 150
+  }
+}
+```
+
+### Tasks Data Structure (per server)
+```json
+{
+  "tasks": {
+    "task_id": {
+      "id": 1,
+      "name": "Welcome New Members",
+      "description": "Help welcome 5 new members to the server",
+      "reward": 100,
+      "duration_hours": 24,
+      "status": "active",
+      "created": "2025-11-14T14:46:07.171675",
+      "expires_at": "2025-11-15T14:46:07.171675",
+      "channel_id": "1438926553084985416",
+      "max_claims": -1,
+      "current_claims": 0,
+      "assigned_users": ["user_id"],
+      "category": "General",
+      "role_name": null,
+      "message_id": "1438959951623225527"
+    }
+  },
+  "user_tasks": {
+    "user_id": {
+      "task_id": {
+        "claimed_at": "2025-11-14T14:46:07.171675",
+        "deadline": "2025-11-15T14:46:07.171675",
+        "status": "in_progress",
+        "proof_message_id": null,
+        "proof_attachments": [],
+        "proof_content": "",
+        "submitted_at": null,
+        "completed_at": null,
+        "notes": ""
+      }
+    }
+  },
+  "categories": [],
+  "settings": {
+    "allow_user_tasks": true,
+    "max_tasks_per_user": 10,
+    "auto_expire_enabled": true,
+    "require_proof": true,
+    "announcement_channel_id": null
+  },
+  "metadata": {
+    "next_task_id": 1,
+    "total_completed": 0,
+    "total_expired": 0
+  }
+}
+```
+
+### Server Configuration Structure
+```json
+{
+  "prefix": "!",
+  "currency_name": "coins",
+  "currency_symbol": "$",
+  "admin_roles": [],
+  "moderator_roles": [],
+  "log_channel": null,
+  "welcome_channel": null,
+  "features": {
+    "currency": true,
+    "tasks": true,
+    "moderation": true
+  },
+  "server_name": "nategrayy's server",
+  "member_count": 215,
+  "icon_url": "https://cdn.discordapp.com/icons/...",
+  "owner_id": "217134609056530434",
+  "created_at": "2022-04-02T22:46:53.934000+00:00",
+  "task_channel_id": "1438926553084985416",
+  "global_shop": false,
+  "global_tasks": false,
+  "shop_channel_id": "1438926554708185138"
+}
+```
+
+### Transaction Log Structure
+```json
+[
+  {
+    "id": "txn_959947059480379463_1731595577168_abc123",
+    "user_id": "764719348824670239",
+    "amount": 100,
+    "balance_before": 50,
+    "balance_after": 150,
+    "type": "daily",
+    "description": "Daily reward",
+    "timestamp": "2025-11-14T14:46:07.171675Z",
+    "metadata": {
+      "source": "discord_command",
+      "command": "/daily"
+    }
+  }
+]
+```
+
+## Key Workflows
+
+### 1. Daily Reward Claim
+**Route/Entry Point**: `/daily` slash command
+**Process Flow**:
+1. User executes `/daily` command in Discord
+2. Bot checks if 24 hours have passed since last claim using UTC timestamps
+3. Validates user exists in currency data, creates if needed
+4. Updates `last_daily` timestamp to prevent double claims
+5. Adds 100 currency to user balance via transaction manager
+6. Logs transaction with type "daily" and balance validation
+7. Sends ephemeral confirmation message to user
+
+**Code Reference**:
+```python
+# In cogs/currency.py, daily() method
+last_daily = data["users"][user_id_str].get("last_daily")
+now_utc = datetime.now(timezone.utc)
+if last_daily:
+    last_time = datetime.fromisoformat(last_daily.replace('Z', '+00:00'))
+    time_diff = (now_utc - last_time).total_seconds()
+    if time_diff < 86400: return  # Rate limited
+
+data["users"][user_id_str]["last_daily"] = now_utc.isoformat().replace('+00:00', 'Z')
+result = self._add_balance(guild_id, user_id, 100, "Daily reward", transaction_type='daily')
+```
+
+### 2. Task Claim and Completion
+**Route/Entry Point**: `/claim` slash command, task buttons
+**Process Flow**:
+1. User clicks "Claim Task" button on Discord task message
+2. Validates task exists and is active, checks expiry and claim limits
+3. Creates user_task entry with deadline and "in_progress" status
+4. Updates task current_claims counter atomically
+5. User submits proof via `/task_submit` command with attachments/text
+6. Creates proof message in task channel for admin review
+7. Admin clicks Accept/Reject buttons on proof message
+8. On acceptance: awards currency, grants role if specified, marks task completed
+9. Updates Discord task message to reflect completion status
+
+**Code Reference**:
+```python
+# In cogs/tasks.py, handle_review() method
+if accept:
+    completed_at = datetime.now(timezone.utc)
+    user_task['status'] = 'accepted'
+    user_task['completed_at'] = completed_at.isoformat()
+
+    # Award currency
+    currency_cog._add_balance(guild_id, user_id, task['reward'],
+                             f"Task completed: {task['name']}")
+
+    # Grant role if specified
+    if task.get('role_name'):
+        role = discord.utils.get(interaction.guild.roles, name=task['role_name'])
+        if role: await member.add_roles(role)
+```
+
+### 3. Shop Item Purchase
+**Route/Entry Point**: `/buy` slash command, shop item buttons
+**Process Flow**:
+1. User executes `/buy item_id quantity` command
+2. Validates item exists, is active, and has sufficient stock
+3. Checks user balance against total cost (price × quantity)
+4. Deducts balance via transaction manager with "shop" type
+5. Updates item stock (if limited) and sales metadata
+6. Adds items to user inventory
+7. Updates Discord shop message to reflect new stock
+8. Broadcasts real-time inventory update via SSE
+
+**Code Reference**:
+```python
+# In core/shop_manager.py, purchase_item() method
+# Check balance
+current_balance = user_data['balance']
+total_cost = item['price'] * quantity
+if current_balance < total_cost: return {'success': False, 'error': 'Insufficient balance'}
+
+# Deduct balance
+new_balance = self.transaction_manager.deduct_balance(guild_id, user_id, total_cost, description, 'shop')
+
+# Update stock and inventory
+if current_stock != -1: item['stock'] = current_stock - quantity
+user_inventory[item_id] = user_inventory.get(item_id, 0) + quantity
+```
+
+### 4. Balance Transfer
+**Route/Entry Point**: `/give` slash command
+**Process Flow**:
+1. User executes `/give @user amount` command
+2. Validates amount > 0 and user not giving to themselves
+3. Checks sender has sufficient balance
+4. Deducts from sender with "transfer_send" transaction type
+5. Adds to receiver with "transfer_receive" transaction type
+6. Sends confirmation message with new balances
+
+**Code Reference**:
+```python
+# In cogs/currency.py, give_money() method
+sender_result = self._add_balance(guild_id, interaction.user.id, -amount,
+                                 f"Gave to {user.name}", transaction_type='transfer_send')
+receiver_result = self._add_balance(guild_id, user.id, amount,
+                                   f"Received from {interaction.user.name}",
+                                   transaction_type='transfer_receive')
+```
+
+## Missing Integration Points Between Systems
+
+### Currency ↔ Task Integration Requirements
+
+#### When Task is Completed (Accept Button Clicked)
+1. Task system must call Currency._add_balance() with exact parameters
+2. Transaction type must be 'task_reward'
+3. Transaction description must include task name: f"Completed task: {task['name']}"
+4. If currency award fails, task status must revert to 'submitted' (rollback)
+5. Task metadata.total_completed must increment only after successful currency award
+6. User must receive DM notification with amount awarded
+
+#### Required Integration Function (Add to cogs/tasks.py)
+```
+def _award_task_currency(guild_id, user_id, task_id, task_name, reward_amount):
+    """
+    Award currency for task completion with error handling.
+    Returns tuple: (success: bool, transaction_id: str or error_msg: str)
+    """
+```
+
+### Currency ↔ Shop Integration Requirements
+
+#### When Item is Purchased (/buy command)
+1. Shop must validate item before touching currency
+2. Shop must call Currency._add_balance() with NEGATIVE amount
+3. Balance deduction must complete before stock update
+4. If balance deduction fails, purchase must abort (no stock change)
+5. If stock update fails after deduction, must refund currency (rollback)
+6. Transaction type must be 'shop_purchase'
+7. Transaction description must include item name and quantity
+
+#### Required Integration Function (Add to cogs/currency.py)
+```
+def _process_shop_purchase(guild_id, user_id, item_id, item_name, total_cost, quantity):
+    """
+    Deduct currency for shop purchase with rollback capability.
+    Returns tuple: (success: bool, new_balance: int or error_msg: str)
+    """
+```
+
+### Discord ↔ Dashboard Sync Requirements
+
+#### Task System Discord-Dashboard Sync
+**When Dashboard Creates Task:**
+1. API endpoint receives task data from frontend
+2. Backend saves task to tasks.json
+3. Backend must call async Discord function to create message
+4. Discord message creation must happen in bot's event loop
+5. message_id must be stored back to tasks.json
+6. If Discord creation fails, task should be marked 'pending_sync' for retry
+7. Dashboard must receive confirmation with message_id
+
+**When Dashboard Edits Task:**
+1. API endpoint receives updated task data
+2. Backend updates tasks.json
+3. Backend must call async Discord function to edit message
+4. If message not found (deleted), clear message_id and flag orphaned
+5. Dashboard must show sync status indicator
+
+**When Dashboard Deletes Task:**
+1. API endpoint receives delete request
+2. Backend must delete Discord message first
+3. Then delete from tasks.json
+4. Also delete all proof messages related to task
+5. Clean up user_tasks entries
+6. Dashboard must confirm deletion complete
+
+#### Shop System Discord-Dashboard Sync
+**When Dashboard Creates Item:**
+1. API endpoint receives item data
+2. Backend saves to shop_items
+3. Backend must create Discord embed in shop_channel
+4. message_id stored to shop_items[item_id].message_id
+5. If Discord post fails, mark item 'pending_sync'
+
+**When Dashboard Updates Stock:**
+1. API endpoint receives stock change
+2. Backend updates shop_items[item_id].stock
+3. Backend must edit Discord message to show new stock
+4. If message not found, recreate and update message_id
+
+**When Item is Purchased (Discord side):**
+1. Discord command updates stock in shop_items
+2. Discord must broadcast SSE event to dashboard
+3. Dashboard real-time updates stock display without refresh
+
+#### Announcement System Discord-Dashboard Sync
+**When Dashboard Creates Announcement:**
+1. API endpoint receives announcement data
+2. Backend creates Discord embed and posts
+3. message_id stored to announcements[id].message_id
+4. If pin requested, pin message in Discord
+5. Return success with message_id to dashboard
+
+**When Dashboard Edits Announcement:**
+1. API updates announcement data
+2. Backend edits Discord message
+3. If message not found, mark orphaned
+
+#### Required Background Sync Job (Add to bot.py)
+```
+@tasks.loop(minutes=10)
+async def sync_pending_discord_messages():
+    """
+    Retry creating Discord messages for items marked 'pending_sync'.
+    Runs every 10 minutes.
+    """
+```
+
+### Data Manager ↔ All Systems Integration
+
+#### When Any System Saves Data
+1. System calls data_manager.save_guild_data()
+2. Data manager must invalidate cache for that data type
+3. Data manager must also invalidate related caches (currency → transactions, tasks → currency)
+4. Data manager must broadcast SSE event for real-time dashboard updates
+5. Data manager must create backup before write
+6. If write fails, restore from backup automatically
+
+#### Required Event Broadcasting (Add to core/data_manager.py)
+```
+def _broadcast_data_change(guild_id, data_type, change_type, affected_ids):
+    """
+    Broadcast SSE event when data changes.
+    change_type: 'create', 'update', 'delete'
+    affected_ids: List of IDs that changed (user_ids, task_ids, item_ids)
+    """
+```
+
+## API Endpoints
+
+### Authentication Endpoints
+#### POST /api/auth/login
+**Purpose**: Authenticate admin user for web dashboard
+**Parameters**:
+```javascript
+{
+  "username": "string", // From .env ADMIN_USERNAME
+  "password": "string"  // From .env ADMIN_PASSWORD
+}
+```
+**Returns**: JWT access and refresh tokens with user info
+**Code Location**: `backend.py:login()`
+
+#### POST /api/auth/refresh
+**Purpose**: Refresh expired access token
+**Returns**: New JWT tokens
+**Code Location**: `backend.py:refresh_token()`
+
+### Server Management Endpoints
+#### GET /api/servers
+**Purpose**: Get list of all Discord servers bot is in
+**Returns**: Array of server objects with member counts and currency totals
+**Code Location**: `backend.py:get_servers()`
+
+#### GET /api/<server_id>/users
+**Purpose**: Get paginated user list with balances and activity
+**Parameters**: `page`, `per_page`, `sort_by`, `include_inactive`
+**Returns**: Users array with balance, inventory, and Discord user info
+**Code Location**: `backend.py:get_users()`
+
+#### PUT /api/<server_id>/users/<user_id>/balance
+**Purpose**: Modify user balance (admin only)
+**Parameters**:
+```javascript
+{
+  "amount": 100,
+  "set": false, // true = set to amount, false = add amount
+  "reason": "Admin adjustment"
+}
+```
+**Code Location**: `backend.py:modify_user_balance()`
+
+### Shop Management Endpoints
+#### GET /api/<server_id>/shop
+**Purpose**: Get shop items with filtering
+**Parameters**: `category`, `active_only`, `include_out_of_stock`
+**Returns**: Array of shop items with stock and pricing info
+**Code Location**: `backend.py:get_shop_items()`
+
+#### POST /api/<server_id>/shop
+**Purpose**: Create new shop item and post to Discord
+**Parameters**:
+```javascript
+{
+  "name": "Cookie",
+  "description": "Delicious cookie",
+  "price": 100,
+  "category": "consumable",
+  "stock": -1, // -1 = unlimited
+  "emoji": "🍪"
+}
+```
+**Code Location**: `backend.py:create_shop_item()`
+
+#### PUT /api/<server_id>/shop/<item_id>/stock
+**Purpose**: Update item stock levels
+**Parameters**:
+```javascript
+{
+  "quantity": 50,
+  "operation": "set" // "set", "add", "subtract"
+}
+```
+**Code Location**: `backend.py:update_stock()`
+
+### Task Management Endpoints
+#### GET /api/<server_id>/tasks
+**Purpose**: Get all tasks for server
+**Returns**: Array of task objects with status and claim counts
+**Code Location**: `backend.py:get_server_tasks()`
+
+#### POST /api/<server_id>/tasks
+**Purpose**: Create new task and post to Discord channel
+**Parameters**:
+```javascript
+{
+  "name": "Welcome Members",
+  "description": "Welcome 5 new members",
+  "reward": 100,
+  "duration_hours": 24,
+  "max_claims": -1
+}
+```
+**Code Location**: `backend.py:create_server_task()`
+
+#### PUT /api/<server_id>/tasks/<task_id>
+**Purpose**: Update existing task
+**Parameters**: Any task field updates
+**Code Location**: `backend.py:update_server_task()`
+
+### Transaction Endpoints
+#### GET /api/<server_id>/transactions
+**Purpose**: Get transaction history with advanced filtering
+**Parameters**: `user_id`, `type`, `start_date`, `end_date`, `limit`, `offset`, `sort`
+**Returns**: Paginated transaction list with user details and statistics
+**Code Location**: `backend.py:get_transactions()`
+
+#### GET /api/<server_id>/transactions/statistics
+**Purpose**: Get transaction statistics for server or user
+**Parameters**: `user_id`, `period` ("day", "week", "month", "all")
+**Returns**: Statistics on earnings, spending, and activity
+**Code Location**: `backend.py:get_transaction_statistics()`
+
+#### GET /api/<server_id>/transactions/<transaction_id>
+**Purpose**: Get single transaction details
+**Returns**: Full transaction data with user information
+**Code Location**: `backend.py:get_transaction_detail()`
+
+#### POST /api/<server_id>/transactions/validate
+**Purpose**: Validate transaction integrity for a user
+**Parameters**: `{"user_id": "string"}`
+**Returns**: Validation results with expected vs actual balances
+**Code Location**: `backend.py:validate_user_transactions()`
+
+#### GET /api/<server_id>/transactions/export
+**Purpose**: Export transactions as CSV
+**Parameters**: `user_id`, `type`, `start_date`, `end_date`, `format`
+**Returns**: CSV file download
+**Code Location**: `backend.py:export_transactions()`
+
+#### POST /api/<server_id>/transactions/archive
+**Purpose**: Archive old transactions
+**Parameters**: `{"days_to_keep": 90, "archive": true}`
+**Returns**: Archive statistics
+**Code Location**: `backend.py:archive_old_transactions()`
+
+### User Management Endpoints
+#### GET /api/<server_id>/users/<user_id>
+**Purpose**: Get detailed user information
+**Returns**: User profile with balance, inventory, recent transactions
+**Code Location**: `backend.py:get_user_details()`
+
+#### POST /api/<server_id>/users/cleanup
+**Purpose**: Clean up inactive users
+**Parameters**: `{"days": 30}`
+**Returns**: Cleanup statistics
+**Code Location**: `backend.py:cleanup_inactive_users()`
+
+#### GET /api/<server_id>/users/inactive
+**Purpose**: Get list of inactive users
+**Parameters**: `days`
+**Returns**: Inactive users with leave dates
+**Code Location**: `backend.py:get_inactive_users()`
+
+#### POST /api/<server_id>/users/<user_id>/reactivate
+**Purpose**: Reactivate an inactive user
+**Returns**: Reactivation confirmation
+**Code Location**: `backend.py:reactivate_user()`
+
+### Announcement Endpoints
+#### GET /api/<server_id>/announcements
+**Purpose**: Get all announcements for server
+**Returns**: Announcements array with metadata
+**Code Location**: `backend.py:get_announcements()`
+
+#### POST /api/<server_id>/announcements
+**Purpose**: Create and post announcement
+**Parameters**: Announcement data with content, channel, embed
+**Returns**: Announcement creation result
+**Code Location**: `backend.py:create_announcement_api()`
+
+#### POST /api/<server_id>/announcements/task/<task_id>
+**Purpose**: Create task announcement
+**Returns**: Announcement result
+**Code Location**: `backend.py:create_task_announcement_api()`
+
+#### PUT /api/<server_id>/announcements/<announcement_id>
+**Purpose**: Edit announcement
+**Parameters**: Updated content and embed data
+**Code Location**: `backend.py:edit_announcement_api()`
+
+#### DELETE /api/<server_id>/announcements/<announcement_id>
+**Purpose**: Delete announcement
+**Parameters**: `delete_discord_message`
+**Code Location**: `backend.py:delete_announcement_api()`
+
+#### POST /api/<server_id>/announcements/<announcement_id>/pin
+**Purpose**: Pin announcement
+**Code Location**: `backend.py:pin_announcement_api()`
+
+#### POST /api/<server_id>/announcements/<announcement_id>/unpin
+**Purpose**: Unpin announcement
+**Code Location**: `backend.py:pin_announcement_api()`
+
+### Embed Management Endpoints
+#### GET /api/<server_id>/embeds
+**Purpose**: Get all embeds for server
+**Returns**: Embeds array with templates
+**Code Location**: `backend.py:get_embeds()`
+
+#### POST /api/<server_id>/embeds
+**Purpose**: Create new embed
+**Parameters**: Embed data with title, description, fields
+**Returns**: Created embed data
+**Code Location**: `backend.py:create_embed()`
+
+#### PUT /api/<server_id>/embeds/<embed_id>
+**Purpose**: Update existing embed
+**Parameters**: Updated embed fields
+**Code Location**: `backend.py:update_embed()`
+
+#### DELETE /api/<server_id>/embeds/<embed_id>
+**Purpose**: Delete embed
+**Parameters**: `delete_discord_message`
+**Code Location**: `backend.py:delete_embed()`
+
+### Bot Management Endpoints
+#### PUT /api/bot/status
+**Purpose**: Update bot's Discord status and presence
+**Parameters**: Status type, message, presence
+**Code Location**: `backend.py:update_bot_status()`
+
+#### GET /api/bot/status
+**Purpose**: Get current bot status configuration
+**Returns**: Bot status settings
+**Code Location**: `backend.py:get_bot_status()`
+
+#### PUT /api/<server_id>/status
+**Purpose**: Update bot status for specific server
+**Parameters**: `{"status": "online|idle|dnd|invisible"}`
+**Code Location**: `backend.py:update_server_bot_status()`
+
+### System Management Endpoints
+#### GET /api/status
+**Purpose**: Get system status
+**Returns**: Bot online status, uptime, server counts
+**Code Location**: `backend.py:get_status()`
+
+#### GET /api/logs
+**Purpose**: Get system logs
+**Parameters**: `level` (filter)
+**Returns**: Recent log entries
+**Code Location**: `backend.py:get_logs()`
+
+#### DELETE /api/logs
+**Purpose**: Clear system logs
+**Code Location**: `backend.py:clear_logs()`
+
+#### GET /api/commands
+**Purpose**: Get custom commands
+**Returns**: Custom command list
+**Code Location**: `backend.py:get_commands()`
+
+#### POST /api/commands
+**Purpose**: Add custom command
+**Parameters**: `{"name": "string", "response": "string"}`
+**Code Location**: `backend.py:add_command()`
+
+#### DELETE /api/commands/<name>
+**Purpose**: Delete custom command
+**Code Location**: `backend.py:delete_command()`
+
+#### GET /api/settings
+**Purpose**: Get global settings
+**Returns**: Application settings
+**Code Location**: `backend.py:get_settings()`
+
+#### PUT /api/settings
+**Purpose**: Update global settings
+**Parameters**: Settings object
+**Code Location**: `backend.py:update_settings()`
+
+#### POST /api/restart
+**Purpose**: Restart bot (restricted to specific server)
+**Code Location**: `backend.py:restart_bot()`
+
+#### GET /api/export
+**Purpose**: Export all system data
+**Returns**: Complete system data dump
+**Code Location**: `backend.py:export_data()`
+
+### Server Configuration Endpoints
+#### GET /api/<server_id>/config
+**Purpose**: Get server configuration
+**Returns**: Server config object
+**Code Location**: `backend.py:get_server_config()`
+
+#### PUT /api/<server_id>/config
+**Purpose**: Update server configuration
+**Parameters**: Config updates
+**Code Location**: `backend.py:update_server_config()`
+
+#### GET /api/<server_id>/channels
+**Purpose**: Get server text channels
+**Returns**: Channel list for dropdowns
+**Code Location**: `backend.py:get_channels()`
+
+### Real-time Updates
+#### GET /api/stream
+**Purpose**: Server-Sent Events for real-time dashboard updates
+**Parameters**: `guilds`, `events` (subscription filters)
+**Returns**: Continuous event stream for live updates
+**Code Location**: `backend.py:stream()`
+
+#### POST /api/stream/test
+**Purpose**: Test SSE event broadcasting
+**Parameters**: `{"event_type": "string", "data": {}}`
+**Code Location**: `backend.py:test_sse()`
+
+## Data Flow Diagrams
+
+### User Balance Update Flow
+```
+Discord Command → Currency Cog → Transaction Manager → Data Manager → JSON File
+       ↓              ↓              ↓              ↓              ↓
+   Validation → Balance Check → Log Transaction → Cache Update → SSE Broadcast
+```
+
+### Task Completion Flow
+```
+Task Claim → User Task Creation → Proof Submission → Admin Review → Currency Award
+     ↓              ↓                      ↓              ↓              ↓
+Validate Task → Set Deadline → Create Proof Message → Accept/Reject → Transaction Log
+```
+
+### Shop Purchase Flow
+```
+Purchase Request → Stock Check → Balance Deduction → Inventory Update → Discord Sync
+        ↓              ↓              ↓              ↓              ↓
+   Item Validation → Price Calculation → Transaction Log → Stock Update → Message Update
+```
+
+## External Integrations
+
+### Discord API Integration
+**Purpose**: Primary bot functionality and user interaction
+**Implementation**: Discord.py library with slash commands and message components
+**API Calls**:
+- Message sending/editing/deleting
+- User role management
+- Channel management
+- Guild member queries
+**Data Exchange**: User commands, embed messages, button interactions
+**Code Location**: All cog files and core/client.py
+
+### Server-Sent Events (SSE)
+**Purpose**: Real-time web dashboard updates
+**Implementation**: Flask SSE endpoint with selective subscriptions
+**Data Exchange**: JSON event payloads for balance updates, task changes, inventory updates
+**Code Location**: `backend.py:sse_manager` and `broadcast_event()` calls
+
+## Authentication & Authorization
+
+### Discord Permission System
+```
+Command Execution → Permission Check → Role Validation → Feature Toggle Check
+```
+
+**Code Implementation**:
+- **Admin Check**: `core/permissions.py:admin_only()` decorator
+- **Moderator Check**: `core/permissions.py:is_moderator()` function
+- **Feature Gates**: Server config feature toggles in `config.json`
+
+### Web Dashboard Authentication
+```
+Login Request → Credential Validation → JWT Token Creation → Cookie Storage
+```
+
+**Code Implementation**:
+- **JWT Authentication**: `backend.py:jwt_required` decorator
+- **Token Refresh**: Automatic refresh token handling
+- **Session Management**: HTTP-only cookies for security
+
+### User Role Permissions
+- **Server Owner**: Full access to all features
+- **Admin Roles**: Configurable role IDs in server config
+- **Moderator Roles**: Limited admin permissions
+- **Regular Users**: Currency commands, task claiming, shop purchases
+
+## Frontend Components
+
+### Web Dashboard (index.html, script.js, styles.css)
+**File**: `index.html`, `script.js`, `styles.css`
+**Props**: Server data, user lists, transaction history
+```javascript
+// Main dashboard state
+{
+  currentServer: "guild_id",
+  servers: [...],
+  users: [...],
+  transactions: [...],
+  tasks: [...],
+  shop: [...]
+}
+```
+**State Variables**:
+- `currentView`: Current dashboard section
+- `selectedServer`: Active server ID
+- `realTimeData`: SSE event buffer
+**Key Functions**:
+- `loadServerData()`: Fetch server information
+- `handleSSE()`: Process real-time updates
+- `renderUsers()`: Display user list with balances
+
+### Discord Embeds
+**File**: `core/embed_builder.py`
+**Props**: Title, description, fields, color, footer
+```python
+embed = discord.Embed(
+    title="Task Completed",
+    description=f"User completed {task_name}",
+    color=discord.Color.green()
+)
+embed.add_field(name="Reward", value=f"{reward} coins")
+```
+**State Variables**: Embed data structure with validation
+**Key Functions**:
+- `create_task_embed()`: Consistent task message formatting
+- `create_shop_embed()`: Shop item display formatting
+
+## State Management
+
+### Global State
+- **Data Manager**: Centralized JSON file storage with caching
+- **Cache System**: 5-minute TTL for performance
+- **Event System**: Listener pattern for data change notifications
+
+### Local State (per server)
+- **Currency Data**: User balances, inventory, shop items
+- **Task Data**: Active tasks, user progress, completion history
+- **Configuration**: Server settings, feature toggles, role permissions
+- **Transaction Logs**: Complete audit trail of all currency movements
+
+## Error Handling
+
+### Client-Side (Discord)
+- **Command Errors**: Global error handler catches missing permissions, invalid arguments
+- **Rate Limiting**: Balance modifications limited to 5 per minute per user
+- **Validation**: Input validation for amounts, user existence, permissions
+
+### Server-Side (Web API)
+- **Authentication Errors**: JWT validation with automatic refresh
+- **Data Validation**: Schema validation for all API inputs
+- **Atomic Operations**: Rollback on transaction failures
+- **Discord API Errors**: Retry logic with exponential backoff
+
+## Deployment
+
+### Platform
+- **Local Development**: Flask development server on port 5000
+- **Discord Bot Production**: Railway.app (24/7 hosting with $5/month free credit)
+- **Web Dashboard Production**: Netlify (static hosting + serverless functions)
+- **Database Production**: Supabase (PostgreSQL with 500MB free tier)
+
+### Build Process
+Local Development:
+```bash
+# Installation
+pip install -r requirements.txt
+
+# Environment setup
+cp .env.example .env
+# Edit .env with Discord token and admin credentials
+
+# Start Discord bot
+python bot.py
+
+# Start web dashboard (separate terminal)
+python backend.py
+```
+
+Railway.app (Discord Bot):
+```bash
+# Railway automatically runs:
+pip install -r requirements.txt
+python bot.py
+```
+
+Netlify (Web Dashboard):
+```bash
+# Netlify automatically runs:
+pip install -r requirements.txt
+# Serves static files and serverless functions
+```
+
+Both platforms deploy automatically on git push to main/master branch.
+
+### Environment Variables
+Required for Railway.app (Discord Bot):
+
+DISCORD_TOKEN: Discord bot authentication token
+DISCORD_APPLICATION_ID: Discord application ID
+SUPABASE_URL: Supabase project URL
+SUPABASE_ANON_KEY: Supabase anonymous key
+SUPABASE_SERVICE_ROLE_KEY: Supabase service role key (KEEP SECRET)
+JWT_SECRET_KEY: JWT token signing key
+ADMIN_USERNAME: Web dashboard admin username
+ADMIN_PASSWORD: Web dashboard admin password (hashed in DB)
+ENVIRONMENT: Set to "production"
+
+Required for Netlify (Web Dashboard):
+
+Same as Railway.app (both need access to same resources)
+
+Setting Environment Variables:
+Railway:
+
+Go to Railway Dashboard > Your Project
+Click "Variables" tab
+Add each variable with its value
+Railway auto-restarts bot with new variables
+
+Netlify:
+
+Go to Site Settings > Environment Variables
+Click "Add a variable"
+Add each variable with "All scopes"
+Redeploy to apply changes
+
+## Complete Production Architecture
+
+### Platform Responsibilities
+Railway.app (Discord Bot Hosting):
+
+Runs bot.py continuously (24/7)
+Handles all Discord slash commands
+Processes button interactions and modals
+Connects to Supabase for data operations
+Logs all bot events
+Auto-restarts on crashes
+Cost: $0 (uses $2-3 of $5 monthly credit)
+
+Netlify (Web Dashboard Hosting):
+
+Hosts static files (index.html, script.js, styles.css)
+Runs serverless functions for API endpoints
+Handles admin authentication (JWT)
+Serves dashboard to admins
+Real-time updates via Server-Sent Events (SSE)
+Cost: $0 (free tier sufficient)
+
+Supabase (Database):
+
+PostgreSQL database for all data storage
+Tables: guilds, users, transactions, tasks, shop_items, etc.
+Atomic operations via database functions
+Row-level security (RLS) for data protection
+Automatic backups
+Cost: $0 (500MB free tier)
+
+### Data Flow Example: Daily Reward Claim
+1. User runs /daily in Discord
+   ↓
+2. Discord → Railway Bot receives command
+   ↓
+3. Bot queries Supabase: "SELECT last_daily FROM users WHERE user_id=X"
+   ↓
+4. Supabase returns last claim time
+   ↓
+5. Bot validates 24 hours passed
+   ↓
+6. Bot calls Supabase function: update_user_balance(+100, 'daily')
+   ↓
+7. Supabase atomically:
+   - Updates user balance
+   - Logs transaction
+   - Returns new balance
+   ↓
+8. Bot sends success message to Discord
+   ↓
+9. Supabase triggers SSE event
+   ↓
+10. Netlify Dashboard receives real-time update
+
+### Deployment Workflow
+Local Development → Production:
+Developer Machine (Local)
+    ↓
+git add .
+git commit -m "Add feature"
+git push origin main
+    ↓
+    ├─→ Railway detects push
+    │   ├─ Pulls latest code
+    │   ├─ Runs: pip install -r requirements.txt
+    │   ├─ Runs: python bot.py
+    │   └─ Bot restarts with new code (30-60 seconds)
+    │
+    └─→ Netlify detects push
+        ├─ Pulls latest code
+        ├─ Builds static assets
+        ├─ Deploys serverless functions
+        └─ Dashboard updated (15-30 seconds)
+
+Both platforms:
+- Zero downtime deployments
+- Automatic rollback on failure
+- Deployment logs available in dashboards
+
+### Monitoring & Logs
+Railway (Discord Bot):
+
+Real-time logs: Railway Dashboard > Logs tab
+Deployment history: Deployments tab
+Resource usage: Metrics tab
+Alerts: Can set up billing alerts
+
+Netlify (Web Dashboard):
+
+Function logs: Functions tab > Select function
+Deploy logs: Deploys tab > Latest deploy
+Analytics: Analytics tab (page views, etc.)
+Error tracking: Integrates with Sentry/Rollbar
+
+Supabase (Database):
+
+Query performance: Dashboard > Database > Query Performance
+Table statistics: Table Editor
+Real-time connections: Database > Connection Pooling
+Backup status: Database > Backups
+
+### Troubleshooting Guide
+Bot not responding in Discord:
+
+Check Railway Dashboard > Logs for errors
+Verify environment variables are set correctly
+Check Supabase connection status
+Verify Discord token hasn't expired
+Check bot has correct permissions in Discord server
+
+Dashboard not loading:
+
+Check Netlify deploy status
+Verify environment variables in Netlify
+Check browser console for errors
+Verify Supabase connection
+Check JWT_SECRET_KEY matches between Railway and Netlify
+
+Database errors:
+
+Check Supabase project is active (not paused)
+Verify SUPABASE_SERVICE_ROLE_KEY is correct
+Check database connection limits
+Review Supabase logs for query errors
+Verify RLS policies aren't blocking queries
+
+### Cost Breakdown (Monthly)
+Platform | Free Tier | Typical Usage | Cost
+---|---|---|---
+Railway.app | $5 credit | $2-3 (bot) | $0
+Netlify | Free static + 125k function invocations | ~5k invocations | $0
+Supabase | 500MB database | ~50MB (small bot) | $0
+**TOTAL** | | | **$0/month**
+
+Notes:
+
+Railway credit renews monthly
+Netlify free tier sufficient for small-medium bots
+Supabase 500MB enough for ~100k users
+Scale up only when needed (rare for Discord bots)
+
+### Scaling Considerations
+When bot grows beyond free tier:
+Railway ($5 credit exceeded):
+
+Upgrade to Hobby plan: $5/month (fixed)
+Or optimize code to reduce resource usage
+
+Netlify (125k functions exceeded):
+
+Upgrade to Pro plan: $19/month
+Or reduce API calls with caching
+
+Supabase (500MB exceeded):
+
+Upgrade to Pro plan: $25/month
+Or implement data archival/cleanup
+
+For most Discord bots serving <1000 users, free tier is sufficient.
+
+## Key Behaviors & Edge Cases
+
+### Daily Reward Anti-Abuse
+- UTC timestamp validation prevents same-day double claims
+- Automatic user data creation for new members
+- Timestamp format handling for DST transitions
+
+### Task System Race Conditions
+- Atomic task claiming prevents double claims
+- User task limits prevent spam claiming
+- Deadline validation with timezone awareness
+
+### Shop Stock Management
+- Thread-safe stock updates prevent overselling
+- Unlimited stock (-1) handling
+- Purchase validation before stock deduction
+
+### Transaction Integrity
+- Balance validation: balance_after = balance_before + amount
+- Idempotency keys prevent duplicate transactions
+- Atomic file operations with backup/rollback
+
+### Multi-Server Isolation
+- Complete data separation between Discord servers
+- Per-server configuration and feature toggles
+- Independent currency systems
+
+## Advanced Features
+
+### Atomic Operations
+- **Two-Phase Commits**: Balance updates use prepare/commit/rollback pattern
+- **Transaction Logging**: All currency changes logged before balance updates
+- **Rollback Capability**: Failed operations automatically rollback to prevent data corruption
+- **Idempotency Keys**: Prevent duplicate transactions from network issues
+
+### Real-Time Synchronization
+- **Server-Sent Events**: Live dashboard updates without polling
+- **Selective Subscriptions**: Clients subscribe to specific guilds/events
+- **Event Batching**: Multiple events batched for efficiency
+- **Cache Invalidation**: Distributed cache clearing across instances
+
+### Data Integrity & Validation
+- **Schema Validation**: All data structures validated against schemas
+- **Transaction Integrity**: Balance calculations verified (balance_after = balance_before + amount)
+- **Backup & Recovery**: Automatic backups with corruption detection
+- **Data Migration**: Safe migration between data format versions
+
+### Performance Optimizations
+- **Multi-Level Caching**: 5-minute TTL cache with invalidation
+- **Indexing System**: Transaction indexes for fast queries
+- **Batch Operations**: Discord message updates batched for rate limiting
+- **Lazy Loading**: Data loaded on-demand with intelligent prefetching
+
+### Security Features
+- **JWT Authentication**: Secure token-based authentication
+- **Rate Limiting**: Balance modifications limited to 5 per minute
+- **Input Validation**: Comprehensive validation of all user inputs
+- **Permission Checks**: Multi-level permission system (server owner > admin roles > moderators > users)
+
+### Multi-Server Architecture
+- **Complete Isolation**: Each Discord server has fully separate data
+- **Shared Bot Instance**: Single bot serves multiple servers efficiently
+- **Per-Server Config**: Independent settings and feature toggles
+- **Global Features**: Optional global shop/tasks across servers
+
+## Missing Helper Functions & Utilities
+
+### Currency System - Required Helper Functions
+
+#### User Management Helpers (Add to cogs/currency.py)
+- `_ensure_user_exists(guild_id, user_id)` - Create user entry if doesn't exist, return user data
+- `_get_balance(guild_id, user_id)` - Safely get balance, return 0 if user not found
+- `_validate_amount(amount)` - Validate currency amount is positive integer
+- `_check_sufficient_balance(guild_id, user_id, required_amount)` - Return bool if user can afford amount
+
+#### Transaction Helpers (Add to cogs/currency.py or core/transaction_manager.py)
+- `_create_transaction_id(user_id)` - Generate unique transaction ID with timestamp
+- `_validate_transaction_integrity(transaction)` - Verify balance_after = balance_before + amount
+- `_rollback_failed_transaction(guild_id, transaction_id)` - Restore previous balance on error
+- `_batch_balance_updates(guild_id, updates_list)` - Process multiple balance changes atomically
+
+### Task System - Required Helper Functions
+
+#### Task Validation Helpers (Add to cogs/tasks.py)
+- `_validate_task_active(task)` - Check if task status is 'active' and not expired
+- `_check_user_can_claim(guild_id, user_id, task_id)` - Verify user eligible to claim task
+- `_calculate_task_deadline(claimed_at, duration_hours)` - Return deadline datetime
+- `_check_max_claims_reached(task)` - Return bool if task at capacity
+
+#### Task Discord Sync Helpers (Add to cogs/tasks.py)
+- `_create_task_embed(task, config)` - Build Discord embed for task display
+- `_update_task_message(guild, task_id, task_data)` - Edit Discord message to reflect changes
+- `_create_proof_embed(user, task, proof_content, attachments)` - Build proof submission embed
+- `_cleanup_task_messages(guild, task_id)` - Delete all Discord messages related to task
+
+#### Task Status Management (Add to cogs/tasks.py)
+- `_expire_task(guild_id, task_id)` - Mark task as expired, update message, disable buttons
+- `_complete_task(guild_id, task_id, user_id)` - Mark user_task as completed, award currency
+- `_reject_submission(guild_id, task_id, user_id, reason)` - Set rejected status, allow resubmit
+
+### Shop System - Required Helper Functions
+
+#### Shop Item Management (Add to core/shop_manager.py or cogs/currency.py)
+- `_validate_item_active(item)` - Check item exists and is_active = true
+- `_check_stock_available(item, quantity)` - Verify sufficient stock for purchase
+- `_calculate_total_cost(item, quantity)` - Return price × quantity
+- `_update_item_stock(guild_id, item_id, quantity_change)` - Atomic stock update
+
+#### Inventory Management (Add to core/shop_manager.py)
+- `_add_to_inventory(guild_id, user_id, item_id, quantity)` - Add items to user inventory
+- `_remove_from_inventory(guild_id, user_id, item_id, quantity)` - Remove items, return success bool
+- `_get_user_inventory(guild_id, user_id)` - Return user's full inventory dict
+- `_check_inventory_has_item(guild_id, user_id, item_id, quantity)` - Verify user owns items
+
+#### Shop Discord Sync (Add to core/shop_manager.py)
+- `_create_shop_embed(item, config)` - Build Discord embed for shop item
+- `_post_shop_item(guild, channel_id, item_data)` - Post item to Discord, return message_id
+- `_update_shop_message(guild, channel_id, message_id, item_data)` - Edit Discord shop message
+- `_delete_shop_message(guild, channel_id, message_id)` - Remove Discord shop message
+
+### Announcement System - Required Helper Functions
+
+#### Announcement Creation (Add to core/announcement_manager.py or cogs/announcements.py)
+- `_build_announcement_embed(announcement_data)` - Convert data to Discord embed
+- `_post_announcement(guild, channel_id, embed_data)` - Post to Discord, return message_id
+- `_edit_announcement(guild, channel_id, message_id, new_embed)` - Update existing announcement
+- `_delete_announcement(guild, channel_id, message_id)` - Remove announcement message
+- `_pin_message(guild, channel_id, message_id)` - Pin announcement in channel
+- `_unpin_message(guild, channel_id, message_id)` - Unpin announcement
+
+### Embed System - Required Helper Functions
+
+#### Embed Builder (Add to core/embed_builder.py)
+- `create_embed_from_data(embed_dict)` - Convert data dict to discord.Embed object
+- `validate_embed_data(embed_dict)` - Check all fields valid (title length, field count, etc)
+- `post_embed_to_channel(guild, channel_id, embed_data)` - Send embed, return message_id
+- `edit_embed_message(guild, channel_id, message_id, new_embed_data)` - Update embed message
+
+### Data Manager - Required Helper Functions
+
+#### File Operations (Add to core/data_manager.py)
+- `_atomic_write(file_path, data)` - Write with temp file + atomic rename
+- `_create_backup(file_path)` - Copy file to .backup before modifications
+- `_restore_from_backup(file_path)` - Restore file from backup on corruption
+- `_validate_json_structure(data, schema)` - Verify data matches expected schema
+
+#### Cache Management (Add to core/data_manager.py)
+- `_get_from_cache(cache_key)` - Return cached data if valid
+- `_set_cache(cache_key, data, ttl)` - Store data with expiration time
+- `_invalidate_cache(cache_key)` - Remove from cache
+- `_invalidate_related_caches(guild

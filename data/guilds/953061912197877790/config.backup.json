@@ -1,0 +1,25 @@
+{
+  "prefix": "!",
+  "currency_name": "coins",
+  "currency_symbol": "$",
+  "admin_roles": [],
+  "moderator_roles": [],
+  "log_channel": null,
+  "welcome_channel": null,
+  "features": {
+    "currency": true,
+    "tasks": true,
+    "moderation": true
+  },
+  "server_name": "Cupid’s Garden 💘🍄🌸💨",
+  "member_count": 160,
+  "icon_url": "https://cdn.discordapp.com/icons/953061912197877790/62939facaedac244baaefc122fdf9e53.png?size=1024",
+  "owner_id": "953061527945113630",
+  "created_at": "2022-03-14T22:47:46.902000+00:00",
+  "task_channel_id": 1438926550077542503,
+  "global_shop": false,
+  "global_tasks": false,
+  "shop_channel_id": 1438926551046557867,
+  "dashboard_enabled": true,
+  "dashboard_tokens": ["cms_admin_token_123"]
+}

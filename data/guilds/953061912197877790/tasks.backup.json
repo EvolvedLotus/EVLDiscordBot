@@ -1,0 +1,37 @@
+{
+  "tasks": {
+    "1": {
+      "id": 1,
+      "name": "Test Task",
+      "description": "This is a test task",
+      "url": "",
+      "reward": 100,
+      "duration_hours": 24,
+      "status": "active",
+      "created": "2025-11-15T18:44:25.584707+00:00",
+      "expires_at": "2025-11-16T18:44:25.584707+00:00",
+      "channel_id": "1438926550077542503",
+      "message_id": "1439325466480742572",
+      "announcement_message_id": null,
+      "role_name": null,
+      "category": "General",
+      "max_claims": -1,
+      "current_claims": 0,
+      "assigned_users": []
+    }
+  },
+  "user_tasks": {},
+  "categories": [],
+  "settings": {
+    "allow_user_tasks": true,
+    "max_tasks_per_user": 10,
+    "auto_expire_enabled": true,
+    "require_proof": true,
+    "announcement_channel_id": null
+  },
+  "metadata": {
+    "next_task_id": 2,
+    "total_completed": 0,
+    "total_expired": 0
+  }
+}

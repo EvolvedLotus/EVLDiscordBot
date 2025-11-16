@@ -1,0 +1,14 @@
+[
+  {
+    "id": 1,
+    "name": "Test",
+    "url": "",
+    "description": "Test",
+    "reward": 1,
+    "duration_hours": 24,
+    "status": "active",
+    "created": "2025-11-14T00:04:34.203335",
+    "channel_id": 1438755231931437137,
+    "role_name": "Test"
+  }
+]

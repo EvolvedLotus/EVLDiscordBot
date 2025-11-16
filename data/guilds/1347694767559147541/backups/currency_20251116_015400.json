@@ -1,0 +1,20 @@
+{
+  "users": {},
+  "inventory": {},
+  "shop_items": {
+    "cookie": {
+      "name": "\ud83c\udf6a Cookie",
+      "description": "A delicious cookie",
+      "price": 100,
+      "category": "consumable",
+      "stock": -1,
+      "is_active": true,
+      "channel_id": "1438926607954874601",
+      "message_id": "1438959980291035288"
+    }
+  },
+  "metadata": {
+    "version": "2.0",
+    "total_currency": 0
+  }
+}

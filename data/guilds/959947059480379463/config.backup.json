@@ -1,0 +1,22 @@
+{
+  "prefix": "!",
+  "currency_name": "coins",
+  "currency_symbol": "$",
+  "admin_roles": [],
+  "moderator_roles": [],
+  "log_channel": null,
+  "welcome_channel": null,
+  "features": {
+    "currency": true,
+    "tasks": true,
+    "moderation": true
+  },
+  "server_name": "nategrayy's server",
+  "member_count": 215,
+  "icon_url": "https://cdn.discordapp.com/icons/959947059480379463/03808d93050c93641fde6e03ebb5a531.png?size=1024",
+  "owner_id": "217134609056530434",
+  "created_at": "2022-04-02T22:46:53.934000+00:00",
+  "task_channel_id": 1438926553084985416,
+  "global_shop": false,
+  "global_tasks": false
+}

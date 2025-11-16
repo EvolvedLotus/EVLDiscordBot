@@ -1,0 +1,13 @@
+[
+  {
+    "id": "txn_1763232242224",
+    "user_id": "125383879928889345",
+    "amount": 100,
+    "balance_before": 0,
+    "balance_after": 100,
+    "type": "admin_adjustment",
+    "description": "Test bonus from API",
+    "timestamp": "2025-11-15T13:44:02.224177",
+    "source": "cms"
+  }
+]

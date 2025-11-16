@@ -1,0 +1,19 @@
+{
+  "embeds": {},
+  "templates": {
+    "task_template": {
+      "color": "#3498db",
+      "footer_text": "Task System",
+      "thumbnail_url": null
+    },
+    "announcement_template": {
+      "color": "#e74c3c",
+      "footer_text": "Server Announcement"
+    }
+  },
+  "settings": {
+    "default_color": "#7289da",
+    "allow_user_embeds": false,
+    "max_embeds_per_channel": 50
+  }
+}
