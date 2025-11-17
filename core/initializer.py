@@ -12,30 +12,48 @@ class GuildInitializer:
         self.bot = bot
 
     async def initialize_guild(self, guild: discord.Guild):
-        """Initialize all systems for a guild"""
+        """Initialize a guild with proper configuration"""
         logger.info(f"🔄 Initializing {guild.name}...")
 
         try:
-            # Load existing config
-            config = self.data_manager.load_guild_data(guild.id, "config")
+            # Load existing config if it exists
+            existing_config = self.data_manager.load_guild_data(guild.id, "config")
 
-            # Update with current guild data (all NOT NULL fields)
-            config.update({
-                'server_name': guild.name,
-                'owner_id': str(guild.owner_id),
-                'member_count': guild.member_count,
+            # Create/update config with ALL required fields
+            config = {
+                'guild_id': str(guild.id),
+                'server_name': guild.name,  # ✅ REQUIRED FIELD
+                'owner_id': str(guild.owner_id),  # ✅ REQUIRED FIELD
+                'member_count': guild.member_count if hasattr(guild, 'member_count') else 0,
                 'icon_url': str(guild.icon.url) if guild.icon else None,
-                'is_active': True
-            })
+                'is_active': True,
+                # Preserve existing settings if they exist
+                'prefix': existing_config.get('prefix', '!') if existing_config else '!',
+                'currency_name': existing_config.get('currency_name', 'coins') if existing_config else 'coins',
+                'currency_symbol': existing_config.get('currency_symbol', '$') if existing_config else '$',
+                'admin_roles': existing_config.get('admin_roles', []) if existing_config else [],
+                'moderator_roles': existing_config.get('moderator_roles', []) if existing_config else [],
+                'log_channel': existing_config.get('log_channel') if existing_config else None,
+                'welcome_channel': existing_config.get('welcome_channel') if existing_config else None,
+                'task_channel_id': existing_config.get('task_channel_id') if existing_config else None,
+                'shop_channel_id': existing_config.get('shop_channel_id') if existing_config else None,
+                'feature_currency': existing_config.get('feature_currency', True) if existing_config else True,
+                'feature_tasks': existing_config.get('feature_tasks', True) if existing_config else True,
+                'feature_shop': existing_config.get('feature_shop', True) if existing_config else True,
+                'feature_announcements': existing_config.get('feature_announcements', True) if existing_config else True,
+                'feature_moderation': existing_config.get('feature_moderation', True) if existing_config else True,
+                'global_shop': existing_config.get('global_shop', False) if existing_config else False,
+                'global_tasks': existing_config.get('global_tasks', False) if existing_config else False,
+            }
 
-            # Save configuration
-            success = self.data_manager.save_guild_data(guild.id, "config", config)
+            # Save the complete config
+            success = self.data_manager.save_guild_data(guild.id, 'config', config)
 
             if not success:
                 logger.error(f"  ❌ Failed to save config for {guild.name}")
-                return
+                return False
 
-            logger.info(f"  ✓ Config saved for {guild.name}")
+            logger.info(f"  ✅ Config saved for {guild.name}")
 
             # Initialize subsystems
             await self._initialize_tasks(guild)
@@ -49,9 +67,11 @@ class GuildInitializer:
             self.data_manager.sync_guild_to_database(guild.id)
 
             logger.info(f"✅ {guild.name} initialization complete")
+            return True
 
         except Exception as e:
             logger.error(f"❌ Error initializing {guild.name}: {e}", exc_info=True)
+            return False
 
     async def _ensure_config(self, guild: discord.Guild):
         """Ensure guild configuration exists with valid settings"""
