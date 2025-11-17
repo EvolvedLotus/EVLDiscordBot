@@ -86,6 +86,83 @@ def setup_logging():
 # Initialize logging
 logger = setup_logging()
 
+# ============================================
+# FLASK APP INITIALIZATION - MUST BE EARLY
+# ============================================
+app = Flask(__name__, static_folder='.')
+
+# Configure CORS for security - allow frontend origins
+# Only allow production domains, no localhost
+allowed_origins = []
+
+# Add Railway public domain if available
+railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
+if railway_domain:
+    railway_url = f"https://{railway_domain}"
+    allowed_origins.append(railway_url)
+
+# Add Netlify domain if API_BASE_URL is set (extract domain)
+api_base_url = os.getenv('API_BASE_URL')
+if api_base_url:
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(api_base_url)
+        netlify_domain = f"{parsed.scheme}://{parsed.netloc}"
+        if netlify_domain not in allowed_origins:
+            allowed_origins.append(netlify_domain)
+    except:
+        pass
+
+# Add Netlify domains from environment variables
+netlify_site_url = os.getenv('NETLIFY_SITE_URL')
+if netlify_site_url:
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(netlify_site_url)
+        netlify_domain = f"{parsed.scheme}://{parsed.netloc}"
+        if netlify_domain not in allowed_origins:
+            allowed_origins.append(netlify_domain)
+    except:
+        pass
+
+# Add common Netlify domain patterns for development
+netlify_preview_domains = [
+    'https://deploy-preview-',
+    'https://branch-deploy-'
+]
+
+# Check if any Netlify domains are already configured
+has_netlify = any('netlify' in origin for origin in allowed_origins)
+
+# If no Netlify domains configured, add wildcard for Netlify (less secure but functional)
+if not has_netlify:
+    # Allow all Netlify domains (deploy previews, custom domains, etc.)
+    allowed_origins.extend([
+        'https://*.netlify.app',
+        'https://*.netlify.com'
+    ])
+
+# If no production domains found, allow all origins (for development)
+if not allowed_origins:
+    allowed_origins = ['*']
+
+CORS(app, resources={
+    r"/api/*": {
+        "origins": allowed_origins,
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "X-Admin-Token", "Cache-Control"],
+        "supports_credentials": True,
+        "expose_headers": ["Content-Type", "X-CSRFToken"]
+    },
+    r"/api/stream": {
+        "origins": allowed_origins,
+        "methods": ["GET"],
+        "allow_headers": ["Cache-Control"],
+        "supports_credentials": False,
+        "expose_headers": []
+    }
+})
+
 # Performance monitoring decorator
 def performance_monitor(func):
     """Decorator to monitor function performance"""
@@ -215,80 +292,6 @@ def set_bot_ready():
     """Mark bot as ready"""
     global bot_ready
     bot_ready = True
-
-app = Flask(__name__, static_folder='.')
-
-# Configure CORS for security - allow frontend origins
-# Only allow production domains, no localhost
-allowed_origins = []
-
-# Add Railway public domain if available
-railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
-if railway_domain:
-    railway_url = f"https://{railway_domain}"
-    allowed_origins.append(railway_url)
-
-# Add Netlify domain if API_BASE_URL is set (extract domain)
-api_base_url = os.getenv('API_BASE_URL')
-if api_base_url:
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(api_base_url)
-        netlify_domain = f"{parsed.scheme}://{parsed.netloc}"
-        if netlify_domain not in allowed_origins:
-            allowed_origins.append(netlify_domain)
-    except:
-        pass
-
-# Add Netlify domains from environment variables
-netlify_site_url = os.getenv('NETLIFY_SITE_URL')
-if netlify_site_url:
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(netlify_site_url)
-        netlify_domain = f"{parsed.scheme}://{parsed.netloc}"
-        if netlify_domain not in allowed_origins:
-            allowed_origins.append(netlify_domain)
-    except:
-        pass
-
-# Add common Netlify domain patterns for development
-netlify_preview_domains = [
-    'https://deploy-preview-',
-    'https://branch-deploy-'
-]
-
-# Check if any Netlify domains are already configured
-has_netlify = any('netlify' in origin for origin in allowed_origins)
-
-# If no Netlify domains configured, add wildcard for Netlify (less secure but functional)
-if not has_netlify:
-    # Allow all Netlify domains (deploy previews, custom domains, etc.)
-    allowed_origins.extend([
-        'https://*.netlify.app',
-        'https://*.netlify.com'
-    ])
-
-# If no production domains found, allow all origins (for development)
-if not allowed_origins:
-    allowed_origins = ['*']
-
-CORS(app, resources={
-    r"/api/*": {
-        "origins": allowed_origins,
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Admin-Token", "Cache-Control"],
-        "supports_credentials": True,
-        "expose_headers": ["Content-Type", "X-CSRFToken"]
-    },
-    r"/api/stream": {
-        "origins": allowed_origins,
-        "methods": ["GET"],
-        "allow_headers": ["Cache-Control"],
-        "supports_credentials": False,
-        "expose_headers": []
-    }
-})
 
 # Configuration
 DATA_DIR = os.getenv('DATA_DIR', 'data')
