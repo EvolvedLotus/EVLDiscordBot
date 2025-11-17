@@ -1,0 +1,38 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python railway_start.py"
+healthcheckPath = "/api/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[build.env]
+# Build-time environment variables
+PYTHON_VERSION = "3.11"
+
+[deploy.env]
+# Runtime environment variables
+ENVIRONMENT = "production"
+FLASK_ENV = "production"
+PYTHONUNBUFFERED = "1"
+
+# Railway-specific variables (automatically set by Railway)
+# RAILWAY_PROJECT_ID
+# RAILWAY_ENVIRONMENT_ID
+# RAILWAY_SERVICE_ID
+# RAILWAY_PUBLIC_DOMAIN
+# RAILWAY_PRIVATE_DOMAIN
+# RAILWAY_STATIC_URL
+
+# Required application variables (set in Railway dashboard)
+# DISCORD_TOKEN
+# SUPABASE_URL
+# SUPABASE_ANON_KEY
+# SUPABASE_SERVICE_ROLE_KEY
+# JWT_SECRET_KEY
+# ADMIN_USERNAME
+# ADMIN_PASSWORD
+# NETLIFY_SITE_URL
+# ALLOWED_ORIGINS

@@ -2,12 +2,15 @@
 """
 Discord Bot - Railway Deployment Entry Point
 Run with: python railway_start.py
+Runs both Flask backend AND Discord bot concurrently
 """
 
 import os
 import sys
 import asyncio
 import logging
+import threading
+from pathlib import Path
 
 # Setup logging
 logging.basicConfig(
@@ -32,26 +35,70 @@ if not DISCORD_TOKEN:
 
 logger.info("✅ DISCORD_TOKEN found")
 
-async def main():
-    """Main entry point for Railway"""
+def run_flask_app():
+    """Run Flask in a separate thread"""
+    logger.info("[Flask] Starting web server on http://0.0.0.0:5000")
     try:
-        logger.info("🚀 Starting Discord Bot on Railway...")
-        
-        # Import and run bot
-        from bot import run_bot
-        
-        logger.info("📥 Importing bot module...")
-        await run_bot()
-        
+        from backend import run_backend
+        run_backend()
     except Exception as e:
-        logger.error(f"❌ Fatal error: {e}", exc_info=True)
-        sys.exit(1)
+        logger.error(f"[Flask] Error starting Flask app: {e}")
+        import traceback
+        traceback.print_exc()
+
+async def run_discord_bot():
+    """Run Discord bot asynchronously"""
+    logger.info("[Discord] Starting Discord bot...")
+    try:
+        from bot import run_bot
+        await run_bot()
+    except Exception as e:
+        logger.error(f"[Discord] Error starting Discord bot: {e}")
+        import traceback
+        traceback.print_exc()
+
+async def main():
+    """Main function to run both bot and Flask concurrently"""
+    logger.info("=" * 50)
+    logger.info("🤖 Discord Economy Bot - Railway Startup")
+    logger.info("=" * 50)
+    logger.info()
+
+    try:
+        # Create directories if they don't exist
+        directories = ['data/guilds', 'data/global', 'logs']
+        for directory in directories:
+            Path(directory).mkdir(parents=True, exist_ok=True)
+
+        logger.info()
+        logger.info("=" * 50)
+        logger.info("🚀 Starting Railway services...")
+        logger.info("=" * 50)
+        logger.info()
+
+        # Start Flask in a separate thread
+        flask_thread = threading.Thread(target=run_flask_app, daemon=True)
+        flask_thread.start()
+        logger.info("[Flask] Web server thread started")
+
+        # Wait a moment for Flask to initialize
+        await asyncio.sleep(3)
+
+        # Start Discord bot (this will block)
+        logger.info("[Discord] Starting Discord bot...")
+        await run_discord_bot()
+
+    except KeyboardInterrupt:
+        logger.info("\n\n✋ Shutdown requested")
+        logger.info("[Shutdown] Shutting down both services...")
+    except Exception as e:
+        logger.error(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("✋ Shutdown requested")
-    except Exception as e:
-        logger.error(f"❌ Error: {e}", exc_info=True)
-        sys.exit(1)
+        logger.info("[Shutdown] Graceful shutdown complete")
+        sys.exit(0)

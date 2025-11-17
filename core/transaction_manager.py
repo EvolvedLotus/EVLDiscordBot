@@ -1,5 +1,3 @@
-import json
-import os
 import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
@@ -14,24 +12,17 @@ class TransactionManager:
         self.cache = {}  # Simple cache for recent queries
         self.cache_lock = threading.Lock()
 
-    def _get_transaction_file_path(self, guild_id: int) -> str:
-        return f"data/guilds/{guild_id}/transactions.json"
-
     def _load_transactions(self, guild_id: int) -> List[dict]:
-        file_path = self._get_transaction_file_path(guild_id)
-        if not os.path.exists(file_path):
-            return []
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return []
+        """Load transactions from Supabase via data_manager"""
+        transactions_data = self.data_manager.load_guild_data(guild_id, 'transactions')
+        if transactions_data and 'transactions' in transactions_data:
+            return transactions_data['transactions']
+        return []
 
     def _save_transactions(self, guild_id: int, transactions: List[dict]):
-        file_path = self._get_transaction_file_path(guild_id)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(transactions, f, indent=2, ensure_ascii=False)
+        """Save transactions to Supabase via data_manager"""
+        transactions_data = {'transactions': transactions}
+        self.data_manager.save_guild_data(guild_id, 'transactions', transactions_data)
 
     def _get_lock(self, guild_id: int) -> threading.Lock:
         if guild_id not in self.index_locks:
@@ -381,31 +372,27 @@ class TransactionManager:
         self,
         guild_id: int,
         days_to_keep: int = 90,
-        archive: bool = True
+        archive: bool = False  # Archive disabled for Supabase-only setup
     ):
+        """
+        Clean up old transactions by removing them from Supabase.
+        Archive functionality disabled since we're using Supabase-only storage.
+        """
         cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
         transactions = self._load_transactions(guild_id)
 
         recent_transactions = []
-        old_transactions = []
 
         for txn in transactions:
             txn_datetime = datetime.fromisoformat(txn['timestamp'].replace('Z', '+00:00'))
             if txn_datetime >= cutoff_date:
                 recent_transactions.append(txn)
-            else:
-                old_transactions.append(txn)
+            # Old transactions are simply discarded (no file archiving)
 
-        if archive and old_transactions:
-            # Archive old transactions
-            year_month = cutoff_date.strftime('%Y_%m')
-            archive_file = f"data/guilds/{guild_id}/transactions_archive_{year_month}.json"
-            os.makedirs(os.path.dirname(archive_file), exist_ok=True)
-            with open(archive_file, 'w', encoding='utf-8') as f:
-                json.dump(old_transactions, f, indent=2, ensure_ascii=False)
-
-        # Save recent transactions
+        # Save recent transactions only
         self._save_transactions(guild_id, recent_transactions)
 
         # Rebuild indexes
         self.rebuild_indexes(guild_id)
+
+        return len(transactions) - len(recent_transactions)  # Return number of transactions removed

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
+from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context, g
 from flask_cors import CORS
 import json
 import os
@@ -9,10 +9,14 @@ import threading
 from datetime import datetime, timedelta, timezone
 import subprocess
 import logging
+import logging.handlers
 from collections import defaultdict
 import jwt
 import hashlib
 import secrets
+import traceback
+import sys
+import functools
 
 # Discord imports for message creation
 import discord
@@ -38,8 +42,169 @@ except ImportError:
 # Global data manager instance (set by set_data_manager)
 data_manager_instance = None
 
-import logging
-logger = logging.getLogger(__name__)
+# === LOGGING CONFIGURATION ===
+
+def setup_logging():
+    """Configure comprehensive logging for the application"""
+    import logging.handlers
+    import os
+
+    # Create logs directory if it doesn't exist
+    logs_dir = os.path.join(DATA_DIR, 'logs')
+    os.makedirs(logs_dir, exist_ok=True)
+
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG if os.getenv('DEBUG', '').lower() == 'true' else logging.INFO)
+
+    # Clear existing handlers
+    root_logger.handlers.clear()
+
+    # Formatters
+    detailed_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+    )
+    simple_formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s'
+    )
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(simple_formatter)
+    root_logger.addHandler(console_handler)
+
+    # File handler for all logs
+    all_logs_file = os.path.join(logs_dir, 'backend.log')
+    file_handler = logging.handlers.RotatingFileHandler(
+        all_logs_file,
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(detailed_formatter)
+    root_logger.addHandler(file_handler)
+
+    # Error-only file handler
+    error_logs_file = os.path.join(logs_dir, 'backend_errors.log')
+    error_handler = logging.handlers.RotatingFileHandler(
+        error_logs_file,
+        maxBytes=5*1024*1024,  # 5MB
+        backupCount=3
+    )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(detailed_formatter)
+    root_logger.addHandler(error_handler)
+
+    # Request logging handler
+    request_logs_file = os.path.join(logs_dir, 'requests.log')
+    request_handler = logging.handlers.RotatingFileHandler(
+        request_logs_file,
+        maxBytes=5*1024*1024,  # 5MB
+        backupCount=3
+    )
+    request_handler.setLevel(logging.INFO)
+    request_formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(client_ip)s - %(method)s %(path)s - %(status_code)s - %(duration)sms - %(message)s'
+    )
+    request_handler.setFormatter(request_formatter)
+    root_logger.addHandler(request_handler)
+
+    # Performance logging handler
+    perf_logs_file = os.path.join(logs_dir, 'performance.log')
+    perf_handler = logging.handlers.RotatingFileHandler(
+        perf_logs_file,
+        maxBytes=5*1024*1024,  # 5MB
+        backupCount=3
+    )
+    perf_handler.setLevel(logging.INFO)
+    perf_formatter = logging.Formatter(
+        '%(asctime)s - PERFORMANCE - %(funcName)s - %(duration)sms - %(message)s'
+    )
+    perf_handler.setFormatter(perf_formatter)
+    root_logger.addHandler(perf_handler)
+
+    return root_logger
+
+# Initialize logging
+logger = setup_logging()
+
+# Performance monitoring decorator
+def performance_monitor(func):
+    """Decorator to monitor function performance"""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        try:
+            result = func(*args, **kwargs)
+            duration = (time.time() - start_time) * 1000  # Convert to milliseconds
+            logger.info(
+                f"Function {func.__name__} completed successfully",
+                extra={
+                    'funcName': func.__name__,
+                    'duration': f"{duration:.2f}",
+                    'status': 'success'
+                }
+            )
+            return result
+        except Exception as e:
+            duration = (time.time() - start_time) * 1000
+            logger.error(
+                f"Function {func.__name__} failed: {str(e)}",
+                extra={
+                    'funcName': func.__name__,
+                    'duration': f"{duration:.2f}",
+                    'status': 'error'
+                },
+                exc_info=True
+            )
+            raise
+    return wrapper
+
+# Request logging middleware
+@app.before_request
+def log_request_info():
+    """Log incoming requests"""
+    g.start_time = time.time()
+    g.request_id = f"req_{int(time.time() * 1000)}_{hash(request.remote_addr) % 10000}"
+
+    # Skip logging for health checks and SSE
+    if request.path in ['/api/health', '/api/stream']:
+        return
+
+    logger.info(
+        f"Incoming {request.method} {request.path}",
+        extra={
+            'client_ip': request.remote_addr,
+            'method': request.method,
+            'path': request.path,
+            'user_agent': request.headers.get('User-Agent', ''),
+            'request_id': g.request_id
+        }
+    )
+
+@app.after_request
+def log_response_info(response):
+    """Log response information"""
+    duration = (time.time() - getattr(g, 'start_time', time.time())) * 1000
+
+    # Skip logging for health checks and SSE
+    if request.path in ['/api/health', '/api/stream']:
+        return response
+
+    logger.info(
+        f"Response {response.status_code} for {request.method} {request.path}",
+        extra={
+            'client_ip': request.remote_addr,
+            'method': request.method,
+            'path': request.path,
+            'status_code': response.status_code,
+            'duration': f"{duration:.2f}",
+            'request_id': getattr(g, 'request_id', 'unknown')
+        }
+    )
+
+    return response
 
 # Import bot instance for user data access (lazy import to avoid startup issues)
 bot = None
@@ -117,6 +282,35 @@ if api_base_url:
             allowed_origins.append(netlify_domain)
     except:
         pass
+
+# Add Netlify domains from environment variables
+netlify_site_url = os.getenv('NETLIFY_SITE_URL')
+if netlify_site_url:
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(netlify_site_url)
+        netlify_domain = f"{parsed.scheme}://{parsed.netloc}"
+        if netlify_domain not in allowed_origins:
+            allowed_origins.append(netlify_domain)
+    except:
+        pass
+
+# Add common Netlify domain patterns for development
+netlify_preview_domains = [
+    'https://deploy-preview-',
+    'https://branch-deploy-'
+]
+
+# Check if any Netlify domains are already configured
+has_netlify = any('netlify' in origin for origin in allowed_origins)
+
+# If no Netlify domains configured, add wildcard for Netlify (less secure but functional)
+if not has_netlify:
+    # Allow all Netlify domains (deploy previews, custom domains, etc.)
+    allowed_origins.extend([
+        'https://*.netlify.app',
+        'https://*.netlify.com'
+    ])
 
 # If no production domains found, allow all origins (for development)
 if not allowed_origins:
@@ -679,6 +873,118 @@ def validate_token():
     return jsonify({'valid': True, 'user': {'username': user['sub'], 'role': user.get('role', 'user')}}), 200
 
 # Routes
+@app.route('/api/health')
+def health_check():
+    """Comprehensive health check endpoint for Railway deployment monitoring"""
+    try:
+        import psutil
+        import time
+
+        # Check if bot is running
+        bot_status = check_bot_running()
+
+        # Check database connectivity and get detailed status
+        db_status = "unknown"
+        db_details = {}
+        if data_manager_instance:
+            try:
+                # Get connection status from DataManager
+                connection_status = data_manager_instance.get_connection_status()
+                db_status = "healthy" if connection_status.get('healthy') else "degraded"
+                db_details = {
+                    "connection_healthy": connection_status.get('healthy'),
+                    "degraded_mode": connection_status.get('degraded_mode'),
+                    "consecutive_failures": connection_status.get('consecutive_failures'),
+                    "cache_size": connection_status.get('cache_size'),
+                    "uptime_seconds": connection_status.get('uptime_seconds')
+                }
+
+                # Try a simple database operation
+                guilds = data_manager_instance.get_all_guilds()
+                db_details["guilds_count"] = len(guilds) if guilds else 0
+
+            except Exception as e:
+                db_status = f"error: {str(e)}"
+                db_details["error"] = str(e)
+
+        # Check system resources
+        system_info = {
+            "cpu_percent": psutil.cpu_percent(interval=1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "memory_used_mb": psutil.virtual_memory().used / 1024 / 1024,
+            "memory_total_mb": psutil.virtual_memory().total / 1024 / 1024,
+            "disk_percent": psutil.disk_usage('/').percent,
+            "uptime_seconds": time.time() - psutil.boot_time()
+        }
+
+        # Check application performance
+        performance_info = {}
+        if data_manager_instance and hasattr(data_manager_instance, 'get_performance_stats'):
+            try:
+                perf_stats = data_manager_instance.get_performance_stats()
+                performance_info = {
+                    "db_loads": perf_stats.get('loads', 0),
+                    "db_saves": perf_stats.get('saves', 0),
+                    "cache_hit_rate": perf_stats.get('cache_hit_rate', 0),
+                    "db_connection_errors": perf_stats.get('db_connection_errors', 0),
+                    "db_retry_attempts": perf_stats.get('db_retry_attempts', 0),
+                    "operations_per_second": perf_stats.get('operations_per_second', 0)
+                }
+            except Exception as e:
+                performance_info["error"] = str(e)
+
+        # Determine overall health status
+        services_healthy = {
+            "bot": bot_status,
+            "database": db_status == "healthy",
+            "web_server": True,
+            "system_resources": (
+                system_info["cpu_percent"] < 90 and
+                system_info["memory_percent"] < 90 and
+                system_info["disk_percent"] < 95
+            )
+        }
+
+        overall_status = "healthy"
+        if not all(services_healthy.values()):
+            overall_status = "degraded"
+        if not services_healthy["bot"] and not services_healthy["database"]:
+            overall_status = "unhealthy"
+
+        health_data = {
+            "status": overall_status,
+            "timestamp": time.time(),
+            "version": "2.0",
+            "services": {
+                "bot": "healthy" if services_healthy["bot"] else "unhealthy",
+                "database": db_status,
+                "web_server": "healthy",
+                "system_resources": "healthy" if services_healthy["system_resources"] else "warning"
+            },
+            "database": db_details,
+            "system": system_info,
+            "performance": performance_info,
+            "environment": {
+                "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
+                "flask_env": os.getenv('FLASK_ENV', 'production'),
+                "railway_env": bool(os.getenv('RAILWAY_ENVIRONMENT')),
+                "netlify_env": bool(os.getenv('NETLIFY'))
+            }
+        }
+
+        # Return appropriate HTTP status
+        status_code = 200 if overall_status == "healthy" else (503 if overall_status == "unhealthy" else 200)
+        return jsonify(health_data), status_code
+
+    except Exception as e:
+        logger.error(f"Health check error: {e}", exc_info=True)
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": time.time(),
+            "emergency_contact": "Check application logs for details"
+        }), 500
+
 @app.route('/')
 def serve_frontend():
     return send_from_directory('.', 'index.html')

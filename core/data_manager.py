@@ -6,6 +6,7 @@ import asyncio
 import os
 from datetime import datetime, timezone
 import time
+import random
 from typing import Any, Dict, List, Callable, Optional
 import supabase
 from supabase import create_client, Client
@@ -13,7 +14,7 @@ from supabase import create_client, Client
 logger = logging.getLogger(__name__)
 
 class DataManager:
-    """Supabase-based data management with event notifications"""
+    """Supabase-based data management with enhanced connection management"""
 
     def __init__(self):
         # Supabase configuration
@@ -24,14 +25,26 @@ class DataManager:
         if not all([self.supabase_url, self.supabase_key, self.supabase_service_key]):
             raise ValueError("Missing Supabase environment variables")
 
-        # Initialize Supabase clients
-        self.client: Client = create_client(self.supabase_url, self.supabase_key)
-        self.admin_client: Client = create_client(self.supabase_url, self.supabase_service_key)
+        # Connection configuration
+        self.connection_timeout = int(os.getenv('DB_CONNECTION_TIMEOUT', '30'))
+        self.max_retries = int(os.getenv('DB_MAX_RETRIES', '3'))
+        self.retry_backoff_base = float(os.getenv('DB_RETRY_BACKOFF_BASE', '2.0'))
+        self.health_check_interval = int(os.getenv('DB_HEALTH_CHECK_INTERVAL', '60'))
+
+        # Initialize Supabase clients with enhanced configuration
+        self.client: Client = self._create_supabase_client(self.supabase_url, self.supabase_key)
+        self.admin_client: Client = self._create_supabase_client(self.supabase_url, self.supabase_service_key)
+
+        # Connection health monitoring
+        self._connection_healthy = True
+        self._last_health_check = 0
+        self._consecutive_failures = 0
+        self._max_consecutive_failures = 5
 
         # Cache system (in-memory only, no file storage)
         self._cache: Dict[str, Any] = {}
         self._cache_timestamps: Dict[str, float] = {}
-        self._cache_ttl = 300  # 5 minutes
+        self._cache_ttl = int(os.getenv('CACHE_TTL', '300'))  # 5 minutes
 
         # Event listener system
         self._listeners: List[Callable] = []
@@ -46,10 +59,144 @@ class DataManager:
             'cache_hits': 0,
             'cache_misses': 0,
             'sync_operations': 0,
+            'db_connection_errors': 0,
+            'db_retry_attempts': 0,
+            'db_query_timeouts': 0,
             'start_time': time.time()
         }
 
-        logger.info("DataManager initialized with Supabase backend")
+        # Graceful degradation mode
+        self._degraded_mode = False
+
+        logger.info("DataManager initialized with enhanced Supabase backend")
+
+    def _create_supabase_client(self, url: str, key: str) -> Client:
+        """Create Supabase client with enhanced configuration"""
+        try:
+            client = create_client(url, key)
+            # Configure timeouts and connection settings
+            # Note: Supabase client handles most of this internally
+            return client
+        except Exception as e:
+            logger.error(f"Failed to create Supabase client: {e}")
+            raise
+
+    def _execute_with_retry(self, operation_func, operation_name: str, *args, **kwargs):
+        """Execute database operation with retry logic and exponential backoff"""
+        last_exception = None
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                # Check connection health before attempting operation
+                if not self._check_connection_health():
+                    if self._degraded_mode:
+                        logger.warning(f"Operating in degraded mode for {operation_name}")
+                        return self._get_fallback_result(operation_name, *args, **kwargs)
+                    else:
+                        raise Exception("Database connection unhealthy")
+
+                start_time = time.time()
+                result = operation_func(*args, **kwargs)
+                query_time = time.time() - start_time
+
+                # Reset consecutive failures on success
+                self._consecutive_failures = 0
+                self._connection_healthy = True
+
+                # Log slow queries
+                if query_time > 5.0:  # 5 seconds
+                    logger.warning(f"Slow database operation: {operation_name} took {query_time:.2f}s")
+
+                return result
+
+            except Exception as e:
+                last_exception = e
+                self._performance_stats['db_connection_errors'] += 1
+                self._consecutive_failures += 1
+
+                if attempt < self.max_retries:
+                    # Calculate backoff delay with jitter
+                    delay = (self.retry_backoff_base ** attempt) + random.uniform(0, 1)
+                    logger.warning(
+                        f"Database operation {operation_name} failed (attempt {attempt + 1}/{self.max_retries + 1}): {e}. "
+                        f"Retrying in {delay:.2f}s"
+                    )
+                    self._performance_stats['db_retry_attempts'] += 1
+                    time.sleep(delay)
+                else:
+                    logger.error(f"Database operation {operation_name} failed after {self.max_retries + 1} attempts: {e}")
+
+                    # Enter degraded mode if too many consecutive failures
+                    if self._consecutive_failures >= self._max_consecutive_failures:
+                        self._degraded_mode = True
+                        logger.error("Entering degraded mode due to persistent database issues")
+
+        # If we get here, all retries failed
+        if self._degraded_mode:
+            return self._get_fallback_result(operation_name, *args, **kwargs)
+        else:
+            raise last_exception
+
+    def _check_connection_health(self) -> bool:
+        """Check database connection health"""
+        current_time = time.time()
+
+        # Only check health periodically
+        if current_time - self._last_health_check < self.health_check_interval:
+            return self._connection_healthy
+
+        try:
+            self._last_health_check = current_time
+
+            # Simple health check query
+            start_time = time.time()
+            result = self.admin_client.table('guilds').select('guild_id').limit(1).execute()
+            query_time = time.time() - start_time
+
+            # Consider unhealthy if query takes too long
+            if query_time > self.connection_timeout:
+                self._performance_stats['db_query_timeouts'] += 1
+                logger.warning(f"Database health check query timed out: {query_time:.2f}s")
+                self._connection_healthy = False
+                return False
+
+            self._connection_healthy = True
+            return True
+
+        except Exception as e:
+            logger.error(f"Database health check failed: {e}")
+            self._connection_healthy = False
+            return False
+
+    def _get_fallback_result(self, operation_name: str, *args, **kwargs):
+        """Provide fallback results when database is unavailable"""
+        logger.warning(f"Providing fallback result for {operation_name} in degraded mode")
+
+        if operation_name.startswith('load_guild_data'):
+            guild_id = args[0] if args else None
+            data_type = args[1] if len(args) > 1 else 'unknown'
+            return self._get_default_data(data_type)
+        elif operation_name == 'save_guild_data':
+            return False  # Indicate save failed
+        elif operation_name == 'get_all_guilds':
+            return []  # Return empty list
+
+        return None
+
+    def is_degraded_mode(self) -> bool:
+        """Check if DataManager is in degraded mode"""
+        return self._degraded_mode
+
+    def get_connection_status(self) -> Dict[str, Any]:
+        """Get detailed connection status information"""
+        return {
+            'healthy': self._connection_healthy,
+            'degraded_mode': self._degraded_mode,
+            'last_health_check': self._last_health_check,
+            'consecutive_failures': self._consecutive_failures,
+            'cache_size': len(self._cache),
+            'uptime_seconds': time.time() - self._performance_stats['start_time']
+        }
 
     def set_bot_instance(self, bot):
         """Set bot instance for Discord updates"""
@@ -74,7 +221,7 @@ class DataManager:
         self._notify_listeners(event_type, data)
 
     def load_guild_data(self, guild_id: int, data_type: str, force_reload: bool = False) -> Optional[Dict]:
-        """Load guild-specific data from Supabase"""
+        """Load guild-specific data from Supabase with retry logic"""
         cache_key = f"{guild_id}:{data_type}"
 
         # Check cache
@@ -86,7 +233,7 @@ class DataManager:
 
         self._performance_stats['cache_misses'] += 1
 
-        try:
+        def _load_operation():
             # Load from Supabase based on data_type
             if data_type == 'config':
                 result = self.admin_client.table('guilds').select('*').eq('guild_id', str(guild_id)).execute()
@@ -306,6 +453,11 @@ class DataManager:
             else:
                 data = self._get_default_data(data_type)
 
+            return data
+
+        try:
+            data = self._execute_with_retry(_load_operation, f'load_guild_data_{data_type}', guild_id, data_type)
+
             # Update cache
             self._cache[cache_key] = data.copy()
             self._cache_timestamps[cache_key] = time.time()
@@ -349,8 +501,8 @@ class DataManager:
         return defaults.get(data_type, {})
 
     def save_guild_data(self, guild_id: int, data_type: str, data) -> bool:
-        """Save guild data to Supabase"""
-        try:
+        """Save guild data to Supabase with retry logic"""
+        def _save_operation():
             if data_type == 'config':
                 # Ensure guild exists
                 self.admin_client.table('guilds').upsert({
@@ -484,30 +636,38 @@ class DataManager:
                 # Embeds are handled separately via embed_builder
                 pass
 
-            # Update cache
-            cache_key = f"{guild_id}:{data_type}"
-            self._cache[cache_key] = data.copy()
-            self._cache_timestamps[cache_key] = time.time()
-
-            # Notify listeners
-            try:
-                self._notify_listeners('guild_update', {
-                    'guild_id': str(guild_id),
-                    'data_type': data_type,
-                    'timestamp': datetime.now().isoformat()
-                })
-            except Exception as e:
-                logger.error(f"Error notifying listeners: {e}")
-
-            # Trigger Discord sync for specific data types
-            if self.bot_instance and data_type in ["tasks", "currency"]:
-                asyncio.run_coroutine_threadsafe(
-                    self._sync_discord_elements(guild_id, data_type, data),
-                    self.bot_instance.loop
-                )
-
-            logger.debug(f"Saved {data_type} for guild {guild_id} to Supabase")
             return True
+
+        try:
+            success = self._execute_with_retry(_save_operation, f'save_guild_data_{data_type}', guild_id, data_type, data)
+
+            if success:
+                # Update cache
+                cache_key = f"{guild_id}:{data_type}"
+                self._cache[cache_key] = data.copy()
+                self._cache_timestamps[cache_key] = time.time()
+
+                # Notify listeners
+                try:
+                    self._notify_listeners('guild_update', {
+                        'guild_id': str(guild_id),
+                        'data_type': data_type,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                except Exception as e:
+                    logger.error(f"Error notifying listeners: {e}")
+
+                # Trigger Discord sync for specific data types
+                if self.bot_instance and data_type in ["tasks", "currency"]:
+                    asyncio.run_coroutine_threadsafe(
+                        self._sync_discord_elements(guild_id, data_type, data),
+                        self.bot_instance.loop
+                    )
+
+                logger.debug(f"Saved {data_type} for guild {guild_id} to Supabase")
+                return True
+
+            return False
 
         except Exception as e:
             logger.error(f"Error saving {data_type} for guild {guild_id} to Supabase: {e}")
@@ -800,10 +960,13 @@ class DataManager:
         return stats
 
     def get_all_guilds(self) -> List[int]:
-        """Get list of all guild IDs that have data stored"""
-        try:
+        """Get list of all guild IDs that have data stored with retry logic"""
+        def _get_guilds_operation():
             result = self.admin_client.table('guilds').select('guild_id').execute()
             return [int(guild['guild_id']) for guild in result.data]
+
+        try:
+            return self._execute_with_retry(_get_guilds_operation, 'get_all_guilds')
         except Exception as e:
             logger.error(f"Error getting guilds from Supabase: {e}")
             return []
