@@ -14,6 +14,16 @@ class GuildInitializer:
         """Run full initialization check for a guild"""
         print(f"🔄 Initializing guild: {guild.name} (ID: {guild.id})")
 
+        # FIRST: Ensure guild record exists with required fields
+        config = self.data_manager.load_guild_data(guild.id, "config")
+        config.update({
+            'server_name': guild.name,
+            'owner_id': str(guild.owner_id),
+            'member_count': guild.member_count,
+            'icon_url': str(guild.icon.url) if guild.icon else None
+        })
+        self.data_manager.save_guild_data(guild.id, "config", config)
+
         # Step 1: Ensure config exists
         await self._ensure_config(guild)
 
@@ -80,6 +90,13 @@ class GuildInitializer:
     async def _initialize_tasks(self, guild: discord.Guild):
         """Ensure all tasks in data have Discord messages"""
         config = self.data_manager.load_guild_data(guild.id, "config")
+
+        # ENSURE server_name and owner_id are ALWAYS set
+        if not config.get('server_name'):
+            config['server_name'] = guild.name
+        if not config.get('owner_id'):
+            config['owner_id'] = str(guild.owner_id)
+
         tasks_data = self.data_manager.load_guild_data(guild.id, "tasks")
 
         # Get or create task channel

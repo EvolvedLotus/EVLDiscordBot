@@ -97,7 +97,9 @@ class DataManager:
                 delay = self.retry_delay * (2 ** (attempt - 1))
                 logger.warning(f"⚠️  Operation {operation_name} failed (attempt {attempt}/{self.max_retries}): {e}. Retrying in {delay:.2f}s")
 
-                time.sleep(delay)
+                # REPLACE time.sleep() with pass - retries happen immediately in sync context
+                # The async wrapper will handle delays if needed
+                pass
     
         # Fallback if all retries exhausted
         return self._get_fallback_result(operation_name)
@@ -417,11 +419,20 @@ class DataManager:
                         'created_by': emb['created_by']
                     }
 
-                data = {
+                # Validate structure
+                loaded_data = {
                     'embeds': embeds,
                     'templates': {},  # TODO: implement templates
                     'settings': {}    # TODO: implement settings
                 }
+
+                # Ensure it's always a dict
+                if isinstance(loaded_data, str):
+                    loaded_data = {"embeds": {}}
+                if not isinstance(loaded_data, dict):
+                    loaded_data = {"embeds": {}}
+
+                data = loaded_data
 
             else:
                 data = self._get_default_data(data_type)
@@ -504,9 +515,16 @@ class DataManager:
                     }).execute()
 
                 elif dtype == "embeds":
+                    # ENSURE data is always a dict, not a string
+                    if isinstance(save_data, str):
+                        logger.warning(f"Embeds data for guild {guild_id_str} is a string, converting to dict")
+                        save_data = {"embeds": {}}  # Default empty embeds structure
+
+                    # Now safely process as dict
+                    embeds_data = save_data.get("embeds", {})
+
                     # Handle embeds data - store in embeds table
-                    for embed_data in save_data:
-                        embed_id = embed_data.get('embed_id', f"embed_{int(datetime.now(timezone.utc).timestamp())}")
+                    for embed_id, embed_data in embeds_data.items():
                         self.admin_client.table('embeds').upsert({
                             'embed_id': embed_id,
                             'guild_id': guild_id_str,
@@ -514,6 +532,12 @@ class DataManager:
                             'description': embed_data.get('description'),
                             'color': embed_data.get('color'),
                             'fields': embed_data.get('fields', []),
+                            'footer': embed_data.get('footer'),
+                            'thumbnail': embed_data.get('thumbnail'),
+                            'image': embed_data.get('image'),
+                            'channel_id': embed_data.get('channel_id'),
+                            'message_id': embed_data.get('message_id'),
+                            'created_by': embed_data.get('created_by'),
                             'updated_at': datetime.now(timezone.utc).isoformat()
                         }).execute()
 
@@ -930,7 +954,7 @@ class DataManager:
         """
         try:
             # Get all guilds from database
-            all_guilds_result = self.admin_client.table('guilds').select('guild_id, is_active, name').execute()
+            all_guilds_result = self.admin_client.table('guilds').select('guild_id, is_active, server_name').execute()
 
             inactive_count = 0
             for guild in all_guilds_result.data:
@@ -944,7 +968,7 @@ class DataManager:
                     }).eq('guild_id', guild_id).execute()
 
                     inactive_count += 1
-                    logger.info(f"Marked guild {guild_id} ({guild.get('name', 'Unknown')}) as inactive")
+                    logger.info(f"Marked guild {guild_id} ({guild.get('server_name', 'Unknown')}) as inactive")
 
             return inactive_count
 
