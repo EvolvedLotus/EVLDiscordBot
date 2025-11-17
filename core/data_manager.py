@@ -891,7 +891,7 @@ class DataManager:
             for guild in self.bot_instance.guilds:
                 discord_guilds[str(guild.id)] = {
                     'guild_id': str(guild.id),
-                    'name': guild.name,
+                    'server_name': guild.name,
                     'member_count': guild.member_count,
                     'owner_id': str(guild.owner_id),
                     'created_at': guild.created_at.isoformat(),
@@ -920,7 +920,7 @@ class DataManager:
                     if is_new:
                         new_guilds.append(guild_id)
 
-                    logger.info(f"{'Created' if is_new else 'Updated'} guild {guild_id} ({guild_data['name']}) in database")
+                    logger.info(f"{'Created' if is_new else 'Updated'} guild {guild_id} ({guild_data['server_name']}) in database")
 
                 except Exception as e:
                     logger.error(f"Failed to sync guild {guild_id}: {e}")
