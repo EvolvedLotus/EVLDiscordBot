@@ -5,7 +5,7 @@ import logging
 import asyncio
 import os
 from datetime import datetime, timezone
-import time as time_module  # ✅ Import as alias
+import time
 import random
 from typing import Any, Dict, List, Callable, Optional
 import supabase
@@ -84,8 +84,6 @@ class DataManager:
 
     def _execute_with_retry(self, operation, operation_name, *args, **kwargs):
         """Execute operation with retry logic (non-blocking)"""
-        import time as time_module  # Use the module directly
-
         for attempt in range(1, self.max_retries + 1):
             try:
                 return operation(*args, **kwargs)
@@ -95,12 +93,11 @@ class DataManager:
                     self._enter_degraded_mode()
                     # Return safe fallback instead of raising
                     return self._get_fallback_result(operation_name)
-                
+
                 delay = self.retry_delay * (2 ** (attempt - 1))
                 logger.warning(f"⚠️  Operation {operation_name} failed (attempt {attempt}/{self.max_retries}): {e}. Retrying in {delay:.2f}s")
-                
-                # Use time_module instead of time
-                time_module.sleep(delay)
+
+                time.sleep(delay)
     
         # Fallback if all retries exhausted
         return self._get_fallback_result(operation_name)
