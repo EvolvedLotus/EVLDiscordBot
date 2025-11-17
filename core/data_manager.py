@@ -36,6 +36,9 @@ class DataManager:
         self.client: Client = self._create_supabase_client(self.supabase_url, self.supabase_key)
         self.admin_client: Client = self._create_supabase_client(self.supabase_url, self.supabase_service_key)
 
+        # ✅ CRITICAL: Store the supabase client for backward compatibility
+        self.supabase = self.client
+
         # Connection health monitoring
         self._connection_healthy = True
         self._last_health_check = 0
@@ -69,7 +72,11 @@ class DataManager:
         # Graceful degradation mode
         self._degraded_mode = False
 
-        logger.info("DataManager initialized with enhanced Supabase backend")
+        # Verify client is valid
+        if not self.supabase:
+            raise ValueError("Supabase client cannot be None")
+
+        logger.info("✅ DataManager initialized with Supabase client")
 
     def _create_supabase_client(self, url: str, key: str) -> Client:
         """Create Supabase client with enhanced configuration"""
