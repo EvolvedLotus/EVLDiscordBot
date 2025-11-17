@@ -19,6 +19,7 @@ class Currency(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.data_manager = bot.data_manager  # ✅ CRITICAL: Store data_manager reference
         # Use global data_manager instead of self.bot.data_manager to avoid timing issues
         from core import data_manager
         self.transaction_manager = TransactionManager(data_manager)
