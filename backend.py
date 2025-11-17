@@ -44,86 +44,44 @@ data_manager_instance = None
 # === LOGGING CONFIGURATION ===
 
 def setup_logging():
-    """Configure comprehensive logging for the application"""
-    import logging.handlers
-    import os
+    """Setup logging configuration for Railway deployment"""
+
+    # Determine logs directory based on environment
+    if os.environ.get('RAILWAY_ENVIRONMENT_ID') or os.environ.get('RAILWAY_PROJECT_ID'):
+        # Railway: Use /tmp which is writable in ephemeral containers
+        logs_dir = '/tmp/logs'
+    else:
+        # Local development: Use ./logs directory
+        logs_dir = os.path.join(os.getcwd(), 'logs')
 
     # Create logs directory if it doesn't exist
-    logs_dir = os.path.join(DATA_DIR, 'logs')
-    os.makedirs(logs_dir, exist_ok=True)
+    try:
+        os.makedirs(logs_dir, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Could not create logs directory: {e}")
+        # Fallback to stdout only logging
+        logging.basicConfig(
+            level=logging.INFO,
+            format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            handlers=[logging.StreamHandler()]
+        )
+        return logging.getLogger(__name__)
 
-    # Configure root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG if os.getenv('DEBUG', '').lower() == 'true' else logging.INFO)
+    # Setup logging with both file and console handlers
+    log_file = os.path.join(logs_dir, 'bot.log')
 
-    # Clear existing handlers
-    root_logger.handlers.clear()
-
-    # Formatters
-    detailed_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+    logging.basicConfig(
+        level=logging.INFO,
+        format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler()
+        ]
     )
-    simple_formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(message)s'
-    )
 
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(simple_formatter)
-    root_logger.addHandler(console_handler)
-
-    # File handler for all logs
-    all_logs_file = os.path.join(logs_dir, 'backend.log')
-    file_handler = logging.handlers.RotatingFileHandler(
-        all_logs_file,
-        maxBytes=10*1024*1024,  # 10MB
-        backupCount=5
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(detailed_formatter)
-    root_logger.addHandler(file_handler)
-
-    # Error-only file handler
-    error_logs_file = os.path.join(logs_dir, 'backend_errors.log')
-    error_handler = logging.handlers.RotatingFileHandler(
-        error_logs_file,
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3
-    )
-    error_handler.setLevel(logging.ERROR)
-    error_handler.setFormatter(detailed_formatter)
-    root_logger.addHandler(error_handler)
-
-    # Request logging handler
-    request_logs_file = os.path.join(logs_dir, 'requests.log')
-    request_handler = logging.handlers.RotatingFileHandler(
-        request_logs_file,
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3
-    )
-    request_handler.setLevel(logging.INFO)
-    request_formatter = logging.Formatter(
-        '%(asctime)s - %(levelname)s - %(client_ip)s - %(method)s %(path)s - %(status_code)s - %(duration)sms - %(message)s'
-    )
-    request_handler.setFormatter(request_formatter)
-    root_logger.addHandler(request_handler)
-
-    # Performance logging handler
-    perf_logs_file = os.path.join(logs_dir, 'performance.log')
-    perf_handler = logging.handlers.RotatingFileHandler(
-        perf_logs_file,
-        maxBytes=5*1024*1024,  # 5MB
-        backupCount=3
-    )
-    perf_handler.setLevel(logging.INFO)
-    perf_formatter = logging.Formatter(
-        '%(asctime)s - PERFORMANCE - %(funcName)s - %(duration)sms - %(message)s'
-    )
-    perf_handler.setFormatter(perf_formatter)
-    root_logger.addHandler(perf_handler)
-
-    return root_logger
+    return logging.getLogger(__name__)
 
 # Initialize logging
 logger = setup_logging()
