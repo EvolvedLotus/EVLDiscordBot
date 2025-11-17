@@ -293,6 +293,9 @@ class Tasks(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        # Initialize managers
+        self.task_manager = TaskManager(data_manager, TransactionManager(data_manager))
+        self.task_manager.set_bot(bot)
         # Don't start the loop here - it will be started in setup or after bot is ready
 
     @app_commands.command(name="task_submit", description="Submit proof for a claimed task")

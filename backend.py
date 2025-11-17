@@ -11,7 +11,6 @@ import subprocess
 import logging
 import logging.handlers
 from collections import defaultdict
-import jwt
 import hashlib
 import secrets
 import traceback
@@ -341,52 +340,36 @@ SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
 COMMANDS_FILE = os.path.join(DATA_DIR, 'commands.json')
 TASKS_FILE = os.path.join(DATA_DIR, 'tasks.json')
 
-# JWT Configuration
-JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
-if not JWT_SECRET_KEY:
-    raise ValueError("JWT_SECRET_KEY environment variable not set")
-JWT_ALGORITHM = 'HS256'
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 30
-JWT_REFRESH_TOKEN_EXPIRE_DAYS = 7
+# Simple session-based authentication
+SESSIONS = {}  # session_id -> user_data
+SESSION_TIMEOUT = 3600  # 1 hour in seconds
 
-# JWT Functions
-def create_access_token(data: dict, expires_delta: timedelta = None):
-    """Create JWT access token"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire, "type": "access"})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
+def create_session(user_data: dict):
+    """Create a new session and return session ID"""
+    session_id = secrets.token_hex(32)
+    SESSIONS[session_id] = {
+        'user': user_data,
+        'created_at': time.time(),
+        'expires_at': time.time() + SESSION_TIMEOUT
+    }
+    return session_id
 
-def create_refresh_token(data: dict):
-    """Create JWT refresh token"""
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(days=JWT_REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire, "type": "refresh"})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
-
-def verify_token(token: str, token_type: str = "access"):
-    """Verify JWT token"""
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        if payload.get("type") != token_type:
-            return None
-        return payload
-    except jwt.ExpiredSignatureError:
-        return None
-    except jwt.PyJWTError:
+def get_session(session_id: str):
+    """Get session data if valid"""
+    if session_id not in SESSIONS:
         return None
 
-def get_current_user(token: str):
-    """Get current user from JWT token"""
-    payload = verify_token(token, "access")
-    if not payload:
+    session = SESSIONS[session_id]
+    if time.time() > session['expires_at']:
+        # Session expired, remove it
+        del SESSIONS[session_id]
         return None
-    return payload
+
+    return session
+
+def destroy_session(session_id: str):
+    """Destroy a session"""
+    SESSIONS.pop(session_id, None)
 
 def authenticate_user(username: str, password: str):
     """Authenticate user with username/password"""
@@ -403,28 +386,20 @@ def authenticate_user(username: str, password: str):
         return {"username": username, "role": "admin"}
     return None
 
-# JWT Middleware decorator
-def jwt_required(f):
-    """Decorator to require JWT authentication from cookies or Authorization header"""
+# Session-based authentication middleware decorator
+def session_required(f):
+    """Decorator to require session-based authentication"""
     def wrapper(*args, **kwargs):
-        # Try to get token from cookies first (more secure)
-        token = request.cookies.get('access_token')
-
-        # Fallback to Authorization header for backward compatibility
-        if not token:
-            auth_header = request.headers.get('Authorization')
-            if auth_header and auth_header.startswith('Bearer '):
-                token = auth_header.split(' ')[1]
-
-        if not token:
+        session_id = request.cookies.get('session_id')
+        if not session_id:
             return jsonify({'error': 'Authentication required'}), 401
 
-        user = get_current_user(token)
-        if not user:
-            return jsonify({'error': 'Invalid or expired token'}), 401
+        session = get_session(session_id)
+        if not session:
+            return jsonify({'error': 'Session expired or invalid'}), 401
 
         # Add user to request context
-        request.user = user
+        request.user = session['user']
         return f(*args, **kwargs)
     wrapper.__name__ = f.__name__
     return wrapper
@@ -722,7 +697,7 @@ def create_task_embed(task):
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    """Authenticate user and return JWT tokens"""
+    """Authenticate user and create session"""
     try:
         # Validate request data
         if not request.is_json:
@@ -746,11 +721,10 @@ def login():
         if not user:
             return jsonify({'error': 'Invalid credentials'}), 401
 
-        # Create tokens
-        access_token = create_access_token({"sub": user["username"], "role": user["role"]})
-        refresh_token = create_refresh_token({"sub": user["username"], "role": user["role"]})
+        # Create session
+        session_id = create_session(user)
 
-        # Set HTTP-only cookies for security
+        # Set session cookie
         response = jsonify({
             'message': 'Login successful',
             'user': {
@@ -759,24 +733,14 @@ def login():
             }
         })
 
-        # Set access token cookie (short-lived)
+        # Set session cookie
         response.set_cookie(
-            'access_token',
-            access_token,
+            'session_id',
+            session_id,
             httponly=True,
             secure=False,  # Set to True in production with HTTPS
             samesite='Lax',
-            max_age=JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        )
-
-        # Set refresh token cookie (long-lived)
-        response.set_cookie(
-            'refresh_token',
-            refresh_token,
-            httponly=True,
-            secure=False,  # Set to True in production with HTTPS
-            samesite='Lax',
-            max_age=JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
+            max_age=SESSION_TIMEOUT
         )
 
         return response
@@ -787,90 +751,47 @@ def login():
         logger.error(f"Login error: {e}", exc_info=True)
         return jsonify({'error': 'Authentication failed'}), 500
 
-@app.route('/api/auth/refresh', methods=['POST'])
-def refresh_token():
-    """Refresh access token using refresh token from cookies"""
-    try:
-        # Get refresh token from cookies
-        refresh_token_value = request.cookies.get('refresh_token')
-
-        if not refresh_token_value:
-            return jsonify({'error': 'Refresh token required'}), 400
-
-        # Verify refresh token
-        payload = verify_token(refresh_token_value, "refresh")
-        if not payload:
-            return jsonify({'error': 'Invalid refresh token'}), 401
-
-        username = payload.get("sub")
-        role = payload.get("role", "user")
-
-        # Create new tokens
-        access_token = create_access_token({"sub": username, "role": role})
-        new_refresh_token = create_refresh_token({"sub": username, "role": role})
-
-        # Set new cookies
-        response = jsonify({
-            'message': 'Token refreshed successfully',
-            'user': {
-                'username': username,
-                'role': role
-            }
-        })
-
-        # Set new access token cookie
-        response.set_cookie(
-            'access_token',
-            access_token,
-            httponly=True,
-            secure=False,  # Set to True in production with HTTPS
-            samesite='Lax',
-            max_age=JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        )
-
-        # Set new refresh token cookie
-        response.set_cookie(
-            'refresh_token',
-            new_refresh_token,
-            httponly=True,
-            secure=False,  # Set to True in production with HTTPS
-            samesite='Lax',
-            max_age=JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
-        )
-
-        return response
-
-    except Exception as e:
-        logger.error(f"Token refresh error: {e}")
-        return jsonify({'error': 'Token refresh failed'}), 500
-
 @app.route('/api/auth/me', methods=['GET'])
-@jwt_required
 def get_current_user_info():
     """Get current authenticated user info"""
-    user = request.user
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        return jsonify({'error': 'Not authenticated'}), 401
+
+    session = get_session(session_id)
+    if not session:
+        return jsonify({'error': 'Session expired'}), 401
+
+    user = session['user']
     return jsonify({
-        'username': user['sub'],
+        'username': user['username'],
         'role': user.get('role', 'user')
     })
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
-    """Logout user by clearing cookies"""
+    """Logout user by destroying session"""
+    session_id = request.cookies.get('session_id')
+    if session_id:
+        destroy_session(session_id)
+
     response = jsonify({'message': 'Logged out successfully'})
-
-    # Clear both cookies
-    response.set_cookie('access_token', '', expires=0, httponly=True, secure=False, samesite='Lax')
-    response.set_cookie('refresh_token', '', expires=0, httponly=True, secure=False, samesite='Lax')
-
+    response.set_cookie('session_id', '', expires=0, httponly=True, secure=False, samesite='Lax')
     return response
 
 @app.route('/api/auth/validate', methods=['GET'])
-@jwt_required
-def validate_token():
-    """Validates current JWT token"""
-    user = request.user
-    return jsonify({'valid': True, 'user': {'username': user['sub'], 'role': user.get('role', 'user')}}), 200
+def validate_session():
+    """Validates current session"""
+    session_id = request.cookies.get('session_id')
+    if not session_id:
+        return jsonify({'valid': False, 'error': 'No session'}), 401
+
+    session = get_session(session_id)
+    if not session:
+        return jsonify({'valid': False, 'error': 'Session expired'}), 401
+
+    user = session['user']
+    return jsonify({'valid': True, 'user': {'username': user['username'], 'role': user.get('role', 'user')}}), 200
 
 # Routes
 @app.route('/api/health')
@@ -881,7 +802,8 @@ def health_check():
         import time
 
         # For Railway deployment, return healthy immediately during startup
-        railway_env = bool(os.getenv('RAILWAY_ENVIRONMENT'))
+        # Railway sets RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID, etc.
+        railway_env = bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_ENVIRONMENT_ID'))
         if railway_env:
             # Simple health check for Railway - just confirm Flask is running
             return jsonify({
@@ -3993,10 +3915,13 @@ def run_backend():
         # Start bot in separate thread before Flask starts
         start_bot_thread()
 
+        # Use PORT environment variable for Railway deployment, default to 5000 for local development
+        port = int(os.getenv('PORT', 5000))
+
         flask_env = os.getenv('FLASK_ENV', 'development')
         debug_mode = flask_env == 'development'
-        logger.info(f"Starting Flask backend on http://0.0.0.0:5000 (FLASK_ENV={flask_env}, debug={debug_mode})")
-        app.run(host='0.0.0.0', port=5000, debug=debug_mode, use_reloader=False, threaded=True)
+        logger.info(f"Starting Flask backend on http://0.0.0.0:{port} (FLASK_ENV={flask_env}, debug={debug_mode})")
+        app.run(host='0.0.0.0', port=port, debug=debug_mode, use_reloader=False, threaded=True)
     except Exception as e:
         logger.error(f"Error starting backend: {e}")
 

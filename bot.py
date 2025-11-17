@@ -189,36 +189,24 @@ async def run_bot():
         @bot.event
         async def on_member_join(member):
             """Handle user joining server - auto-create user data"""
-            guild_id = str(member.guild.id)
-            user_id = str(member.id)
+            guild_id = member.guild.id
+            user_id = member.id
 
             try:
-                # Load currency data
-                currency_data = data_manager.load_guild_data(guild_id, 'currency')
+                # Use DataManager to create user if they don't exist
+                # The DataManager handles user creation automatically in database operations
+                user_data = data_manager.load_guild_data(guild_id, 'currency')
+                users = user_data.get('users', {})
 
-                # Check if user already exists
-                if user_id not in currency_data.get('users', {}):
-                    # Auto-create user entry
-                    currency_data.setdefault('users', {})[user_id] = {
-                        'balance': 0,
-                        'total_earned': 0,
-                        'total_spent': 0,
-                        'created_at': datetime.now().isoformat(),
-                        'is_active': True,
-                        'username': member.name,
-                        'display_name': member.display_name
-                    }
-
-                    # Save data
-                    data_manager.save_guild_data(guild_id, 'currency', currency_data)
-
-                    logger.info(f"Auto-created user data for {member.display_name} ({member.name}) in guild {guild_id}")
+                if str(user_id) not in users:
+                    # User will be auto-created on first balance operation
+                    logger.info(f"New user {member.display_name} ({member.name}) joined guild {guild_id} - will be auto-created on first transaction")
 
                     # Broadcast SSE event
                     from backend import sse_manager
                     sse_manager.broadcast_event('user_joined', {
-                        'guild_id': guild_id,
-                        'user_id': user_id,
+                        'guild_id': str(guild_id),
+                        'user_id': str(user_id),
                         'username': member.name,
                         'display_name': member.display_name
                     })
