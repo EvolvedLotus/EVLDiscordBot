@@ -213,10 +213,10 @@ def performance_monitor(func):
     """Decorator to monitor function performance"""
     @functools.wraps(func)
     def performance_wrapper(*args, **kwargs):
-        start_time = time.time()
+        start_time = time_module.time()
         try:
             result = func(*args, **kwargs)
-            duration = (time.time() - start_time) * 1000  # Convert to milliseconds
+            duration = (time_module.time() - start_time) * 1000  # Convert to milliseconds
             logger.info(
                 f"Function {func.__name__} completed successfully",
                 extra={
@@ -227,7 +227,7 @@ def performance_monitor(func):
             )
             return result
         except Exception as e:
-            duration = (time.time() - start_time) * 1000
+            duration = (time_module.time() - start_time) * 1000
             logger.error(
                 f"Function {func.__name__} failed: {str(e)}",
                 extra={
@@ -244,8 +244,8 @@ def performance_monitor(func):
 @app.before_request
 def log_request_info():
     """Log incoming requests"""
-    g.start_time = time.time()
-    g.request_id = f"req_{int(time.time() * 1000)}_{hash(request.remote_addr) % 10000}"
+    g.start_time = time_module.time()
+    g.request_id = f"req_{int(time_module.time() * 1000)}_{hash(request.remote_addr) % 10000}"
 
     # Skip logging for health checks and SSE
     if request.path in ['/api/health', '/api/stream']:
@@ -265,7 +265,7 @@ def log_request_info():
 @app.after_request
 def log_response_info(response):
     """Log response information"""
-    duration = (time.time() - getattr(g, 'start_time', time.time())) * 1000
+    duration = (time_module.time() - getattr(g, 'start_time', time_module.time())) * 1000
 
     # Skip logging for health checks and SSE
     if request.path in ['/api/health', '/api/stream']:
@@ -355,8 +355,8 @@ def create_session(user_data: dict):
     session_id = secrets.token_hex(32)
     SESSIONS[session_id] = {
         'user': user_data,
-        'created_at': time.time(),
-        'expires_at': time.time() + SESSION_TIMEOUT
+        'created_at': time_module.time(),
+        'expires_at': time_module.time() + SESSION_TIMEOUT
     }
     return session_id
 
@@ -366,7 +366,7 @@ def get_session(session_id: str):
         return None
 
     session = SESSIONS[session_id]
-    if time.time() > session['expires_at']:
+    if time_module.time() > session['expires_at']:
         # Session expired, remove it
         del SESSIONS[session_id]
         return None
@@ -1188,7 +1188,7 @@ def create_shop_item(server_id):
             return jsonify({'error': f'Failed to validate server/channel: {str(e)}'}), 500
 
         # Generate unique item ID
-        item_id = f"item_{int(time.time() * 1000)}"
+        item_id = f"item_{int(time_module.time() * 1000)}"
 
         # Prepare item data
         item_data = {
@@ -1727,12 +1727,12 @@ def get_users(server_id):
         })
 
 # Rate limiting for balance modifications
-balance_modification_limits = defaultdict(lambda: {'count': 0, 'reset_time': time.time() + 60})
+balance_modification_limits = defaultdict(lambda: {'count': 0, 'reset_time': time_module.time() + 60})
 
 def check_balance_modification_rate_limit(server_id, user_id):
     """Check rate limit for balance modifications (max 5 per minute per server)"""
     key = f"{server_id}_{user_id}"
-    current_time = time.time()
+    current_time = time_module.time()
 
     # Reset counter if time window passed
     if current_time > balance_modification_limits[key]['reset_time']:
@@ -1853,7 +1853,7 @@ def modify_user_balance(server_id, user_id):
 
         # Validate transaction data
         transaction_data = {
-            'id': f"txn_{int(time.time() * 1000)}",
+            'id': f"txn_{int(time_module.time() * 1000)}",
             'user_id': user_id_str,
             'amount': actual_change,
             'balance_before': balance_before,
@@ -3597,7 +3597,7 @@ class SSEManager:
                 # Send keepalive ping
                 keepalive_event = {
                     'type': 'keepalive',
-                    'timestamp': time.time(),
+                    'timestamp': time_module.time(),
                     'message': 'Connection active'
                 }
                 self.clients[client_id].put(keepalive_event, timeout=1)  # Non-blocking with timeout
@@ -3650,7 +3650,7 @@ class SSEManager:
                                         'event_type': event_type,
                                         'guild_id': guild_id,
                                         'events': guild_event_list,
-                                        'timestamp': time.time()
+                                        'timestamp': time_module.time()
                                     }
                                     self.clients[client_id].put(batch_event)
                             except:
@@ -3665,7 +3665,7 @@ class SSEManager:
         with self.buffer_lock:
             self.event_buffer[event_type].append({
                 **event_data,
-                'timestamp': time.time()
+                'timestamp': time_module.time()
             })
 
             # If buffer gets too large, process immediately
@@ -3677,7 +3677,7 @@ class SSEManager:
         self.subscriptions[client_id] = {
             'guilds': set(guilds or []),
             'event_types': set(event_types or []),
-            'connected_at': time.time()
+            'connected_at': time_module.time()
         }
         self.clients[client_id] = queue.Queue()
 
@@ -3710,7 +3710,7 @@ def stream():
     subscribed_events = request.args.get('events', '').split(',') if request.args.get('events') else None
 
     # Generate client ID for tracking
-    client_id = f"client_{int(time.time() * 1000)}_{hash(request.remote_addr) % 10000}"
+    client_id = f"client_{int(time_module.time() * 1000)}_{hash(request.remote_addr) % 10000}"
 
     # Subscribe client
     sse_manager.subscribe_client(client_id, subscribed_guilds, subscribed_events)
@@ -3734,7 +3734,7 @@ def stream():
 
                 except queue.Empty:
                     # Send heartbeat with connection info
-                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': time.time()})}\n\n"
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': time_module.time()})}\n\n"
 
         except GeneratorExit:
             # Client disconnected
@@ -3770,7 +3770,7 @@ def broadcast_update(event_type, data):
                 'guild_id': str(data.get('guild_id', '')),
                 'type': data.get('data_type', 'unknown'),
                 'action': 'update',
-                'timestamp': time.time()
+                'timestamp': time_module.time()
             })
         elif event_type in ['shop_update', 'inventory_update']:
             # Handle shop-specific events
@@ -3779,7 +3779,7 @@ def broadcast_update(event_type, data):
                 'action': data.get('action', 'update'),
                 'item_id': data.get('item_id'),
                 'user_id': data.get('user_id'),
-                'timestamp': time.time()
+                'timestamp': time_module.time()
             })
         else:
             # Handle other event types generically
@@ -3787,7 +3787,7 @@ def broadcast_update(event_type, data):
                 'guild_id': str(data.get('guild_id', '')),
                 'action': 'update',
                 'data': data,
-                'timestamp': time.time()
+                'timestamp': time_module.time()
             })
     except Exception as e:
         logger.error(f"Error broadcasting update: {e}")
