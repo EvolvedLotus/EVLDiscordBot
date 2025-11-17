@@ -1837,7 +1837,7 @@ def check_balance_modification_rate_limit(server_id, user_id):
     balance_modification_limits[key]['count'] += 1
     return True, 0
 
-@app.route('/api/<server_id>/users/<user_id>/balance', methods=['PUT'])
+@app.route('/api/<server_id>/users/<user_id>/balance', methods=['PUT'], endpoint='modify_user_balance')
 def modify_user_balance(server_id, user_id):
     if not data_manager_instance:
         return jsonify({'error': 'Data manager not available'}), 500
@@ -2027,7 +2027,7 @@ def modify_user_balance(server_id, user_id):
         logger.error(f"Error modifying balance: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/bot/status', methods=['PUT'])
+@app.route('/api/bot/status', methods=['PUT'], endpoint='update_bot_status')
 @jwt_required
 def update_bot_status():
     """Update bot's Discord status and presence"""
@@ -2171,7 +2171,7 @@ def get_bot_status():
         logger.error(f"Error getting bot status: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/status', methods=['PUT'])
+@app.route('/api/<server_id>/status', methods=['PUT'], endpoint='update_server_bot_status')
 def update_server_bot_status(server_id):
     """Update bot status for a specific server"""
     data = request.get_json()
@@ -2624,7 +2624,7 @@ async def create_server_task(server_id):
         logger.error(f"Error creating task: {e}", exc_info=True)
         return jsonify({'error': 'Internal server error'}), 500
 
-@app.route('/api/<server_id>/tasks/<task_id>', methods=['PUT'])
+@app.route('/api/<server_id>/tasks/<task_id>', methods=['PUT'], endpoint='update_server_task')
 def update_server_task(server_id, task_id):
     """
     Update task with Discord message sync.
@@ -2734,7 +2734,7 @@ async def update_task_message(guild, server_id, task_id, task):
     except Exception as e:
         app.logger.error(f"Error updating task message: {e}", exc_info=True)
 
-@app.route('/api/<server_id>/tasks/<task_id>', methods=['DELETE'])
+@app.route('/api/<server_id>/tasks/<task_id>', methods=['DELETE'], endpoint='delete_server_task')
 @jwt_required
 def delete_server_task(server_id, task_id):
     """Delete task and remove Discord message"""
@@ -2800,7 +2800,7 @@ def delete_server_task(server_id, task_id):
         logger.error(f"Error deleting task: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/transactions', methods=['GET'])
+@app.route('/api/<server_id>/transactions', methods=['GET'], endpoint='get_transactions')
 def get_transactions(server_id):
     """Get transaction history for a server with advanced filtering"""
     if not data_manager_instance:
@@ -2866,7 +2866,7 @@ def get_transactions(server_id):
         logger.error(f"Error fetching transactions: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/transactions/statistics', methods=['GET'])
+@app.route('/api/<server_id>/transactions/statistics', methods=['GET'], endpoint='get_transaction_statistics')
 def get_transaction_statistics(server_id):
     """Get transaction statistics for a server"""
     if not data_manager_instance or not TransactionManager:
@@ -2898,7 +2898,7 @@ def get_transaction_statistics(server_id):
         logger.error(f"Error fetching transaction statistics: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/transactions/<transaction_id>', methods=['GET'])
+@app.route('/api/<server_id>/transactions/<transaction_id>', methods=['GET'], endpoint='get_transaction_detail')
 def get_transaction_detail(server_id, transaction_id):
     """Get single transaction with full details"""
     if not data_manager_instance or not TransactionManager:
@@ -2935,7 +2935,7 @@ def get_transaction_detail(server_id, transaction_id):
         logger.error(f"Error fetching transaction detail: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/transactions/validate', methods=['POST'])
+@app.route('/api/<server_id>/transactions/validate', methods=['POST'], endpoint='validate_user_transactions')
 def validate_user_transactions(server_id):
     """Validate transaction integrity for a user"""
     if not data_manager_instance or not TransactionManager:
@@ -2961,7 +2961,7 @@ def validate_user_transactions(server_id):
         logger.error(f"Error validating transactions: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/transactions/export', methods=['GET'])
+@app.route('/api/<server_id>/transactions/export', methods=['GET'], endpoint='export_transactions')
 def export_transactions(server_id):
     """Export transactions as CSV with filtering"""
     if not data_manager_instance or not TransactionManager:
@@ -3051,7 +3051,7 @@ def export_transactions(server_id):
         logger.error(f"Error exporting transactions: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/transactions/archive', methods=['POST'])
+@app.route('/api/<server_id>/transactions/archive', methods=['POST'], endpoint='archive_old_transactions')
 def archive_old_transactions(server_id):
     """Archive old transactions (older than specified days)"""
     if not data_manager_instance or not TransactionManager:
