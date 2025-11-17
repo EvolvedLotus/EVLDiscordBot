@@ -62,7 +62,6 @@ async def main():
     logger.info("=" * 50)
     logger.info("🤖 Discord Economy Bot - Railway Startup")
     logger.info("=" * 50)
-    logger.info()
 
     try:
         # Create directories if they don't exist
@@ -70,11 +69,9 @@ async def main():
         for directory in directories:
             Path(directory).mkdir(parents=True, exist_ok=True)
 
-        logger.info()
         logger.info("=" * 50)
         logger.info("🚀 Starting Railway services...")
         logger.info("=" * 50)
-        logger.info()
 
         # Start Flask in a separate thread
         flask_thread = threading.Thread(target=run_flask_app, daemon=True)
@@ -98,7 +95,10 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        runner = asyncio.Runner()
+        runner.run(main())
     except KeyboardInterrupt:
         logger.info("[Shutdown] Graceful shutdown complete")
         sys.exit(0)
+    finally:
+        runner.close()
