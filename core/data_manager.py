@@ -233,7 +233,7 @@ class DataManager:
 
         self._performance_stats['cache_misses'] += 1
 
-        def _load_operation():
+        def _load_operation(guild_id, data_type):
             # Load from Supabase based on data_type
             if data_type == 'config':
                 result = self.admin_client.table('guilds').select('*').eq('guild_id', str(guild_id)).execute()

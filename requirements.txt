@@ -23,8 +23,8 @@ pytz>=2023.3
 # Environment & Configuration (ONLY for local development)
 # python-dotenv>=1.0.0  # Commented out - not needed in production
 
-# System Monitoring (optional for production)
-# psutil>=5.9.0  # Commented out - not needed in production
+# System Monitoring (required for Railway deployment)
+psutil>=5.9.0
 
 # Production WSGI Server
 gunicorn>=21.2.0

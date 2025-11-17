@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 import json
 import os
-import time
+import time as time_module
 import queue
 import asyncio
 import threading
@@ -17,6 +17,9 @@ import secrets
 import traceback
 import sys
 import functools
+
+# System monitoring
+import psutil
 
 # Discord imports for message creation
 import discord
@@ -801,9 +804,6 @@ def validate_session():
 def health_check():
     """Comprehensive health check endpoint for Railway deployment monitoring"""
     try:
-        import psutil
-        import time
-
         # For Railway deployment, return healthy immediately during startup
         # Railway sets RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID, etc.
         railway_env = bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_ENVIRONMENT_ID'))
@@ -811,7 +811,7 @@ def health_check():
             # Simple health check for Railway - just confirm Flask is running
             return jsonify({
                 "status": "healthy",
-                "timestamp": time.time(),
+                "timestamp": time_module.time(),
                 "version": "2.0",
                 "environment": {
                     "railway_env": True,
@@ -853,7 +853,7 @@ def health_check():
             "memory_used_mb": psutil.virtual_memory().used / 1024 / 1024,
             "memory_total_mb": psutil.virtual_memory().total / 1024 / 1024,
             "disk_percent": psutil.disk_usage('/').percent,
-            "uptime_seconds": time.time() - psutil.boot_time()
+            "uptime_seconds": time_module.time() - psutil.boot_time()
         }
 
         # Check application performance
@@ -892,7 +892,7 @@ def health_check():
 
         health_data = {
             "status": overall_status,
-            "timestamp": time.time(),
+            "timestamp": time_module.time(),
             "version": "2.0",
             "services": {
                 "bot": "healthy" if services_healthy["bot"] else "unhealthy",
@@ -920,7 +920,7 @@ def health_check():
         return jsonify({
             "status": "error",
             "error": str(e),
-            "timestamp": time.time(),
+            "timestamp": time_module.time(),
             "emergency_contact": "Check application logs for details"
         }), 500
 
