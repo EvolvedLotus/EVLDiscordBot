@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context, g
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 import json
 import os
 import time
@@ -90,6 +91,14 @@ logger = setup_logging()
 # FLASK APP INITIALIZATION - MUST BE EARLY
 # ============================================
 app = Flask(__name__, static_folder='.')
+
+# Configure JWT
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+
+# Initialize JWTManager
+jwt = JWTManager(app)
 
 # Configure CORS for security - allow frontend origins
 # Only allow production domains, no localhost
