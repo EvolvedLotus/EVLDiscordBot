@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 import logging
 import discord
-import asyncio  # ADD THIS LINE
+from discord import Embed  # ADD THIS LINE
+import asyncio
 
 logger = logging.getLogger(__name__)
 
