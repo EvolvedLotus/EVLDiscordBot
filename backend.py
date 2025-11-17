@@ -2062,7 +2062,7 @@ def update_bot_status():
         logger.error(f"Error updating bot status: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/bot/status', methods=['GET'])
+@app.route('/api/bot/status', methods=['GET'], endpoint='get_bot_status')
 @jwt_required
 def get_bot_status():
     """Get current bot status configuration"""
@@ -2350,7 +2350,7 @@ def atomic_task_operation(server_id, operation_func):
 
         raise
 
-@app.route('/api/<server_id>/tasks', methods=['POST'])
+@app.route('/api/<server_id>/tasks', methods=['POST'], endpoint='create_server_task')
 @jwt_required
 async def create_server_task(server_id):
     """Create new task and post to configured task channel"""
@@ -3105,7 +3105,7 @@ def cleanup_inactive_users(server_id):
         logger.error(f"Error cleaning up inactive users: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/users/inactive')
+@app.route('/api/<server_id>/users/inactive', endpoint='get_inactive_users')
 def get_inactive_users(server_id):
     """Get list of inactive users"""
     if not data_manager_instance:
@@ -3159,7 +3159,7 @@ def get_inactive_users(server_id):
         logger.error(f"Error getting inactive users: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/users/reactivate/<user_id>', methods=['POST'])
+@app.route('/api/<server_id>/users/reactivate/<user_id>', methods=['POST'], endpoint='reactivate_user')
 def reactivate_user(server_id, user_id):
     """Reactivate a previously inactive user"""
     if not data_manager_instance:
