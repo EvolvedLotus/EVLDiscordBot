@@ -139,6 +139,12 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load tasks cog: {e}")
 
+        try:
+            await bot.load_extension('cogs.bot_admin')
+            logger.info("✓ Bot Admin cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load bot admin cog: {e}")
+
         # Create initializer
         initializer = GuildInitializer(bot, data_manager)
 
@@ -170,6 +176,18 @@ async def run_bot():
                     await initializer.initialize_guild(guild)
                 except Exception as e:
                     logger.error(f'❌ Failed to initialize {guild.name}: {e}')
+
+            # Run initial guild sync to ensure database consistency
+            print("🔄 Running initial guild sync...")
+            try:
+                sync_result = data_manager.sync_all_guilds()
+                if sync_result['success']:
+                    logger.info(f"Initial guild sync completed: {sync_result['synced_guilds']} synced, "
+                              f"{sync_result['new_guilds']} new, {sync_result['inactive_guilds']} marked inactive")
+                else:
+                    logger.error(f"Initial guild sync failed: {sync_result.get('error', 'Unknown error')}")
+            except Exception as e:
+                logger.error(f"Error during initial guild sync: {e}")
 
             logger.info("=" * 50)
             logger.info("Bot is ready and online!")
@@ -444,6 +462,41 @@ async def run_bot():
 
         # Start the cache cleanup job
         cleanup_expired_cache.start()
+
+        @tasks.loop(hours=1)
+        async def hourly_guild_sync():
+            """Hourly sync of all guilds to ensure database consistency."""
+            logger.info("Running hourly guild sync...")
+
+            try:
+                # Run the guild sync
+                sync_result = data_manager.sync_all_guilds()
+
+                if sync_result['success']:
+                    logger.info(f"Guild sync completed: {sync_result['synced_guilds']} synced, "
+                              f"{sync_result['new_guilds']} new, {sync_result['inactive_guilds']} marked inactive")
+
+                    # Broadcast sync completion event
+                    from backend import sse_manager
+                    sse_manager.broadcast_event('guild_sync_completed', {
+                        'synced_guilds': sync_result['synced_guilds'],
+                        'new_guilds': sync_result['new_guilds'],
+                        'inactive_guilds': sync_result['inactive_guilds'],
+                        'total_guilds': sync_result['total_discord_guilds']
+                    })
+                else:
+                    logger.error(f"Guild sync failed: {sync_result.get('error', 'Unknown error')}")
+
+            except Exception as e:
+                logger.error(f"Error during hourly guild sync: {e}")
+
+        @hourly_guild_sync.before_loop
+        async def before_hourly_guild_sync():
+            await bot.wait_until_ready()
+            logger.info("Hourly guild sync job initialized")
+
+        # Start the hourly guild sync job
+        hourly_guild_sync.start()
 
         @tasks.loop(hours=24)
         async def validate_transaction_integrity():

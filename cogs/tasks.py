@@ -10,10 +10,12 @@ import logging
 # Import data manager and embed builder
 try:
     from core import data_manager
+    from core.task_manager import TaskManager
     from core.embed_builder import EmbedBuilder
     from core.utils import create_embed
 except ImportError:
     data_manager = None
+    TaskManager = None
     EmbedBuilder = None
     create_embed = None
 

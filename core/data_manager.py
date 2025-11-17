@@ -971,6 +971,129 @@ class DataManager:
             logger.error(f"Error getting guilds from Supabase: {e}")
             return []
 
+    def sync_all_guilds(self) -> Dict[str, Any]:
+        """
+        Sync all guilds from Discord to Supabase.
+        Ensures all bot guilds have entries in the database.
+
+        Returns:
+            Dict with sync results
+        """
+        if not self.bot_instance:
+            return {'success': False, 'error': 'Bot instance not available'}
+
+        synced_guilds = []
+        failed_guilds = []
+        new_guilds = []
+
+        try:
+            # Get all current guilds from Discord
+            discord_guilds = {}
+            for guild in self.bot_instance.guilds:
+                discord_guilds[str(guild.id)] = {
+                    'guild_id': str(guild.id),
+                    'name': guild.name,
+                    'member_count': guild.member_count,
+                    'owner_id': str(guild.owner_id),
+                    'created_at': guild.created_at.isoformat(),
+                    'icon_url': str(guild.icon.url) if guild.icon else None,
+                    'is_active': True,
+                    'last_sync': datetime.now(timezone.utc).isoformat()
+                }
+
+            # Get existing guilds from database
+            existing_guilds_result = self.admin_client.table('guilds').select('guild_id, is_active').execute()
+            existing_guild_ids = {guild['guild_id'] for guild in existing_guilds_result.data}
+
+            # Sync each Discord guild
+            for guild_id, guild_data in discord_guilds.items():
+                try:
+                    # Check if guild exists in database
+                    is_new = guild_id not in existing_guild_ids
+
+                    # Upsert guild data
+                    self.admin_client.table('guilds').upsert({
+                        **guild_data,
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }).execute()
+
+                    synced_guilds.append(guild_id)
+                    if is_new:
+                        new_guilds.append(guild_id)
+
+                    logger.info(f"{'Created' if is_new else 'Updated'} guild {guild_id} ({guild_data['name']}) in database")
+
+                except Exception as e:
+                    logger.error(f"Failed to sync guild {guild_id}: {e}")
+                    failed_guilds.append(guild_id)
+
+            # Mark inactive guilds (guilds in DB but not in Discord)
+            inactive_count = self._mark_inactive_guilds(list(discord_guilds.keys()))
+
+            return {
+                'success': True,
+                'synced_guilds': len(synced_guilds),
+                'new_guilds': len(new_guilds),
+                'failed_guilds': len(failed_guilds),
+                'inactive_guilds': inactive_count,
+                'total_discord_guilds': len(discord_guilds)
+            }
+
+        except Exception as e:
+            logger.error(f"Error during guild sync: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'synced_guilds': len(synced_guilds),
+                'failed_guilds': len(failed_guilds)
+            }
+
+    def _mark_inactive_guilds(self, active_guild_ids: List[str]) -> int:
+        """
+        Mark guilds as inactive if they're not in the active list.
+        Returns count of guilds marked inactive.
+        """
+        try:
+            # Get all guilds from database
+            all_guilds_result = self.admin_client.table('guilds').select('guild_id, is_active, name').execute()
+
+            inactive_count = 0
+            for guild in all_guilds_result.data:
+                guild_id = guild['guild_id']
+                if guild_id not in active_guild_ids and guild.get('is_active', True):
+                    # Mark as inactive
+                    self.admin_client.table('guilds').update({
+                        'is_active': False,
+                        'last_sync': datetime.now(timezone.utc).isoformat(),
+                        'updated_at': datetime.now(timezone.utc).isoformat()
+                    }).eq('guild_id', guild_id).execute()
+
+                    inactive_count += 1
+                    logger.info(f"Marked guild {guild_id} ({guild.get('name', 'Unknown')}) as inactive")
+
+            return inactive_count
+
+        except Exception as e:
+            logger.error(f"Error marking inactive guilds: {e}")
+            return 0
+
+    def get_cache_stats(self):
+        """Get cache statistics for monitoring"""
+        cache_size = len(self._cache) if hasattr(self, '_cache') else 0
+        return {
+            'size': cache_size,
+            'max_size': getattr(self, '_cache_max_size', 1000),
+            'hit_rate': self._calculate_hit_rate() if hasattr(self, '_cache_hits') else 0.0,
+            'keys': list(self._cache.keys())[:10] if hasattr(self, '_cache') else []  # Show first 10 keys
+        }
+
+    def _calculate_hit_rate(self):
+        """Calculate cache hit rate"""
+        total = getattr(self, '_cache_hits', 0) + getattr(self, '_cache_misses', 0)
+        if total == 0:
+            return 0.0
+        return (self._cache_hits / total) * 100
+
     def cleanup_expired_cache(self) -> int:
         """Remove expired cache entries and return count of removed entries"""
         current_time = time.time()

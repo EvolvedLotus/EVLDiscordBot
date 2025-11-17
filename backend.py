@@ -322,7 +322,7 @@ def start_bot_thread():
     timeout = 30  # 30 second timeout
     elapsed = 0
     while not bot_ready and elapsed < timeout:
-        time.sleep(0.5)
+        time_module.sleep(0.5)
         elapsed += 0.5
         if get_bot() and hasattr(get_bot(), 'is_ready') and get_bot().is_ready():
             bot_ready = True
@@ -3572,7 +3572,7 @@ class SSEManager:
         """Start timer for batch processing"""
         def process_batches():
             while True:
-                time.sleep(self.BATCH_INTERVAL)
+                time_module.sleep(self.BATCH_INTERVAL)
                 self._process_event_batches()
 
         self.batch_timer = threading.Thread(target=process_batches, daemon=True)
@@ -3582,7 +3582,7 @@ class SSEManager:
         """Start timer for sending keepalive messages to SSE clients"""
         def send_keepalive():
             while True:
-                time.sleep(self.KEEPALIVE_INTERVAL)
+                time_module.sleep(self.KEEPALIVE_INTERVAL)
                 self._send_keepalive_messages()
 
         self.keepalive_timer = threading.Thread(target=send_keepalive, daemon=True)
