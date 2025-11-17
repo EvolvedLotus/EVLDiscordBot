@@ -934,6 +934,10 @@ def health_check():
                 performance_info["error"] = str(e)
 
         # Determine overall health status
+        # For Railway deployment, be more lenient during startup
+        railway_env = bool(os.getenv('RAILWAY_ENVIRONMENT'))
+        startup_grace_period = 120  # 2 minutes grace period for Railway
+
         services_healthy = {
             "bot": bot_status,
             "database": db_status == "healthy",
@@ -945,11 +949,16 @@ def health_check():
             )
         }
 
-        overall_status = "healthy"
-        if not all(services_healthy.values()):
-            overall_status = "degraded"
-        if not services_healthy["bot"] and not services_healthy["database"]:
-            overall_status = "unhealthy"
+        if railway_env and time.time() - psutil.boot_time() < startup_grace_period:
+            # During startup grace period, only require web server to be healthy
+            overall_status = "healthy" if services_healthy["web_server"] else "unhealthy"
+        else:
+            # Normal health check logic
+            overall_status = "healthy"
+            if not all(services_healthy.values()):
+                overall_status = "degraded"
+            if not services_healthy["bot"] and not services_healthy["database"]:
+                overall_status = "unhealthy"
 
         health_data = {
             "status": overall_status,
