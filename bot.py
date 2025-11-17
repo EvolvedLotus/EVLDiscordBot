@@ -28,11 +28,27 @@ if os.getenv('ENVIRONMENT') != 'production':
     except ImportError:
         pass  # dotenv not installed in production
 
-DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+# Environment variable validation for Railway deployment
+REQUIRED_ENV_VARS = {
+    'DISCORD_TOKEN': 'Discord bot token',
+    'SUPABASE_URL': 'Supabase project URL',
+    'SUPABASE_KEY': 'Supabase service role key',
+    'JWT_SECRET_KEY': 'JWT secret for authentication',
+    'PORT': 'Server port (Railway auto-assigns)',
+}
 
-if not DISCORD_TOKEN:
-    logger.error("DISCORD_TOKEN not found in environment variables!")
-    exit(1)
+missing = []
+for var, description in REQUIRED_ENV_VARS.items():
+    if not os.getenv(var):
+        missing.append(f"{var} ({description})")
+
+if missing:
+    print("❌ MISSING REQUIRED ENVIRONMENT VARIABLES:")
+    for m in missing:
+        print(f"  - {m}")
+    sys.exit(1)
+
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 
 # Initialize data manager (global instance)
 data_manager = DataManager()

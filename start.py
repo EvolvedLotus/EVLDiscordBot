@@ -86,11 +86,12 @@ def create_directories():
 
 def run_flask_app():
     """Run Flask in a separate thread"""
-    print("[Flask] Starting web server on http://0.0.0.0:5000")
+    port = int(os.getenv('PORT', 5000))
+    print(f"[Flask] Starting web server on http://0.0.0.0:{port}")
     try:
         from backend import app, init_sse
         init_sse()  # Initialize SSE system
-        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False, threaded=True)
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False, threaded=True)
     except Exception as e:
         print(f"[Flask] Error starting Flask app: {e}")
         import traceback

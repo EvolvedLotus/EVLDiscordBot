@@ -31,6 +31,26 @@ if os.getenv('ENVIRONMENT') != 'production':
     except ImportError:
         pass  # dotenv not installed in production
 
+# Environment variable validation for Railway deployment
+REQUIRED_ENV_VARS = {
+    'DISCORD_TOKEN': 'Discord bot token',
+    'SUPABASE_URL': 'Supabase project URL',
+    'SUPABASE_KEY': 'Supabase service role key',
+    'JWT_SECRET_KEY': 'JWT secret for authentication',
+    'PORT': 'Server port (Railway auto-assigns)',
+}
+
+missing = []
+for var, description in REQUIRED_ENV_VARS.items():
+    if not os.getenv(var):
+        missing.append(f"{var} ({description})")
+
+if missing:
+    print("❌ MISSING REQUIRED ENVIRONMENT VARIABLES:")
+    for m in missing:
+        print(f"  - {m}")
+    sys.exit(1)
+
 # Import data manager for server-specific data access
 try:
     from core import data_manager as data_manager_module
@@ -69,18 +89,29 @@ def setup_logging():
         )
         return logging.getLogger(__name__)
 
-    # Setup logging with both file and console handlers
-    log_file = os.path.join(logs_dir, 'bot.log')
+    # Setup logging - Railway uses stdout only, local development uses both file and stdout
+    is_railway = os.environ.get('RAILWAY_ENVIRONMENT_ID') or os.environ.get('RAILWAY_PROJECT_ID')
 
-    logging.basicConfig(
-        level=logging.INFO,
-        format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
-            logging.StreamHandler()
-        ]
-    )
+    if is_railway:
+        # Railway: Only stdout (captured by Railway logs)
+        logging.basicConfig(
+            level=logging.INFO,
+            format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            handlers=[logging.StreamHandler()]
+        )
+    else:
+        # Local development: Both file and stdout
+        log_file = os.path.join(logs_dir, 'bot.log')
+        logging.basicConfig(
+            level=logging.INFO,
+            format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            handlers=[
+                logging.FileHandler(log_file, encoding='utf-8'),
+                logging.StreamHandler()
+            ]
+        )
 
     return logging.getLogger(__name__)
 
@@ -100,11 +131,11 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 # Initialize JWTManager
 jwt = JWTManager(app)
 
-# Configure CORS for security - allow frontend origins
-# Only allow production domains, no localhost
+# Configure CORS for security - allow only specific frontend origins
+# No wildcard origins in production
 allowed_origins = []
 
-# Add Railway public domain if available
+# Add Railway public domain if available (for Railway-hosted frontend)
 railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
 if railway_domain:
     railway_url = f"https://{railway_domain}"
@@ -116,9 +147,9 @@ if api_base_url:
     try:
         from urllib.parse import urlparse
         parsed = urlparse(api_base_url)
-        netlify_domain = f"{parsed.scheme}://{parsed.netloc}"
-        if netlify_domain not in allowed_origins:
-            allowed_origins.append(netlify_domain)
+        frontend_domain = f"{parsed.scheme}://{parsed.netloc}"
+        if frontend_domain not in allowed_origins:
+            allowed_origins.append(frontend_domain)
     except:
         pass
 
@@ -134,26 +165,28 @@ if netlify_site_url:
     except:
         pass
 
-# Add common Netlify domain patterns for development
-netlify_preview_domains = [
-    'https://deploy-preview-',
-    'https://branch-deploy-'
-]
+# Add specific allowed frontend domains from environment variable
+allowed_frontend_domains = os.getenv('ALLOWED_FRONTEND_DOMAINS', '')
+if allowed_frontend_domains:
+    domains = [d.strip() for d in allowed_frontend_domains.split(',') if d.strip()]
+    for domain in domains:
+        if domain not in allowed_origins:
+            # Ensure domain has https:// prefix
+            if not domain.startswith('http'):
+                domain = f"https://{domain}"
+            allowed_origins.append(domain)
 
-# Check if any Netlify domains are already configured
-has_netlify = any('netlify' in origin for origin in allowed_origins)
+# For local development, allow localhost if no production domains configured
+is_production = os.getenv('RAILWAY_ENVIRONMENT_ID') or os.getenv('RAILWAY_PROJECT_ID') or os.getenv('PRODUCTION')
+if not is_production and not allowed_origins:
+    # Only allow localhost for development
+    allowed_origins = ['http://localhost:3000', 'http://localhost:5000', 'http://127.0.0.1:3000', 'http://127.0.0.1:5000']
 
-# If no Netlify domains configured, add wildcard for Netlify (less secure but functional)
-if not has_netlify:
-    # Allow all Netlify domains (deploy previews, custom domains, etc.)
-    allowed_origins.extend([
-        'https://*.netlify.app',
-        'https://*.netlify.com'
-    ])
-
-# If no production domains found, allow all origins (for development)
+# If still no origins configured, log warning but don't allow wildcard
 if not allowed_origins:
-    allowed_origins = ['*']
+    logger.warning("⚠️  No CORS origins configured! Set ALLOWED_FRONTEND_DOMAINS environment variable")
+    # Don't allow wildcard - require explicit configuration
+    allowed_origins = []
 
 CORS(app, resources={
     r"/api/*": {
@@ -202,7 +235,6 @@ def performance_monitor(func):
                 exc_info=True
             )
             raise
-    performance_wrapper.__name__ = f"{func.__name__}_performance_monitored"
     return performance_wrapper
 
 # Request logging middleware
@@ -360,6 +392,7 @@ def authenticate_user(username: str, password: str):
 # Session-based authentication middleware decorator
 def session_required(f):
     """Decorator to require session-based authentication"""
+    @functools.wraps(f)
     def session_wrapper(*args, **kwargs):
         session_id = request.cookies.get('session_id')
         if not session_id:
@@ -372,7 +405,6 @@ def session_required(f):
         # Add user to request context
         request.user = session['user']
         return f(*args, **kwargs)
-    session_wrapper.__name__ = f"{f.__name__}_session_required"
     return session_wrapper
 
 # Ensure data directory exists
@@ -765,7 +797,7 @@ def validate_session():
     return jsonify({'valid': True, 'user': {'username': user['username'], 'role': user.get('role', 'user')}}), 200
 
 # Routes
-@app.route('/api/health')
+@app.route('/api/health', endpoint='health_check')
 def health_check():
     """Comprehensive health check endpoint for Railway deployment monitoring"""
     try:
@@ -892,19 +924,19 @@ def health_check():
             "emergency_contact": "Check application logs for details"
         }), 500
 
-@app.route('/')
+@app.route('/', endpoint='serve_frontend')
 def serve_frontend():
     return send_from_directory('.', 'index.html')
 
-@app.route('/styles.css')
+@app.route('/styles.css', endpoint='serve_css')
 def serve_css():
     return send_from_directory('.', 'styles.css')
 
-@app.route('/script.js')
+@app.route('/script.js', endpoint='serve_js')
 def serve_js():
     return send_from_directory('.', 'script.js')
 
-@app.route('/favicon.ico')
+@app.route('/favicon.ico', endpoint='favicon')
 def favicon():
     """Serve favicon or return 204 No Content"""
     # Option 1: Return empty response
@@ -914,7 +946,7 @@ def favicon():
     # from flask import send_from_directory
     # return send_from_directory('static', 'favicon.ico')
 
-@app.route('/api/servers')
+@app.route('/api/servers', endpoint='get_servers')
 def get_servers():
     """Get list of all servers the bot is in"""
     servers = []
@@ -982,7 +1014,7 @@ def get_servers():
 
     return jsonify({'servers': servers})
 
-@app.route('/api/status')
+@app.route('/api/status', endpoint='get_status')
 def get_status():
     status = read_json_file(STATUS_FILE)
     # Check if bot is actually running
@@ -994,7 +1026,7 @@ def get_status():
     write_json_file(STATUS_FILE, status)
     return jsonify(status)
 
-@app.route('/api/logs')
+@app.route('/api/logs', endpoint='get_logs')
 def get_logs():
     level_filter = request.args.get('level', 'all')
     logs = read_json_file(LOGS_FILE)
@@ -1004,18 +1036,18 @@ def get_logs():
 
     return jsonify(logs[-100:])  # Return last 100 logs
 
-@app.route('/api/logs', methods=['DELETE'])
+@app.route('/api/logs', methods=['DELETE'], endpoint='clear_logs')
 def clear_logs():
     write_json_file(LOGS_FILE, [])
     log_event('info', 'Logs cleared by admin')
     return jsonify({'message': 'Logs cleared'})
 
-@app.route('/api/commands')
+@app.route('/api/commands', endpoint='get_commands')
 def get_commands():
     commands = read_json_file(COMMANDS_FILE)
     return jsonify(commands)
 
-@app.route('/api/commands', methods=['POST'])
+@app.route('/api/commands', methods=['POST'], endpoint='add_command')
 def add_command():
     data = request.get_json()
     name = data.get('name', '').strip()
@@ -1040,7 +1072,7 @@ def add_command():
     log_event('info', f'Custom command added: {name}')
     return jsonify({'message': 'Command added'})
 
-@app.route('/api/commands/<name>', methods=['DELETE'])
+@app.route('/api/commands/<name>', methods=['DELETE'], endpoint='delete_command')
 def delete_command(name):
     commands = read_json_file(COMMANDS_FILE)
     commands = [cmd for cmd in commands if cmd['name'] != name]
@@ -1293,7 +1325,7 @@ def delete_shop_item(server_id, item_id):
 
 # === STOCK MANAGEMENT ===
 
-@app.route('/api/<server_id>/shop/<item_id>/stock', methods=['GET'])
+@app.route('/api/<server_id>/shop/<item_id>/stock', methods=['GET'], endpoint='get_item_stock')
 def check_stock(server_id, item_id):
     """Get current stock status"""
     if not data_manager_instance:
@@ -1310,7 +1342,7 @@ def check_stock(server_id, item_id):
         logging.error(f"Error checking stock for item {item_id} in server {server_id}: {e}")
         return jsonify({'error': 'Failed to check stock'}), 500
 
-@app.route('/api/<server_id>/shop/<item_id>/stock', methods=['PUT'])
+@app.route('/api/<server_id>/shop/<item_id>/stock', methods=['PUT'], endpoint='update_item_stock')
 def update_stock(server_id, item_id):
     """
     Update item stock.
@@ -1360,7 +1392,7 @@ def update_stock(server_id, item_id):
 
 # === INVENTORY ===
 
-@app.route('/api/<server_id>/inventory/<user_id>', methods=['GET'])
+@app.route('/api/<server_id>/inventory/<user_id>', methods=['GET'], endpoint='get_user_inventory')
 def get_user_inventory(server_id, user_id):
     """Get user inventory with item details"""
     if not data_manager_instance:
@@ -1384,7 +1416,7 @@ def get_user_inventory(server_id, user_id):
         logging.error(f"Error getting inventory for user {user_id} in server {server_id}: {e}")
         return jsonify({'error': 'Failed to load inventory'}), 500
 
-@app.route('/api/<server_id>/inventory/<user_id>/export', methods=['GET'])
+@app.route('/api/<server_id>/inventory/<user_id>/export', methods=['GET'], endpoint='export_user_inventory')
 def export_user_inventory(server_id, user_id):
     """Export inventory as CSV/JSON"""
     if not data_manager_instance:
@@ -1415,7 +1447,7 @@ def export_user_inventory(server_id, user_id):
         logging.error(f"Error exporting inventory for user {user_id} in server {server_id}: {e}")
         return jsonify({'error': 'Failed to export inventory'}), 500
 
-@app.route('/api/<server_id>/inventory/export', methods=['GET'])
+@app.route('/api/<server_id>/inventory/export', methods=['GET'], endpoint='export_all_inventories')
 def export_all_inventories(server_id):
     """Export all user inventories (admin only)"""
     if not data_manager_instance:
@@ -1448,7 +1480,7 @@ def export_all_inventories(server_id):
 
 # === STATISTICS ===
 
-@app.route('/api/<server_id>/shop/statistics', methods=['GET'])
+@app.route('/api/<server_id>/shop/statistics', methods=['GET'], endpoint='get_shop_statistics')
 def get_shop_statistics(server_id):
     """
     Get shop statistics.
@@ -1477,7 +1509,7 @@ def get_shop_statistics(server_id):
 
 # === VALIDATION ===
 
-@app.route('/api/<server_id>/shop/validate', methods=['POST'])
+@app.route('/api/<server_id>/shop/validate', methods=['POST'], endpoint='validate_shop_integrity')
 def validate_shop_integrity(server_id):
     """Validate shop data integrity"""
     if not data_manager_instance:
@@ -1495,7 +1527,7 @@ def validate_shop_integrity(server_id):
         logging.error(f"Error validating shop integrity for server {server_id}: {e}")
         return jsonify({'error': 'Failed to validate shop'}), 500
 
-@app.route('/api/<server_id>/users/<user_id>', methods=['GET'])
+@app.route('/api/<server_id>/users/<user_id>', methods=['GET'], endpoint='get_user_details')
 def get_user_details(server_id, user_id):
     """Get detailed information for a specific user"""
     if not data_manager_instance:
@@ -1697,7 +1729,7 @@ def create_announcement(server_id):
         logger.error(f"Error creating announcement: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/users')
+@app.route('/api/<server_id>/users', endpoint='get_users')
 def get_users(server_id):
     """Get users for a specific server with pagination support"""
     if not data_manager_instance:
@@ -2212,19 +2244,19 @@ def update_server_bot_status(server_id):
         logger.error(f"Error updating server bot status: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/settings')
+@app.route('/api/settings', endpoint='get_settings')
 def get_settings():
     settings = read_json_file(SETTINGS_FILE)
     return jsonify(settings)
 
-@app.route('/api/settings', methods=['PUT'])
+@app.route('/api/settings', methods=['PUT'], endpoint='update_settings')
 def update_settings():
     data = request.get_json()
     write_json_file(SETTINGS_FILE, data)
     log_event('info', 'Settings updated by admin')
     return jsonify({'message': 'Settings updated'})
 
-@app.route('/api/restart', methods=['POST'])
+@app.route('/api/restart', methods=['POST'], endpoint='restart_bot')
 def restart_bot():
     try:
         # Check if we're in the EVL server (1123738140050464878)
@@ -2259,7 +2291,7 @@ def restart_bot():
         log_event('error', f'Failed to restart bot: {str(e)}')
         return jsonify({'error': f'Failed to restart bot: {str(e)}'}), 500
 
-@app.route('/api/<server_id>/config')
+@app.route('/api/<server_id>/config', endpoint='get_server_config')
 def get_server_config(server_id):
     """Get configuration for a specific server"""
     if not data_manager_instance:
@@ -2272,7 +2304,7 @@ def get_server_config(server_id):
         logging.error(f"Error getting config for server {server_id}: {e}")
         return jsonify({'error': 'Failed to load server config'}), 500
 
-@app.route('/api/<server_id>/config', methods=['PUT'])
+@app.route('/api/<server_id>/config', methods=['PUT'], endpoint='update_server_config')
 def update_server_config(server_id):
     """Update configuration for a specific server"""
     data = request.get_json()
@@ -3279,7 +3311,7 @@ def get_announcements(server_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/<server_id>/announcements', methods=['POST'])
+@app.route('/api/<server_id>/announcements', methods=['POST'], endpoint='create_announcement_api')
 def create_announcement_api(server_id):
     """Create announcement via API"""
     try:
@@ -3318,7 +3350,7 @@ def create_announcement_api(server_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/<server_id>/announcements/task/<task_id>', methods=['POST'])
+@app.route('/api/<server_id>/announcements/task/<task_id>', methods=['POST'], endpoint='create_task_announcement_api')
 def create_task_announcement_api(server_id, task_id):
     """Create task announcement via API"""
     try:
@@ -3346,7 +3378,7 @@ def create_task_announcement_api(server_id, task_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/<server_id>/announcements/<announcement_id>', methods=['PUT'])
+@app.route('/api/<server_id>/announcements/<announcement_id>', methods=['PUT'], endpoint='edit_announcement_api')
 def edit_announcement_api(server_id, announcement_id):
     """Edit announcement via API"""
     try:
@@ -3372,7 +3404,7 @@ def edit_announcement_api(server_id, announcement_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/<server_id>/announcements/<announcement_id>', methods=['DELETE'])
+@app.route('/api/<server_id>/announcements/<announcement_id>', methods=['DELETE'], endpoint='delete_announcement_api')
 def delete_announcement_api(server_id, announcement_id):
     """Delete announcement via API"""
     try:
@@ -3397,7 +3429,7 @@ def delete_announcement_api(server_id, announcement_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/<server_id>/announcements/<announcement_id>/pin', methods=['POST'])
+@app.route('/api/<server_id>/announcements/<announcement_id>/pin', methods=['POST'], endpoint='pin_announcement_api')
 def pin_announcement_api(server_id, announcement_id):
     """Pin announcement via API"""
     try:
@@ -3418,7 +3450,7 @@ def pin_announcement_api(server_id, announcement_id):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route('/api/<server_id>/announcements/<announcement_id>/unpin', methods=['POST'])
+@app.route('/api/<server_id>/announcements/<announcement_id>/unpin', methods=['POST'], endpoint='unpin_announcement_api')
 def unpin_announcement_api(server_id, announcement_id):
     """Unpin announcement via API"""
     try:
@@ -3455,7 +3487,7 @@ def get_embeds(server_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/embeds/<embed_id>', methods=['PUT'])
+@app.route('/api/<server_id>/embeds/<embed_id>', methods=['PUT'], endpoint='update_embed')
 def update_embed(server_id, embed_id):
     """Update an existing embed"""
     try:
@@ -3524,7 +3556,7 @@ def update_embed(server_id, embed_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/embeds/<embed_id>', methods=['DELETE'])
+@app.route('/api/<server_id>/embeds/<embed_id>', methods=['DELETE'], endpoint='delete_embed')
 def delete_embed(server_id, embed_id):
     """Delete an embed"""
     try:
@@ -3571,7 +3603,7 @@ def delete_embed(server_id, embed_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/channels', methods=['GET'])
+@app.route('/api/<server_id>/channels', methods=['GET'], endpoint='get_channels')
 def get_channels(server_id):
     """Get text channels for a server"""
     try:
@@ -3597,7 +3629,7 @@ def get_channels(server_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/export')
+@app.route('/api/export', endpoint='export_data')
 def export_data():
     data = {
         'status': read_json_file(STATUS_FILE),
@@ -3761,7 +3793,7 @@ class SSEManager:
 # Global SSE manager instance
 sse_manager = SSEManager()
 
-@app.route('/api/stream')
+@app.route('/api/stream', endpoint='stream')
 def stream():
     """Enhanced Server-Sent Events endpoint with selective subscriptions"""
     # Parse subscription parameters
@@ -3809,7 +3841,7 @@ def stream():
         }
     )
 
-@app.route('/api/stream/test', methods=['POST'])
+@app.route('/api/stream/test', methods=['POST'], endpoint='test_sse')
 def test_sse():
     """Test endpoint to send SSE events"""
     event_type = request.json.get('event_type', 'test')
@@ -3871,6 +3903,20 @@ def set_data_manager(dm_instance):
     global data_manager_instance
     data_manager_instance = dm_instance
     print(f"DEBUG: set_data_manager called with {dm_instance}")
+
+    # Test database connection before proceeding
+    try:
+        logger.info("Testing database connection...")
+        # Test connection by getting connection status
+        connection_status = data_manager_instance.get_connection_status()
+        if not connection_status.get('healthy'):
+            logger.error("❌ Database connection test failed!")
+            logger.error(f"Connection status: {connection_status}")
+            sys.exit(1)
+        logger.info("✅ Database connection test passed")
+    except Exception as e:
+        logger.error(f"❌ Database connection test failed: {e}")
+        sys.exit(1)
 
     # Register SSE broadcaster
     if hasattr(data_manager_instance, 'register_listener'):

@@ -37,7 +37,8 @@ logger.info("✅ DISCORD_TOKEN found")
 
 def run_flask_app():
     """Run Flask in a separate thread"""
-    logger.info("[Flask] Starting web server on http://0.0.0.0:5000")
+    port = int(os.getenv('PORT', 5000))
+    logger.info(f"[Flask] Starting web server on http://0.0.0.0:{port}")
     try:
         from backend import run_backend
         run_backend()
