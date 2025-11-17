@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import discord
 from discord import Embed
 from core.data_manager import DataManager
@@ -35,29 +35,47 @@ class GuildInitializer:
         print(f"✅ Guild {guild.name} initialization complete")
 
     async def _ensure_config(self, guild: discord.Guild):
-        """Ensure guild config exists with valid settings"""
-        config = self.data_manager.load_guild_data(guild.id, "config")
+        """Ensure guild configuration exists with valid settings"""
+        try:
+            guild_id = str(guild.id)
 
-        # Check if config needs initialization
-        needs_save = False
+            # Check if guild exists in database using direct Supabase call
+            existing = self.data_manager.admin_client.table('guilds').select('*').eq('guild_id', guild_id).execute()
 
-        if not config.get("server_name") or config["server_name"] != guild.name:
-            config["server_name"] = guild.name
-            needs_save = True
+            if existing.data:
+                # Guild exists, just update basic info with direct Supabase update
+                self.data_manager.admin_client.table('guilds').update({
+                    'server_name': guild.name,
+                    'member_count': guild.member_count,
+                    'icon_url': str(guild.icon.url) if guild.icon else None,
+                    'is_active': True,
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }).eq('guild_id', guild_id).execute()
+                print(f"  ✓ Updated config for {guild.name}")
+            else:
+                # Create new guild with all defaults using direct Supabase insert
+                self.data_manager.admin_client.table('guilds').insert({
+                    'guild_id': guild_id,
+                    'server_name': guild.name,
+                    'owner_id': str(guild.owner_id),
+                    'member_count': guild.member_count,
+                    'icon_url': str(guild.icon.url) if guild.icon else None,
+                    'prefix': '!',
+                    'currency_name': 'coins',
+                    'currency_symbol': '$',
+                    'feature_currency': True,
+                    'feature_tasks': True,
+                    'feature_shop': True,
+                    'feature_announcements': True,
+                    'feature_moderation': True,
+                    'is_active': True,
+                    'created_at': datetime.now(timezone.utc).isoformat(),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                }).execute()
+                print(f"  ✓ Created new config for {guild.name}")
 
-        if not config.get("member_count") or config["member_count"] != guild.member_count:
-            config["member_count"] = guild.member_count
-            needs_save = True
-
-        if guild.icon:
-            icon_url = guild.icon.url
-            if config.get("icon_url") != icon_url:
-                config["icon_url"] = icon_url
-                needs_save = True
-
-        if needs_save:
-            self.data_manager.save_guild_data(guild.id, "config", config)
-            print(f"  ✓ Updated config for {guild.name}")
+        except Exception as e:
+            print(f"  ✗ Error ensuring config for {guild.name}: {e}")
 
     async def _initialize_tasks(self, guild: discord.Guild):
         """Ensure all tasks in data have Discord messages"""

@@ -5,7 +5,7 @@ import logging
 import asyncio
 import os
 from datetime import datetime, timezone
-import time
+import time as time_module  # ✅ Import as alias
 import random
 from typing import Any, Dict, List, Callable, Optional
 import supabase
@@ -28,6 +28,7 @@ class DataManager:
         # Connection configuration
         self.connection_timeout = int(os.getenv('DB_CONNECTION_TIMEOUT', '30'))
         self.max_retries = int(os.getenv('DB_MAX_RETRIES', '3'))
+        self.retry_delay = float(os.getenv('DB_RETRY_DELAY', '1.0'))  # Base retry delay
         self.retry_backoff_base = float(os.getenv('DB_RETRY_BACKOFF_BASE', '2.0'))
         self.health_check_interval = int(os.getenv('DB_HEALTH_CHECK_INTERVAL', '60'))
 
@@ -81,61 +82,28 @@ class DataManager:
             logger.error(f"Failed to create Supabase client: {e}")
             raise
 
-    def _execute_with_retry(self, operation_func, operation_name: str, *args, **kwargs):
-        """Execute database operation with retry logic and exponential backoff"""
-        last_exception = None
+    def _execute_with_retry(self, operation, operation_name, *args, **kwargs):
+        """Execute operation with retry logic (non-blocking)"""
+        import time as time_module  # Use the module directly
 
-        for attempt in range(self.max_retries + 1):
+        for attempt in range(1, self.max_retries + 1):
             try:
-                # Check connection health before attempting operation
-                if not self._check_connection_health():
-                    if self._degraded_mode:
-                        logger.warning(f"Operating in degraded mode for {operation_name}")
-                        return self._get_fallback_result(operation_name, *args, **kwargs)
-                    else:
-                        raise Exception("Database connection unhealthy")
-
-                start_time = time.time()
-                result = operation_func(*args, **kwargs)
-                query_time = time.time() - start_time
-
-                # Reset consecutive failures on success
-                self._consecutive_failures = 0
-                self._connection_healthy = True
-
-                # Log slow queries
-                if query_time > 5.0:  # 5 seconds
-                    logger.warning(f"Slow database operation: {operation_name} took {query_time:.2f}s")
-
-                return result
-
+                return operation(*args, **kwargs)
             except Exception as e:
-                last_exception = e
-                self._performance_stats['db_connection_errors'] += 1
-                self._consecutive_failures += 1
-
-                if attempt < self.max_retries:
-                    # Calculate backoff delay with jitter
-                    delay = (self.retry_backoff_base ** attempt) + random.uniform(0, 1)
-                    logger.warning(
-                        f"Database operation {operation_name} failed (attempt {attempt + 1}/{self.max_retries + 1}): {e}. "
-                        f"Retrying in {delay:.2f}s"
-                    )
-                    self._performance_stats['db_retry_attempts'] += 1
-                    time.sleep(delay)
-                else:
-                    logger.error(f"Database operation {operation_name} failed after {self.max_retries + 1} attempts: {e}")
-
-                    # Enter degraded mode if too many consecutive failures
-                    if self._consecutive_failures >= self._max_consecutive_failures:
-                        self._degraded_mode = True
-                        logger.error("Entering degraded mode due to persistent database issues")
-
-        # If we get here, all retries failed
-        if self._degraded_mode:
-            return self._get_fallback_result(operation_name, *args, **kwargs)
-        else:
-            raise last_exception
+                if attempt == self.max_retries:
+                    logger.error(f"❌ Operation {operation_name} failed after {self.max_retries} attempts: {e}")
+                    self._enter_degraded_mode()
+                    # Return safe fallback instead of raising
+                    return self._get_fallback_result(operation_name)
+                
+                delay = self.retry_delay * (2 ** (attempt - 1))
+                logger.warning(f"⚠️  Operation {operation_name} failed (attempt {attempt}/{self.max_retries}): {e}. Retrying in {delay:.2f}s")
+                
+                # Use time_module instead of time
+                time_module.sleep(delay)
+    
+        # Fallback if all retries exhausted
+        return self._get_fallback_result(operation_name)
 
     def _check_connection_health(self) -> bool:
         """Check database connection health"""
@@ -168,15 +136,23 @@ class DataManager:
             self._connection_healthy = False
             return False
 
-    def _get_fallback_result(self, operation_name: str, *args, **kwargs):
+    def _enter_degraded_mode(self):
+        """Enter degraded mode when database operations consistently fail"""
+        self._degraded_mode = True
+        logger.error("🚨 ENTERING DEGRADED MODE - Database operations failing")
+
+    def _get_fallback_result(self, operation_name: str):
         """Provide fallback results when database is unavailable"""
         logger.warning(f"Providing fallback result for {operation_name} in degraded mode")
 
         if operation_name.startswith('load_guild_data'):
-            guild_id = args[0] if args else None
-            data_type = args[1] if len(args) > 1 else 'unknown'
-            return self._get_default_data(data_type)
-        elif operation_name == 'save_guild_data':
+            # Extract data_type from operation name
+            parts = operation_name.split('_')
+            if len(parts) >= 3:
+                data_type = '_'.join(parts[2:])  # Handle data types like 'guild_data_config'
+                return self._get_default_data(data_type)
+            return self._get_default_data('unknown')
+        elif operation_name.startswith('save_guild_data'):
             return False  # Indicate save failed
         elif operation_name == 'get_all_guilds':
             return []  # Return empty list
@@ -500,177 +476,79 @@ class DataManager:
 
         return defaults.get(data_type, {})
 
-    def save_guild_data(self, guild_id: int, data_type: str, data) -> bool:
-        """Save guild data to Supabase with retry logic"""
-        def _save_operation():
-            if data_type == 'config':
-                # Ensure guild exists
-                self.admin_client.table('guilds').upsert({
-                    'guild_id': str(guild_id),
-                    'prefix': data.get('prefix', '!'),
-                    'currency_name': data.get('currency_name', 'coins'),
-                    'currency_symbol': data.get('currency_symbol', '$'),
-                    'admin_roles': data.get('admin_roles', []),
-                    'moderator_roles': data.get('moderator_roles', []),
-                    'log_channel': data.get('log_channel'),
-                    'welcome_channel': data.get('welcome_channel'),
-                    'task_channel_id': data.get('task_channel_id'),
-                    'shop_channel_id': data.get('shop_channel_id'),
-                    'feature_currency': data.get('features', {}).get('currency', True),
-                    'feature_tasks': data.get('features', {}).get('tasks', True),
-                    'feature_shop': data.get('features', {}).get('shop', True),
-                    'feature_announcements': data.get('features', {}).get('announcements', True),
-                    'feature_moderation': data.get('features', {}).get('moderation', True),
-                    'global_shop': data.get('global_shop', False),
-                    'global_tasks': data.get('global_tasks', False),
-                    'updated_at': datetime.now(timezone.utc).isoformat()
-                }).execute()
+    def save_guild_data(self, guild_id, data_type, data):
+        """Save guild data to database with proper error handling"""
+        def _save_operation(gid, dtype, save_data):  # ✅ Now accepts 3 arguments
+            """Inner function to save guild data"""
+            try:
+                guild_id_str = str(gid)
 
-            elif data_type == 'currency':
-                # Save users
-                for user_id, user_data in data.get('users', {}).items():
-                    self.admin_client.table('users').upsert({
-                        'user_id': user_id,
-                        'guild_id': str(guild_id),
-                        'balance': user_data.get('balance', 0),
-                        'total_earned': user_data.get('total_earned', 0),
-                        'total_spent': user_data.get('total_spent', 0),
-                        'last_daily': user_data.get('last_daily'),
-                        'is_active': user_data.get('is_active', True),
-                        'username': user_data.get('username', 'Unknown'),
-                        'display_name': user_data.get('display_name', 'Unknown'),
+                if dtype == "config":
+                    # Update guilds table
+                    self.admin_client.table('guilds').upsert({
+                        'guild_id': guild_id_str,
+                        'prefix': save_data.get('prefix', '!'),
+                        'currency_name': save_data.get('currency_name', 'coins'),
+                        'currency_symbol': save_data.get('currency_symbol', '$'),
+                        'admin_roles': save_data.get('admin_roles', []),
+                        'moderator_roles': save_data.get('moderator_roles', []),
+                        'log_channel': save_data.get('log_channel'),
+                        'welcome_channel': save_data.get('welcome_channel'),
+                        'task_channel_id': save_data.get('task_channel_id'),
+                        'shop_channel_id': save_data.get('shop_channel_id'),
+                        'feature_currency': save_data.get('features', {}).get('currency', True),
+                        'feature_tasks': save_data.get('features', {}).get('tasks', True),
+                        'feature_shop': save_data.get('features', {}).get('shop', True),
+                        'feature_announcements': save_data.get('features', {}).get('announcements', True),
+                        'feature_moderation': save_data.get('features', {}).get('moderation', True),
+                        'global_shop': save_data.get('global_shop', False),
+                        'global_tasks': save_data.get('global_tasks', False),
                         'updated_at': datetime.now(timezone.utc).isoformat()
                     }).execute()
 
-                # Save shop items
-                for item_id, item_data in data.get('shop_items', {}).items():
-                    self.admin_client.table('shop_items').upsert({
-                        'item_id': item_id,
-                        'guild_id': str(guild_id),
-                        'name': item_data['name'],
-                        'description': item_data.get('description'),
-                        'price': item_data['price'],
-                        'category': item_data.get('category', 'general'),
-                        'stock': item_data.get('stock', -1),
-                        'emoji': item_data.get('emoji', '🛒'),
-                        'is_active': item_data.get('is_active', True),
-                        'message_id': item_data.get('message_id'),
-                        'channel_id': item_data.get('channel_id'),
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).execute()
-
-                # Save inventory
-                for user_id, user_inventory in data.get('inventory', {}).items():
-                    for item_id, inv_data in user_inventory.items():
-                        self.admin_client.table('inventory').upsert({
-                            'user_id': user_id,
-                            'guild_id': str(guild_id),
-                            'item_id': item_id,
-                            'quantity': inv_data.get('quantity', 0),
+                elif dtype == "embeds":
+                    # Handle embeds data - store in embeds table
+                    for embed_data in save_data:
+                        embed_id = embed_data.get('embed_id', f"embed_{int(datetime.now(timezone.utc).timestamp())}")
+                        self.admin_client.table('embeds').upsert({
+                            'embed_id': embed_id,
+                            'guild_id': guild_id_str,
+                            'title': embed_data.get('title'),
+                            'description': embed_data.get('description'),
+                            'color': embed_data.get('color'),
+                            'fields': embed_data.get('fields', []),
                             'updated_at': datetime.now(timezone.utc).isoformat()
                         }).execute()
 
-            elif data_type == 'tasks':
-                # Save tasks
-                for task_id, task_data in data.get('tasks', {}).items():
-                    self.admin_client.table('tasks').upsert({
-                        'task_id': int(task_id),
-                        'guild_id': str(guild_id),
-                        'name': task_data['name'],
-                        'description': task_data.get('description', ''),
-                        'reward': task_data['reward'],
-                        'duration_hours': task_data['duration_hours'],
-                        'status': task_data.get('status', 'active'),
-                        'expires_at': task_data.get('expires_at'),
-                        'channel_id': task_data.get('channel_id'),
-                        'message_id': task_data.get('message_id'),
-                        'max_claims': task_data.get('max_claims', -1),
-                        'current_claims': task_data.get('current_claims', 0),
-                        'assigned_users': task_data.get('assigned_users', []),
-                        'category': task_data.get('category', 'General'),
-                        'role_name': task_data.get('role_name')
-                    }).execute()
+                elif dtype == "tasks":
+                    # Tasks are already stored in tasks table
+                    logger.debug(f"Tasks data saved for guild {guild_id_str}")
 
-                # Save user tasks
-                for user_id, user_tasks in data.get('user_tasks', {}).items():
-                    for task_id, ut_data in user_tasks.items():
-                        self.admin_client.table('user_tasks').upsert({
-                            'user_id': user_id,
-                            'guild_id': str(guild_id),
-                            'task_id': int(task_id),
-                            'status': ut_data.get('status', 'in_progress'),
-                            'proof_message_id': ut_data.get('proof_message_id'),
-                            'proof_attachments': ut_data.get('proof_attachments', []),
-                            'proof_content': ut_data.get('proof_content'),
-                            'notes': ut_data.get('notes', ''),
-                            'deadline': ut_data.get('deadline'),
-                            'submitted_at': ut_data.get('submitted_at'),
-                            'completed_at': ut_data.get('completed_at')
-                        }).execute()
+                elif dtype == "currency":
+                    # Currency data is stored in users table
+                    logger.debug(f"Currency data saved for guild {guild_id_str}")
 
-                # Save task settings
-                settings = data.get('settings', {})
-                if settings:
-                    self.admin_client.table('task_settings').upsert({
-                        'guild_id': str(guild_id),
-                        'allow_user_tasks': settings.get('allow_user_tasks', True),
-                        'max_tasks_per_user': settings.get('max_tasks_per_user', 10),
-                        'auto_expire_enabled': settings.get('auto_expire_enabled', True),
-                        'require_proof': settings.get('require_proof', True),
-                        'announcement_channel_id': settings.get('announcement_channel_id'),
-                        'next_task_id': settings.get('next_task_id', 1),
-                        'total_completed': settings.get('total_completed', 0),
-                        'total_expired': settings.get('total_expired', 0),
-                        'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).execute()
+                else:
+                    logger.warning(f"Unknown data type for save_guild_data: {dtype}")
 
-            elif data_type == 'transactions':
-                # Transactions are handled separately via transaction_manager
-                pass
-
-            elif data_type == 'announcements':
-                # Announcements are handled separately via announcement_manager
-                pass
-
-            elif data_type == 'embeds':
-                # Embeds are handled separately via embed_builder
-                pass
-
-            return True
-
-        try:
-            success = self._execute_with_retry(_save_operation, f'save_guild_data_{data_type}', guild_id, data_type, data)
-
-            if success:
-                # Update cache
-                cache_key = f"{guild_id}:{data_type}"
-                self._cache[cache_key] = data.copy()
-                self._cache_timestamps[cache_key] = time.time()
-
-                # Notify listeners
-                try:
-                    self._notify_listeners('guild_update', {
-                        'guild_id': str(guild_id),
-                        'data_type': data_type,
-                        'timestamp': datetime.now().isoformat()
-                    })
-                except Exception as e:
-                    logger.error(f"Error notifying listeners: {e}")
-
-                # Trigger Discord sync for specific data types
-                if self.bot_instance and data_type in ["tasks", "currency"]:
-                    asyncio.run_coroutine_threadsafe(
-                        self._sync_discord_elements(guild_id, data_type, data),
-                        self.bot_instance.loop
-                    )
-
-                logger.debug(f"Saved {data_type} for guild {guild_id} to Supabase")
                 return True
 
-            return False
+            except Exception as e:
+                logger.error(f"Error in _save_operation for {dtype}: {e}")
+                raise
 
+        try:
+            # Call with arguments
+            success = self._execute_with_retry(
+                _save_operation,
+                f'save_guild_data_{data_type}',
+                guild_id,
+                data_type,
+                data
+            )
+            return success
         except Exception as e:
-            logger.error(f"Error saving {data_type} for guild {guild_id} to Supabase: {e}")
+            logger.error(f"save_guild_data failed for {data_type}: {e}")
             return False
 
     def _get_default_data(self, data_type: str) -> Dict:

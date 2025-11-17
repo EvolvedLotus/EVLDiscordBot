@@ -151,8 +151,10 @@ async def run_bot():
         # Register event handlers
         @bot.event
         async def on_ready():
-            logger.info(f"Bot logged in as {bot.user.name} (ID: {bot.user.id})")
-            logger.info(f"Connected to {len(bot.guilds)} guild(s)")
+            logger.info("=" * 60)
+            logger.info(f"🤖 Bot logged in as {bot.user.name} (ID: {bot.user.id})")
+            logger.info(f"📊 Connected to {len(bot.guilds)} guild(s)")
+            logger.info("=" * 60)
 
             # Set bot status
             await bot.change_presence(
@@ -169,30 +171,45 @@ async def run_bot():
             except Exception as e:
                 logger.error(f"✗ Failed to sync slash commands: {e}")
 
-            # Initialize all guilds
-            print(f"🔄 Initializing {len(bot.guilds)} guilds...")
-            for guild in bot.guilds:
+            # === CONCURRENT GUILD INITIALIZATION ===
+            # Initialize all guilds concurrently instead of sequentially
+            async def init_guild_safe(guild):
+                """Initialize a single guild with error handling"""
                 try:
+                    logger.info(f"🔄 Initializing {guild.name}...")
                     await initializer.initialize_guild(guild)
+                    logger.info(f"✅ {guild.name} initialized")
                 except Exception as e:
-                    logger.error(f'❌ Failed to initialize {guild.name}: {e}')
+                    logger.error(f"❌ Failed to initialize {guild.name}: {e}")
 
-            # Run initial guild sync to ensure database consistency
-            print("🔄 Running initial guild sync...")
+            # Run all initializations concurrently
+            await asyncio.gather(
+                *[init_guild_safe(guild) for guild in bot.guilds],
+                return_exceptions=True  # Don't let one failure stop others
+            )
+
+            logger.info("=" * 60)
+            logger.info("✅ All guild initializations complete")
+            logger.info("=" * 60)
+
+            # === RUN INITIAL STARTUP SYNC ===
+            logger.info("=" * 60)
+            logger.info("🚀 RUNNING INITIAL STARTUP SYNC")
+            logger.info("=" * 60)
+
             try:
                 sync_result = data_manager.sync_all_guilds()
                 if sync_result['success']:
-                    logger.info(f"Initial guild sync completed: {sync_result['synced_guilds']} synced, "
+                    logger.info(f"✅ Startup sync complete: {sync_result['synced_guilds']} guilds synced, "
                               f"{sync_result['new_guilds']} new, {sync_result['inactive_guilds']} marked inactive")
                 else:
-                    logger.error(f"Initial guild sync failed: {sync_result.get('error', 'Unknown error')}")
+                    logger.error(f"❌ Startup sync failed: {sync_result.get('error', 'Unknown error')}")
             except Exception as e:
-                logger.error(f"Error during initial guild sync: {e}")
+                logger.error(f"❌ Error during startup sync: {e}", exc_info=True)
 
-            logger.info("=" * 50)
-            logger.info("Bot is ready and online!")
-            logger.info(f"Web Dashboard: http://127.0.0.1:3000")
-            logger.info("=" * 50)
+            logger.info("=" * 60)
+            logger.info("🎉 BOT IS FULLY READY AND OPERATIONAL")
+            logger.info("=" * 60)
 
         @bot.event
         async def on_guild_join(guild):
