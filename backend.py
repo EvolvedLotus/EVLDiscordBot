@@ -176,7 +176,7 @@ CORS(app, resources={
 def performance_monitor(func):
     """Decorator to monitor function performance"""
     @functools.wraps(func)
-    def wrapper(*args, **kwargs):
+    def performance_wrapper(*args, **kwargs):
         start_time = time.time()
         try:
             result = func(*args, **kwargs)
@@ -202,7 +202,8 @@ def performance_monitor(func):
                 exc_info=True
             )
             raise
-    return wrapper
+    performance_wrapper.__name__ = f"{func.__name__}_performance_monitored"
+    return performance_wrapper
 
 # Request logging middleware
 @app.before_request
@@ -359,7 +360,7 @@ def authenticate_user(username: str, password: str):
 # Session-based authentication middleware decorator
 def session_required(f):
     """Decorator to require session-based authentication"""
-    def wrapper(*args, **kwargs):
+    def session_wrapper(*args, **kwargs):
         session_id = request.cookies.get('session_id')
         if not session_id:
             return jsonify({'error': 'Authentication required'}), 401
@@ -371,8 +372,8 @@ def session_required(f):
         # Add user to request context
         request.user = session['user']
         return f(*args, **kwargs)
-    wrapper.__name__ = f.__name__
-    return wrapper
+    session_wrapper.__name__ = f"{f.__name__}_session_required"
+    return session_wrapper
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
