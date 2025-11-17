@@ -698,7 +698,7 @@ def create_task_embed(task):
 
 # === AUTHENTICATION ===
 
-@app.route('/api/auth/login', methods=['POST'])
+@app.route('/api/auth/login', methods=['POST'], endpoint='login')
 def login():
     """Authenticate user and create session"""
     try:
@@ -754,7 +754,7 @@ def login():
         logger.error(f"Login error: {e}", exc_info=True)
         return jsonify({'error': 'Authentication failed'}), 500
 
-@app.route('/api/auth/me', methods=['GET'])
+@app.route('/api/auth/me', methods=['GET'], endpoint='get_current_user_info')
 def get_current_user_info():
     """Get current authenticated user info"""
     session_id = request.cookies.get('session_id')
@@ -771,7 +771,7 @@ def get_current_user_info():
         'role': user.get('role', 'user')
     })
 
-@app.route('/api/auth/logout', methods=['POST'])
+@app.route('/api/auth/logout', methods=['POST'], endpoint='logout')
 def logout():
     """Logout user by destroying session"""
     session_id = request.cookies.get('session_id')
@@ -782,7 +782,7 @@ def logout():
     response.set_cookie('session_id', '', expires=0, httponly=True, secure=False, samesite='Lax')
     return response
 
-@app.route('/api/auth/validate', methods=['GET'])
+@app.route('/api/auth/validate', methods=['GET'], endpoint='validate_session')
 def validate_session():
     """Validates current session"""
     session_id = request.cookies.get('session_id')
@@ -1598,104 +1598,13 @@ def get_user_details(server_id, user_id):
 
 # ===== EMBEDS =====
 
-@app.route('/api/<server_id>/embeds', methods=['GET'], endpoint='get_embeds')
-def get_embeds(server_id):
-    """Get all embeds for a server"""
-    try:
-        guild_id = int(server_id)
-        data = request.json
-
-        # Validate required fields
-        if not data.get('title') or not data.get('channel_id'):
-            return jsonify({'error': 'Title and channel_id required'}), 400
-
-        # Validate embed data
-        from core.embed_builder import EmbedBuilder
-        valid, error = EmbedBuilder.validate_embed_data(data)
-        if not valid:
-            return jsonify({'error': error}), 400
-
-        # Generate ID
-        embed_id = f"emb_{int(datetime.now().timestamp() * 1000)}"
-
-        # Prepare embed data
-        embed_data = {
-            'id': embed_id,
-            'type': data.get('type', 'custom'),
-            'title': data['title'],
-            'description': data.get('description', ''),
-            'color': data.get('color', '#7289da'),
-            'thumbnail_url': data.get('thumbnail_url'),
-            'image_url': data.get('image_url'),
-            'footer_text': data.get('footer_text'),
-            'footer_icon_url': data.get('footer_icon_url'),
-            'author_name': data.get('author_name'),
-            'author_icon_url': data.get('author_icon_url'),
-            'fields': data.get('fields', []),
-            'channel_id': data['channel_id'],
-            'created_at': datetime.now().isoformat(),
-            'created_by': 'cms',
-            'is_active': True
-        }
-
-        # Create Discord message asynchronously
-        async def _create_embed_message():
-            guild = bot_instance.get_guild(guild_id)
-            if not guild:
-                return None
-
-            channel = guild.get_channel(int(embed_data['channel_id']))
-            if not channel:
-                return None
-
-            embed = EmbedBuilder.build_embed(embed_data)
-
-            try:
-                message = await channel.send(embed=embed)
-                return str(message.id)
-            except Exception as e:
-                print(f"Error creating embed message: {e}")
-                return None
-
-        # Run async task
-        future = asyncio.run_coroutine_threadsafe(
-            _create_embed_message(),
-            bot_instance.loop
-        )
-
-        try:
-            message_id = future.result(timeout=10)
-            if not message_id:
-                return jsonify({'error': 'Failed to create Discord message'}), 500
-
-            embed_data['message_id'] = message_id
-
-        except Exception as e:
-            return jsonify({'error': f'Discord error: {str(e)}'}), 500
-
-        # Save to database
-        embeds_data = data_manager_instance.load_guild_data(guild_id, 'embeds')
-        if not embeds_data:
-            embeds_data = {'embeds': {}, 'templates': {}, 'settings': {}}
-
-        embeds_data['embeds'][embed_id] = embed_data
-        data_manager_instance.save_guild_data(guild_id, 'embeds', embeds_data)
-
-        return jsonify({
-            'success': True,
-            'embed': embed_data
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 
 
 
 
 # ===== ANNOUNCEMENTS =====
 
-@app.route('/api/<server_id>/announcements', methods=['POST'])
+@app.route('/api/<server_id>/announcements', methods=['POST'], endpoint='create_announcement')
 @jwt_required
 def create_announcement(server_id):
     """Create and post announcement"""
@@ -3092,7 +3001,7 @@ def archive_old_transactions(server_id):
 
 # === USER MANAGEMENT ===
 
-@app.route('/api/<server_id>/users/cleanup', methods=['POST'])
+@app.route('/api/<server_id>/users/cleanup', methods=['POST'], endpoint='cleanup_inactive_users')
 def cleanup_inactive_users(server_id):
     """Clean up inactive users who haven't been seen for X days"""
     if not data_manager_instance:

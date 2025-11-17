@@ -20,3 +20,5 @@ else:
 
 if len(routes) != len(endpoints):
     print(f"⚠️  WARNING: {len(routes) - len(endpoints)} routes missing explicit endpoints")
+else:
+    print("✅ All routes have explicit endpoints")
