@@ -711,6 +711,47 @@ DROP POLICY IF EXISTS "Service role full access" ON scheduled_jobs;
 CREATE POLICY "Service role full access" ON scheduled_jobs FOR ALL USING (true);
 
 -- =====================================================
+-- INACTIVITY SYSTEM MIGRATIONS
+-- =====================================================
+
+-- Add inactivity_days column to guilds table
+ALTER TABLE guilds
+ADD COLUMN IF NOT EXISTS inactivity_days INTEGER DEFAULT 30 CHECK (inactivity_days > 0);
+
+-- =====================================================
+-- INACTIVITY SYSTEM FUNCTIONS
+-- =====================================================
+
+-- Stored procedure to atomically mark users as inactive
+CREATE OR REPLACE FUNCTION mark_inactive_users(
+    p_guild_id TEXT,
+    p_cutoff_date TIMESTAMP WITH TIME ZONE
+)
+RETURNS INTEGER AS $$
+DECLARE
+    affected_count INTEGER;
+BEGIN
+    -- Mark users as inactive if their last update was before cutoff
+    -- and they have no recent transactions
+    UPDATE users
+    SET is_active = false,
+        updated_at = NOW()
+    WHERE guild_id = p_guild_id
+        AND is_active = true
+        AND updated_at < p_cutoff_date
+        AND NOT EXISTS (
+            SELECT 1 FROM transactions
+            WHERE transactions.user_id = users.user_id
+                AND transactions.guild_id = users.guild_id
+                AND transactions.timestamp > p_cutoff_date
+        );
+
+    GET DIAGNOSTICS affected_count = ROW_COUNT;
+    RETURN affected_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
 -- INITIAL DATA
 -- =====================================================
 

@@ -764,6 +764,57 @@ async def run_bot():
         # Start the backup job
         create_data_backups.start()
 
+        @tasks.loop(hours=24)
+        async def check_inactive_users():
+            """Mark users as inactive if they haven't had transactions within configured period"""
+            try:
+                logger.info("🔍 Starting daily inactive user check")
+
+                for guild in bot.guilds:
+                    try:
+                        # Get guild's inactivity threshold from database
+                        guild_config = data_manager.supabase.table('guilds').select('inactivity_days').eq('guild_id', str(guild.id)).execute()
+
+                        if not guild_config.data:
+                            continue
+
+                        inactivity_days = guild_config.data[0].get('inactivity_days', 30)
+
+                        # Calculate cutoff date
+                        from datetime import datetime, timedelta
+                        cutoff_date = datetime.utcnow() - timedelta(days=inactivity_days)
+
+                        # Mark users as inactive via stored procedure (atomic operation)
+                        result = data_manager.supabase.rpc(
+                            'mark_inactive_users',
+                            {
+                                'p_guild_id': str(guild.id),
+                                'p_cutoff_date': cutoff_date.isoformat()
+                            }
+                        ).execute()
+
+                        marked_count = result.data if result.data else 0
+
+                        if marked_count > 0:
+                            logger.info(f"✓ Marked {marked_count} users as inactive in {guild.name}")
+
+                    except Exception as e:
+                        logger.error(f"❌ Failed to check inactive users for guild {guild.id}: {e}")
+                        continue
+
+                logger.info("✅ Daily inactive user check complete")
+
+            except Exception as e:
+                logger.error(f"❌ Inactive user check failed: {e}")
+
+        @check_inactive_users.before_loop
+        async def before_check_inactive_users():
+            await bot.wait_until_ready()
+            logger.info("Inactive user check job initialized")
+
+        # Start the inactive user check job
+        check_inactive_users.start()
+
         @bot.event
         async def on_command_error(ctx, error):
             """Global error handler"""

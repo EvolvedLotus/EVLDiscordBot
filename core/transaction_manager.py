@@ -116,6 +116,15 @@ class TransactionManager:
             'transaction': transaction
         })
 
+        # Update user's updated_at timestamp to track activity
+        try:
+            self.data_manager.supabase.table('users').update({
+                'updated_at': datetime.utcnow().isoformat()
+            }).eq('guild_id', str(guild_id)).eq('user_id', str(user_id)).execute()
+        except Exception as e:
+            # Don't fail the transaction if timestamp update fails
+            pass
+
         # Invalidate cache
         with self.cache_lock:
             self.cache.clear()

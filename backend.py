@@ -3207,6 +3207,127 @@ def reactivate_user(server_id, user_id):
         logger.error(f"Error reactivating user: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/<server_id>/users/inactive', methods=['GET'], endpoint='get_inactive_users_list')
+@session_required
+def get_inactive_users_list(server_id):
+    """Get list of inactive users with optional days filter"""
+    try:
+        bot_instance = get_bot()
+        if not bot_instance:
+            return jsonify({'error': 'Bot not ready'}), 503
+
+        guild = bot_instance.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Server not found'}), 404
+
+        # Get inactivity threshold from guild config
+        config_result = data_manager_instance.supabase.table('guilds').select('inactivity_days').eq('guild_id', server_id).execute()
+        inactivity_days = config_result.data[0].get('inactivity_days', 30) if config_result.data else 30
+
+        # Get inactive users from database
+        result = data_manager_instance.supabase.table('users').select(
+            'user_id, balance, total_earned, total_spent, updated_at'
+        ).eq('guild_id', server_id).eq('is_active', False).execute()
+
+        inactive_users = []
+        for user_data in result.data:
+            try:
+                member = guild.get_member(int(user_data['user_id']))
+                inactive_users.append({
+                    'user_id': user_data['user_id'],
+                    'username': member.name if member else f"User {user_data['user_id']}",
+                    'balance': user_data['balance'],
+                    'total_earned': user_data['total_earned'],
+                    'total_spent': user_data['total_spent'],
+                    'last_activity': user_data['updated_at']
+                })
+            except Exception as e:
+                logger.error(f"Error fetching member {user_data['user_id']}: {e}")
+                continue
+
+        return jsonify({
+            'inactive_users': inactive_users,
+            'threshold_days': inactivity_days,
+            'count': len(inactive_users)
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching inactive users: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/<server_id>/users/reactivate/<user_id>', methods=['POST'], endpoint='reactivate_user_db')
+@session_required
+def reactivate_user_db(server_id, user_id):
+    """Reactivate an inactive user"""
+    try:
+        # Update user to active status
+        result = data_manager_instance.supabase.table('users').update({
+            'is_active': True,
+            'updated_at': datetime.utcnow().isoformat()
+        }).eq('guild_id', server_id).eq('user_id', user_id).execute()
+
+        if not result.data:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Broadcast SSE update
+        sse_manager.broadcast_event('user.reactivated', {
+            'guild_id': server_id,
+            'user_id': user_id
+        })
+
+        return jsonify({'success': True, 'message': 'User reactivated'})
+
+    except Exception as e:
+        logger.error(f"Error reactivating user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/<server_id>/config', methods=['PUT'], endpoint='update_server_config_db')
+@session_required
+def update_server_config_db(server_id):
+    """Update server configuration including inactivity_days"""
+    try:
+        data = request.get_json()
+
+        # Build update dict with only provided fields
+        updates = {}
+        if 'inactivity_days' in data:
+            inactivity_days = int(data['inactivity_days'])
+            if inactivity_days < 1:
+                return jsonify({'error': 'inactivity_days must be positive'}), 400
+            updates['inactivity_days'] = inactivity_days
+
+        # Add other config fields as needed
+        if 'currency_name' in data:
+            updates['currency_name'] = data['currency_name']
+        if 'currency_symbol' in data:
+            updates['currency_symbol'] = data['currency_symbol']
+
+        if not updates:
+            return jsonify({'error': 'No valid fields to update'}), 400
+
+        updates['updated_at'] = datetime.utcnow().isoformat()
+
+        # Update database
+        result = data_manager_instance.supabase.table('guilds').update(updates).eq('guild_id', server_id).execute()
+
+        if not result.data:
+            return jsonify({'error': 'Server not found'}), 404
+
+        # Invalidate cache
+        data_manager_instance.cache_manager.invalidate_cache(server_id, 'config')
+
+        # Broadcast update
+        sse_manager.broadcast_event('config.updated', {
+            'guild_id': server_id,
+            'updates': updates
+        })
+
+        return jsonify({'success': True, 'config': result.data[0]})
+
+    except Exception as e:
+        logger.error(f"Error updating config: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # Announcement API endpoints
 @app.route('/api/<server_id>/announcements', methods=['GET'], endpoint='get_announcements')
 def get_announcements(server_id):
