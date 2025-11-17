@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import threading
+import sys
 from datetime import datetime
 import discord
 from discord.ext import commands, tasks
@@ -32,7 +33,7 @@ if os.getenv('ENVIRONMENT') != 'production':
 REQUIRED_ENV_VARS = {
     'DISCORD_TOKEN': 'Discord bot token',
     'SUPABASE_URL': 'Supabase project URL',
-    'SUPABASE_KEY': 'Supabase service role key',
+    'SUPABASE_SERVICE_ROLE_KEY': 'Supabase service role key',
     'JWT_SECRET_KEY': 'JWT secret for authentication',
     'PORT': 'Server port (Railway auto-assigns)',
 }
