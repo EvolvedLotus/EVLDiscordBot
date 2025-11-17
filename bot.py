@@ -57,14 +57,6 @@ data_manager = DataManager()
 def create_bot():
     """Create and configure the Discord bot"""
 
-    # Dynamic prefix function
-    async def get_prefix(bot, message):
-        if not message.guild:
-            return '!'
-
-        config = data_manager.load_guild_data(message.guild.id, 'config')
-        return config.get('prefix', '!')
-
     # Create bot with intents
     intents = discord.Intents.default()
     intents.members = True
@@ -77,7 +69,7 @@ def create_bot():
         logger.warning("message_content intent not available - some features may not work")
 
     bot = commands.Bot(
-        command_prefix=get_prefix,
+        command_prefix=commands.when_mentioned,
         intents=intents,
         help_command=None
     )
@@ -146,7 +138,7 @@ async def run_bot():
             logger.error(f"✗ Failed to load bot admin cog: {e}")
 
         # Create initializer
-        initializer = GuildInitializer(bot, data_manager)
+        initializer = GuildInitializer(data_manager, bot)
 
         # Register event handlers
         @bot.event
@@ -890,7 +882,7 @@ async def main():
             logger.error(f"✗ Failed to load tasks cog: {e}")
 
         # Create initializer
-        initializer = GuildInitializer(bot, data_manager)
+        initializer = GuildInitializer(data_manager, bot)
 
         # Register event handlers
         @bot.event
