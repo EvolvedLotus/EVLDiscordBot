@@ -1,48 +1,56 @@
 from datetime import datetime, timezone
+import logging
 import discord
-from discord import Embed
-from core.data_manager import DataManager
+import asyncio  # ADD THIS LINE
+
+logger = logging.getLogger(__name__)
 
 class GuildInitializer:
-    """Ensures all stored data has corresponding Discord elements"""
-
-    def __init__(self, bot, data_manager: DataManager):
-        self.bot = bot
+    def __init__(self, data_manager, bot):
         self.data_manager = data_manager
+        self.bot = bot
 
     async def initialize_guild(self, guild: discord.Guild):
-        """Run full initialization check for a guild"""
-        print(f"🔄 Initializing guild: {guild.name} (ID: {guild.id})")
+        """Initialize all systems for a guild"""
+        logger.info(f"🔄 Initializing {guild.name}...")
 
-        # FIRST: Ensure guild record exists with required fields
-        config = self.data_manager.load_guild_data(guild.id, "config")
-        config.update({
-            'server_name': guild.name,
-            'owner_id': str(guild.owner_id),
-            'member_count': guild.member_count,
-            'icon_url': str(guild.icon.url) if guild.icon else None
-        })
-        self.data_manager.save_guild_data(guild.id, "config", config)
+        try:
+            # Load existing config
+            config = self.data_manager.load_guild_data(guild.id, "config")
 
-        # Step 1: Ensure config exists
-        await self._ensure_config(guild)
+            # Update with current guild data (all NOT NULL fields)
+            config.update({
+                'server_name': guild.name,
+                'owner_id': str(guild.owner_id),
+                'member_count': guild.member_count,
+                'icon_url': str(guild.icon.url) if guild.icon else None,
+                'is_active': True
+            })
 
-        # Step 2: Initialize task system
-        await self._initialize_tasks(guild)
+            # Save configuration
+            success = self.data_manager.save_guild_data(guild.id, "config", config)
 
-        # Step 3: Initialize currency/shop system
-        await self._initialize_currency(guild)
+            if not success:
+                logger.error(f"  ❌ Failed to save config for {guild.name}")
+                return
 
-        # Step 4: Initialize embed system
-        await self._initialize_embeds(guild)
+            logger.info(f"  ✓ Config saved for {guild.name}")
 
-        # Step 5: Validate user data integrity
-        await self._validate_user_data(guild)
+            # Initialize subsystems
+            await self._initialize_tasks(guild)
+            await self._initialize_shop(guild)
+            await self._initialize_embeds(guild)
 
-        # Step 5: Clean up orphaned data
-        await self._cleanup_orphaned_data(guild)
+            # Step 4: CREATE ALL USERS (NEW)
+            await self._initialize_users(guild)
 
-        print(f"✅ Guild {guild.name} initialization complete")
+            # Sync last_sync timestamp via RPC
+            self.data_manager.sync_guild_to_database(guild.id)
+
+            logger.info(f"✅ {guild.name} initialization complete")
+
+        except Exception as e:
+            logger.error(f"❌ Error initializing {guild.name}: {e}", exc_info=True)
 
     async def _ensure_config(self, guild: discord.Guild):
         """Ensure guild configuration exists with valid settings"""
@@ -88,178 +96,77 @@ class GuildInitializer:
             print(f"  ✗ Error ensuring config for {guild.name}: {e}")
 
     async def _initialize_tasks(self, guild: discord.Guild):
-        """Ensure all tasks in data have Discord messages"""
-        config = self.data_manager.load_guild_data(guild.id, "config")
+        """Initialize task system"""
+        try:
+            # Ensure task_settings exists
+            settings = self.data_manager.load_guild_data(guild.id, "task_settings")
+            if not settings or not settings.get('next_task_id'):
+                settings = {
+                    'allow_user_tasks': True,
+                    'max_tasks_per_user': 10,
+                    'next_task_id': 1
+                }
+                self.data_manager.save_guild_data(guild.id, "task_settings", settings)
 
-        # ENSURE server_name and owner_id are ALWAYS set
-        if not config.get('server_name'):
-            config['server_name'] = guild.name
-        if not config.get('owner_id'):
-            config['owner_id'] = str(guild.owner_id)
+            logger.info(f"  ✓ Tasks initialized for {guild.name}")
+        except Exception as e:
+            logger.error(f"  ❌ Failed to initialize tasks for {guild.name}: {e}")
 
-        tasks_data = self.data_manager.load_guild_data(guild.id, "tasks")
-
-        # Get or create task channel
-        task_channel_id = config.get("task_channel_id")
-        task_channel = None
-
-        if task_channel_id:
-            task_channel = guild.get_channel(int(task_channel_id))
-
-        # If no channel or channel deleted, find/create one
-        if not task_channel:
-            # Look for existing channel named "tasks" or "task-board"
-            task_channel = discord.utils.get(guild.text_channels, name="tasks")
-
-            if not task_channel:
-                task_channel = discord.utils.get(guild.text_channels, name="task-board")
-
-            # Create if still not found
-            if not task_channel:
-                try:
-                    task_channel = await guild.create_text_channel(
-                        "tasks",
-                        topic="📋 Complete tasks to earn rewards!",
-                        reason="Auto-created by economy bot"
-                    )
-                    print(f"  ✓ Created #tasks channel in {guild.name}")
-                except discord.Forbidden:
-                    print(f"  ⚠️ No permission to create task channel in {guild.name}")
-                    return
-
-            # Save channel ID to config
-            config["task_channel_id"] = task_channel.id
-            self.data_manager.save_guild_data(guild.id, "config", config)
-
-        # Now sync all tasks
-        tasks = tasks_data.get("tasks", {})
-        updated = False
-
-        for task_id, task_data in tasks.items():
-            message_id = task_data.get("message_id")
-
-            # Check if message exists
-            message_exists = False
-            if message_id:
-                try:
-                    await task_channel.fetch_message(int(message_id))
-                    message_exists = True
-                except (discord.NotFound, discord.HTTPException):
-                    message_exists = False
-
-            # Create message if doesn't exist
-            if not message_exists:
-                embed = self._create_task_embed(task_data)
-                try:
-                    message = await task_channel.send(embed=embed)
-                    task_data["message_id"] = str(message.id)
-                    task_data["channel_id"] = str(task_channel.id)
-                    updated = True
-                    print(f"  ✓ Created Discord message for task: {task_data['name']}")
-                except discord.Forbidden:
-                    print(f"  ⚠️ No permission to send messages in {task_channel.name}")
-
-        if updated:
-            self.data_manager.save_guild_data(guild.id, "tasks", tasks_data)
-
-    async def _initialize_currency(self, guild: discord.Guild):
-        """Ensure all shop items in data have Discord messages"""
-        config = self.data_manager.load_guild_data(guild.id, "config")
-        currency_data = self.data_manager.load_guild_data(guild.id, "currency")
-
-        # Get or create shop channel
-        shop_channel_id = config.get("shop_channel_id")
-        shop_channel = None
-
-        if shop_channel_id:
-            shop_channel = guild.get_channel(int(shop_channel_id))
-
-        # If no channel or channel deleted, find/create one
-        if not shop_channel:
-            # Look for existing channel named "shop" or "store"
-            shop_channel = discord.utils.get(guild.text_channels, name="shop")
-
-            if not shop_channel:
-                shop_channel = discord.utils.get(guild.text_channels, name="store")
-
-            # Create if still not found
-            if not shop_channel:
-                try:
-                    shop_channel = await guild.create_text_channel(
-                        "shop",
-                        topic="🛒 Purchase items with your earned coins!",
-                        reason="Auto-created by economy bot"
-                    )
-                    print(f"  ✓ Created #shop channel in {guild.name}")
-                except discord.Forbidden:
-                    print(f"  ⚠️ No permission to create shop channel in {guild.name}")
-                    return
-
-            # Save channel ID to config
-            config["shop_channel_id"] = shop_channel.id
-            self.data_manager.save_guild_data(guild.id, "config", config)
-
-        # Now sync all shop items
-        shop_items = currency_data.get("shop_items", {})
-        updated = False
-
-        for item_id, item_data in shop_items.items():
-            message_id = item_data.get("message_id")
-
-            # Check if message exists
-            message_exists = False
-            if message_id:
-                try:
-                    await shop_channel.fetch_message(int(message_id))
-                    message_exists = True
-                except (discord.NotFound, discord.HTTPException):
-                    message_exists = False
-
-            # Create message if doesn't exist and item is active
-            if not message_exists and item_data.get("is_active", True):
-                embed = self._create_shop_item_embed(item_data, config)
-                try:
-                    message = await shop_channel.send(embed=embed)
-                    item_data["message_id"] = str(message.id)
-                    item_data["channel_id"] = str(shop_channel.id)
-                    updated = True
-                    print(f"  ✓ Created Discord message for shop item: {item_data['name']}")
-                except discord.Forbidden:
-                    print(f"  ⚠️ No permission to send messages in {shop_channel.name}")
-
-        if updated:
-            self.data_manager.save_guild_data(guild.id, "currency", currency_data)
+    async def _initialize_shop(self, guild: discord.Guild):
+        """Initialize shop system"""
+        try:
+            # Shop items are loaded on demand, just log
+            logger.info(f"  ✓ Shop initialized for {guild.name}")
+        except Exception as e:
+            logger.error(f"  ❌ Failed to initialize shop for {guild.name}: {e}")
 
     async def _initialize_embeds(self, guild: discord.Guild):
-        """Initialize embed system for the guild"""
-        # Load embeds data - this will create default structure if it doesn't exist
-        embeds_data = self.data_manager.load_guild_data(guild.id, "embeds")
+        """Initialize embed system"""
+        try:
+            # Embeds are created on demand
+            logger.info(f"  ✓ Embeds initialized for {guild.name}")
+        except Exception as e:
+            logger.error(f"  ❌ Failed to initialize embeds for {guild.name}: {e}")
 
-        # Ensure embeds.json exists with proper structure
-        if not embeds_data.get("embeds"):
-            embeds_data["embeds"] = {}
-        if not embeds_data.get("templates"):
-            embeds_data["templates"] = {
-                'task_template': {
-                    'color': '#3498db',
-                    'footer_text': 'Task System',
-                    'thumbnail_url': None
-                },
-                'announcement_template': {
-                    'color': '#e74c3c',
-                    'footer_text': 'Server Announcement'
-                }
-            }
-        if not embeds_data.get("settings"):
-            embeds_data["settings"] = {
-                'default_color': '#7289da',
-                'allow_user_embeds': False,
-                'max_embeds_per_channel': 50
-            }
+    async def _initialize_users(self, guild: discord.Guild):
+        """Create user records for all guild members"""
+        try:
+            logger.info(f"  🔄 Creating users for {guild.name}...")
 
-        # Save to ensure file exists
-        self.data_manager.save_guild_data(guild.id, "embeds", embeds_data)
-        print(f"  ✓ Initialized embed system for {guild.name}")
+            # Get all members (excluding bots)
+            members = [m for m in guild.members if not m.bot]
+
+            logger.info(f"  📊 Found {len(members)} human members")
+
+            # Create users in batches to avoid rate limits
+            batch_size = 50
+            created_count = 0
+
+            for i in range(0, len(members), batch_size):
+                batch = members[i:i + batch_size]
+
+                for member in batch:
+                    try:
+                        # Check if user exists
+                        user_data = self.data_manager.load_user_data(guild.id, member.id)
+
+                        if not user_data or user_data.get('balance') is None:
+                            # Create new user with default balance
+                            self.data_manager.ensure_user_exists(guild.id, member.id)
+                            created_count += 1
+
+                    except Exception as e:
+                        logger.warning(f"  ⚠️  Failed to create user {member.id}: {e}")
+                        continue
+
+                # Small delay between batches
+                if i + batch_size < len(members):
+                    await asyncio.sleep(0.5)
+
+            logger.info(f"  ✓ Created {created_count} new users for {guild.name}")
+
+        except Exception as e:
+            logger.error(f"  ❌ Failed to initialize users for {guild.name}: {e}")
 
     async def _validate_user_data(self, guild: discord.Guild):
         """Ensure all users in data still exist in guild"""

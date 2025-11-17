@@ -947,6 +947,35 @@ class DataManager:
                 'failed_guilds': len(failed_guilds)
             }
 
+    def sync_guild_to_database(self, guild_id: str, guild_data: dict = None):
+        """Sync guild data using RPC to bypass PostgREST cache issues"""
+        try:
+            # Use RPC function instead of direct table update
+            result = self.supabase.rpc(
+                'sync_guild_last_sync',
+                {'p_guild_id': str(guild_id)}
+            ).execute()
+
+            logger.info(f"✅ Guild {guild_id} synced via RPC")
+            return True
+
+        except Exception as e:
+            logger.warning(f"RPC sync failed for {guild_id}: {e}")
+
+            # Fallback: update without last_sync column
+            try:
+                result = self.admin_client.table("guilds").update({
+                    "is_active": True,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
+                }).eq("guild_id", str(guild_id)).execute()
+
+                logger.info(f"✅ Guild {guild_id} synced via fallback (no last_sync)")
+                return True
+
+            except Exception as e2:
+                logger.error(f"❌ All sync methods failed for {guild_id}: {e2}")
+                return False
+
     def _mark_inactive_guilds(self, active_guild_ids: List[str]) -> int:
         """
         Mark guilds as inactive if they're not in the active list.
@@ -1011,3 +1040,48 @@ class DataManager:
 
         logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
         return len(expired_keys)
+
+    def ensure_user_exists(self, guild_id: int, user_id: int) -> bool:
+        """Ensure user exists in database with default values"""
+        try:
+            # Try to insert new user
+            result = self.supabase.table("users").insert({
+                "user_id": str(user_id),
+                "guild_id": str(guild_id),
+                "balance": 0,
+                "total_earned": 0,
+                "total_spent": 0,
+                "is_active": True
+            }).execute()
+
+            logger.info(f"✅ Created user {user_id} in guild {guild_id}")
+            return True
+
+        except Exception as e:
+            error_msg = str(e)
+
+            # If user already exists (duplicate key error), that's fine
+            if "duplicate" in error_msg.lower() or "unique" in error_msg.lower():
+                logger.debug(f"User {user_id} already exists in guild {guild_id}")
+                return True
+
+            logger.error(f"Failed to create user {user_id} in guild {guild_id}: {e}")
+            return False
+
+    def load_user_data(self, guild_id: int, user_id: int) -> dict:
+        """Load user data from database"""
+        try:
+            result = self.supabase.table("users").select("*").eq(
+                "guild_id", str(guild_id)
+            ).eq(
+                "user_id", str(user_id)
+            ).execute()
+
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+
+            return {}
+
+        except Exception as e:
+            logger.error(f"Failed to load user {user_id} from guild {guild_id}: {e}")
+            return {}

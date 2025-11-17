@@ -177,39 +177,54 @@ class Currency(commands.Cog):
         target = user or interaction.user
         guild_id = interaction.guild.id
 
-        balance = self._get_balance(guild_id, target.id)
-        symbol = self._get_currency_symbol(guild_id)
-
-        embed = create_embed(
-            title=f"💰 {target.display_name}'s Balance",
-            description=f"{symbol}{balance:,}",
-            color=0x2ecc71
-        )
-
-        # Get last 5 transactions via transaction_manager
         try:
-            recent_txns = self.transaction_manager.get_transactions(
-                guild_id=guild_id,
-                user_id=target.id,
-                limit=5
-            )['transactions']
+            # Ensure user exists FIRST
+            self.data_manager.ensure_user_exists(guild_id, target.id)
 
-            if recent_txns:
-                embed.add_field(
-                    name="Recent Activity",
-                    value="\n".join([
-                        f"{'+' if txn['amount'] > 0 else ''}{symbol}{txn['amount']} - {txn['description'][:30]}{'...' if len(txn['description']) > 30 else ''}"
-                        for txn in recent_txns
-                    ]),
-                    inline=False
-                )
+            # Then load their data
+            user_data = self.data_manager.load_user_data(guild_id, target.id)
+
+            balance = user_data.get('balance', 0)
+            symbol = self._get_currency_symbol(guild_id)
+
+            embed = create_embed(
+                title=f"💰 {target.display_name}'s Balance",
+                description=f"{symbol}{balance:,}",
+                color=0x2ecc71
+            )
+
+            # Get last 5 transactions via transaction_manager
+            try:
+                recent_txns = self.transaction_manager.get_transactions(
+                    guild_id=guild_id,
+                    user_id=target.id,
+                    limit=5
+                )['transactions']
+
+                if recent_txns:
+                    embed.add_field(
+                        name="Recent Activity",
+                        value="\n".join([
+                            f"{'+' if txn['amount'] > 0 else ''}{symbol}{txn['amount']} - {txn['description'][:30]}{'...' if len(txn['description']) > 30 else ''}"
+                            for txn in recent_txns
+                        ]),
+                        inline=False
+                    )
+            except Exception as e:
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to load recent transactions for balance display: {e}")
+
+            embed.set_footer(text=f"Server: {interaction.guild.name}")
+
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
         except Exception as e:
             logger = logging.getLogger(__name__)
-            logger.error(f"Failed to load recent transactions for balance display: {e}")
-
-        embed.set_footer(text=f"Server: {interaction.guild.name}")
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+            logger.error(f"Error in balance command: {e}")
+            await interaction.response.send_message(
+                "❌ An error occurred while checking your balance.",
+                ephemeral=True
+            )
 
     @app_commands.command(name="daily", description="Claim your daily reward of 100 coins")
     @app_commands.guild_only()
@@ -219,13 +234,18 @@ class Currency(commands.Cog):
         user_id = interaction.user.id
         user_id_str = str(user_id)
 
-        # Load data once
-        data = data_manager.load_guild_data(guild_id, "currency")
+        try:
+            # Ensure user exists FIRST
+            self.data_manager.ensure_user_exists(guild_id, user_id)
 
-        # Initialize user if needed
-        if user_id_str not in data["users"]:
-            self._initialize_user(data, user_id_str)
-            data_manager.save_guild_data(guild_id, "currency", data)
+            # Load data once
+            data = data_manager.load_guild_data(guild_id, "currency")
+
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in daily command setup: {e}")
+            await interaction.response.send_message("❌ An error occurred while setting up daily reward!", ephemeral=True)
+            return
 
         last_daily = data["users"][user_id_str].get("last_daily")
         now_utc = datetime.now(timezone.utc)  # Use UTC timezone
@@ -375,14 +395,26 @@ class Currency(commands.Cog):
             return
 
         guild_id = interaction.guild.id
-        sender_balance = self._get_balance(guild_id, interaction.user.id)
 
-        if sender_balance < amount:
-            symbol = self._get_currency_symbol(guild_id)
-            await interaction.response.send_message(
-                f"❌ Insufficient funds! You have {symbol}{sender_balance:,} but need {symbol}{amount:,}",
-                ephemeral=True
-            )
+        try:
+            # Ensure both users exist FIRST
+            self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
+            self.data_manager.ensure_user_exists(guild_id, user.id)
+
+            sender_balance = self._get_balance(guild_id, interaction.user.id)
+
+            if sender_balance < amount:
+                symbol = self._get_currency_symbol(guild_id)
+                await interaction.response.send_message(
+                    f"❌ Insufficient funds! You have {symbol}{sender_balance:,} but need {symbol}{amount:,}",
+                    ephemeral=True
+                )
+                return
+
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in give command setup: {e}")
+            await interaction.response.send_message("❌ An error occurred while setting up transfer!", ephemeral=True)
             return
 
         # Deduct from sender

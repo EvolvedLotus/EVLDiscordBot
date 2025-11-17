@@ -241,40 +241,22 @@ async def run_bot():
         @bot.event
         async def on_member_join(member):
             """Handle user joining server - auto-create user data"""
-            guild_id = member.guild.id
-            user_id = member.id
+            if member.bot:
+                return
 
             try:
-                # Use DataManager to create user if they don't exist
-                # The DataManager handles user creation automatically in database operations
-                user_data = data_manager.load_guild_data(guild_id, 'currency')
-                users = user_data.get('users', {})
+                # Create user record
+                data_manager.ensure_user_exists(member.guild.id, member.id)
+                logger.info(f"✅ Created user record for {member.name} in {member.guild.name}")
 
-                if str(user_id) not in users:
-                    # User will be auto-created on first balance operation
-                    logger.info(f"New user {member.display_name} ({member.name}) joined guild {guild_id} - will be auto-created on first transaction")
+                # Send welcome message if configured
+                config = data_manager.load_guild_data(member.guild.id, "config")
+                welcome_channel_id = config.get("welcome_channel")
 
-                    # Broadcast SSE event
-                    from backend import sse_manager
-                    sse_manager.broadcast_event('user_joined', {
-                        'guild_id': str(guild_id),
-                        'user_id': str(user_id),
-                        'username': member.name,
-                        'display_name': member.display_name
-                    })
-
-                    # Send welcome DM (optional - can be disabled in config)
-                    config = data_manager.load_guild_data(guild_id, 'config')
-                    if config.get('welcome_dm', False):
-                        try:
-                            embed = discord.Embed(
-                                title="👋 Welcome to the server!",
-                                description="You now have access to our currency system. Use `/balance` to check your balance!",
-                                color=discord.Color.green()
-                            )
-                            await member.send(embed=embed)
-                        except discord.Forbidden:
-                            logger.debug(f"Could not send welcome DM to {member.name} - DMs disabled")
+                if welcome_channel_id:
+                    channel = member.guild.get_channel(int(welcome_channel_id))
+                    if channel:
+                        await channel.send(f"Welcome {member.mention}! 🎉")
 
             except Exception as e:
                 logger.error(f"Error handling member join for {member.name}: {e}")
@@ -974,52 +956,22 @@ async def main():
         @bot.event
         async def on_member_join(member):
             """Handle user joining server - auto-create user data"""
-            guild_id = str(member.guild.id)
-            user_id = str(member.id)
+            if member.bot:
+                return
 
             try:
-                # Load currency data
-                currency_data = data_manager.load_guild_data(guild_id, 'currency')
+                # Create user record
+                data_manager.ensure_user_exists(member.guild.id, member.id)
+                logger.info(f"✅ Created user record for {member.name} in {member.guild.name}")
 
-                # Check if user already exists
-                if user_id not in currency_data.get('users', {}):
-                    # Auto-create user entry
-                    currency_data.setdefault('users', {})[user_id] = {
-                        'balance': 0,
-                        'total_earned': 0,
-                        'total_spent': 0,
-                        'created_at': datetime.now().isoformat(),
-                        'is_active': True,
-                        'username': member.name,
-                        'display_name': member.display_name
-                    }
+                # Send welcome message if configured
+                config = data_manager.load_guild_data(member.guild.id, "config")
+                welcome_channel_id = config.get("welcome_channel")
 
-                    # Save data
-                    data_manager.save_guild_data(guild_id, 'currency', currency_data)
-
-                    logger.info(f"Auto-created user data for {member.display_name} ({member.name}) in guild {guild_id}")
-
-                    # Broadcast SSE event
-                    from backend import sse_manager
-                    sse_manager.broadcast_event('user_joined', {
-                        'guild_id': guild_id,
-                        'user_id': user_id,
-                        'username': member.name,
-                        'display_name': member.display_name
-                    })
-
-                    # Send welcome DM (optional - can be disabled in config)
-                    config = data_manager.load_guild_data(guild_id, 'config')
-                    if config.get('welcome_dm', False):
-                        try:
-                            embed = discord.Embed(
-                                title="👋 Welcome to the server!",
-                                description="You now have access to our currency system. Use `/balance` to check your balance!",
-                                color=discord.Color.green()
-                            )
-                            await member.send(embed=embed)
-                        except discord.Forbidden:
-                            logger.debug(f"Could not send welcome DM to {member.name} - DMs disabled")
+                if welcome_channel_id:
+                    channel = member.guild.get_channel(int(welcome_channel_id))
+                    if channel:
+                        await channel.send(f"Welcome {member.mention}! 🎉")
 
             except Exception as e:
                 logger.error(f"Error handling member join for {member.name}: {e}")
