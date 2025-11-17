@@ -4070,6 +4070,145 @@ def await_coroutine(coro):
     """Helper to run coroutine from sync context."""
     return run_discord_task(coro)
 
+@app.route('/api/<server_id>/moderation/logs/export', methods=['GET'], endpoint='export_moderation_logs')
+def export_moderation_logs(server_id):
+    """Export moderation logs as CSV/JSON"""
+    if not data_manager_instance:
+        return jsonify({'error': 'Data manager not available'}), 500
+
+    try:
+        guild_id = int(server_id)
+
+        # Parse query parameters for filtering
+        format_type = request.args.get('format', 'json')
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        action_type = request.args.get('action')
+        moderator_id = request.args.get('moderator_id')
+        target_user_id = request.args.get('target_user_id')
+        limit = min(int(request.args.get('limit', 1000)), 10000)  # Max 10k for export
+
+        # Parse dates
+        start_date = None
+        end_date = None
+        if start_date_str:
+            try:
+                start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+            except ValueError:
+                return jsonify({'error': 'Invalid start_date format'}), 400
+        if end_date_str:
+            try:
+                end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+            except ValueError:
+                return jsonify({'error': 'Invalid end_date format'}), 400
+
+        # Load moderation data
+        moderation_data = data_manager_instance.load_guild_data(guild_id, 'moderation')
+        if not moderation_data:
+            return jsonify({'error': 'No moderation data found'}), 404
+
+        logs = moderation_data.get('logs', [])
+
+        # Apply filters
+        filtered_logs = []
+        for log_entry in logs:
+            # Date filtering
+            if start_date or end_date:
+                try:
+                    log_date = datetime.fromisoformat(log_entry.get('timestamp', ''))
+                    if start_date and log_date < start_date:
+                        continue
+                    if end_date and log_date > end_date:
+                        continue
+                except (ValueError, TypeError):
+                    continue  # Skip invalid dates
+
+            # Action type filtering
+            if action_type and log_entry.get('action') != action_type:
+                continue
+
+            # Moderator filtering
+            if moderator_id and str(log_entry.get('moderator_id', '')) != str(moderator_id):
+                continue
+
+            # Target user filtering
+            if target_user_id and str(log_entry.get('target_user_id', '')) != str(target_user_id):
+                continue
+
+            filtered_logs.append(log_entry)
+
+        # Sort by timestamp descending
+        filtered_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+
+        # Apply limit
+        filtered_logs = filtered_logs[:limit]
+
+        if format_type == 'csv':
+            # Create CSV response
+            import io
+            import csv
+
+            output = io.StringIO()
+            fieldnames = [
+                'timestamp', 'action', 'moderator_id', 'moderator_name',
+                'target_user_id', 'target_username', 'reason', 'duration',
+                'channel_id', 'message_id', 'details'
+            ]
+
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for log_entry in filtered_logs:
+                writer.writerow({
+                    'timestamp': log_entry.get('timestamp', ''),
+                    'action': log_entry.get('action', ''),
+                    'moderator_id': log_entry.get('moderator_id', ''),
+                    'moderator_name': log_entry.get('moderator_name', ''),
+                    'target_user_id': log_entry.get('target_user_id', ''),
+                    'target_username': log_entry.get('target_username', ''),
+                    'reason': log_entry.get('reason', ''),
+                    'duration': log_entry.get('duration', ''),
+                    'channel_id': log_entry.get('channel_id', ''),
+                    'message_id': log_entry.get('message_id', ''),
+                    'details': json.dumps(log_entry.get('details', {}))
+                })
+
+            output.seek(0)
+
+            return Response(
+                output.getvalue(),
+                mimetype='text/csv',
+                headers={
+                    'Content-Disposition': f'attachment; filename=moderation_logs_{server_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+                }
+            )
+
+        else:  # JSON format
+            return Response(
+                json.dumps({
+                    'server_id': server_id,
+                    'exported_at': datetime.now().isoformat(),
+                    'total_logs': len(filtered_logs),
+                    'filters': {
+                        'start_date': start_date_str,
+                        'end_date': end_date_str,
+                        'action_type': action_type,
+                        'moderator_id': moderator_id,
+                        'target_user_id': target_user_id,
+                        'limit': limit
+                    },
+                    'logs': filtered_logs
+                }, indent=2),
+                mimetype='application/json',
+                headers={
+                    'Content-Disposition': f'attachment; filename=moderation_logs_{server_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+                }
+            )
+
+    except Exception as e:
+        logger.error(f"Error exporting moderation logs: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # === GLOBAL ERROR HANDLERS ===
 
 @app.errorhandler(404)

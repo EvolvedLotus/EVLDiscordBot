@@ -301,6 +301,64 @@ created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- =====================================================
+-- STRIKES TABLE (User Violations & Warnings)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS strikes (
+id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+strike_id TEXT NOT NULL,
+guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+user_id TEXT NOT NULL,
+reason TEXT NOT NULL,
+moderator_id TEXT NOT NULL,
+auto_generated BOOLEAN DEFAULT false,
+expires_at TIMESTAMP WITH TIME ZONE,
+is_active BOOLEAN DEFAULT true,
+
+-- Metadata
+created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+UNIQUE(guild_id, strike_id)
+);
+
+-- =====================================================
+-- MODERATION_AUDIT_LOGS TABLE (Action Logging)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS moderation_audit_logs (
+id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+audit_id TEXT UNIQUE NOT NULL,
+guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+action TEXT NOT NULL,
+user_id TEXT NOT NULL,
+moderator_id TEXT NOT NULL,
+message_id TEXT,
+details JSONB DEFAULT '{}',
+can_undo BOOLEAN DEFAULT false,
+
+-- Metadata
+created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =====================================================
+-- SCHEDULED_JOBS TABLE (Automated Moderation Tasks)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS scheduled_jobs (
+id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+job_id TEXT UNIQUE NOT NULL,
+guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+user_id TEXT,
+job_type TEXT NOT NULL, -- 'unmute', 'unban', 'cleanup', etc.
+execute_at TIMESTAMP WITH TIME ZONE NOT NULL,
+is_executed BOOLEAN DEFAULT false,
+executed_at TIMESTAMP WITH TIME ZONE,
+job_data JSONB DEFAULT '{}',
+
+-- Metadata
+created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =====================================================
 -- INDEXES FOR PERFORMANCE
 -- =====================================================
 -- Guilds indexes
@@ -357,6 +415,24 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_active ON admin_users(is_active);
 -- Cache indexes
 CREATE INDEX IF NOT EXISTS idx_cache_expires ON cache(expires_at);
 
+-- Strikes indexes
+CREATE INDEX IF NOT EXISTS idx_strikes_guild ON strikes(guild_id);
+CREATE INDEX IF NOT EXISTS idx_strikes_user ON strikes(user_id, guild_id);
+CREATE INDEX IF NOT EXISTS idx_strikes_active ON strikes(is_active);
+CREATE INDEX IF NOT EXISTS idx_strikes_expires ON strikes(expires_at);
+
+-- Moderation audit logs indexes
+CREATE INDEX IF NOT EXISTS idx_moderation_audit_logs_guild ON moderation_audit_logs(guild_id);
+CREATE INDEX IF NOT EXISTS idx_moderation_audit_logs_user ON moderation_audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_moderation_audit_logs_action ON moderation_audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_moderation_audit_logs_created ON moderation_audit_logs(created_at DESC);
+
+-- Scheduled jobs indexes
+CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_guild ON scheduled_jobs(guild_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_execute_at ON scheduled_jobs(execute_at);
+CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_executed ON scheduled_jobs(is_executed);
+CREATE INDEX IF NOT EXISTS idx_scheduled_jobs_type ON scheduled_jobs(job_type);
+
 -- =====================================================
 -- TRIGGER FUNCTIONS
 -- =====================================================
@@ -408,6 +484,16 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS update_admin_users_updated_at ON admin_users;
 CREATE TRIGGER update_admin_users_updated_at
 BEFORE UPDATE ON admin_users
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_strikes_updated_at ON strikes;
+CREATE TRIGGER update_strikes_updated_at
+BEFORE UPDATE ON strikes
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_scheduled_jobs_updated_at ON scheduled_jobs;
+CREATE TRIGGER update_scheduled_jobs_updated_at
+BEFORE UPDATE ON scheduled_jobs
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================================================
@@ -512,6 +598,65 @@ RETURN v_deleted_count;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Cleanup expired strikes
+CREATE OR REPLACE FUNCTION cleanup_expired_strikes()
+RETURNS INTEGER AS $$
+DECLARE
+v_deleted_count INTEGER;
+BEGIN
+UPDATE strikes SET is_active = false WHERE expires_at < NOW() AND is_active = true;
+GET DIAGNOSTICS v_deleted_count = ROW_COUNT;
+RETURN v_deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Execute scheduled jobs
+CREATE OR REPLACE FUNCTION execute_scheduled_jobs()
+RETURNS INTEGER AS $$
+DECLARE
+v_executed_count INTEGER := 0;
+v_job_record RECORD;
+BEGIN
+FOR v_job_record IN
+    SELECT job_id, job_type, job_data, guild_id, user_id
+    FROM scheduled_jobs
+    WHERE execute_at <= NOW() AND is_executed = false
+    ORDER BY execute_at ASC
+LOOP
+    -- Mark job as executed
+    UPDATE scheduled_jobs
+    SET is_executed = true, executed_at = NOW()
+    WHERE job_id = v_job_record.job_id;
+
+    -- Here you would add logic to actually execute the job based on job_type
+    -- For now, just count the executions
+    v_executed_count := v_executed_count + 1;
+
+    -- Log the execution
+    INSERT INTO moderation_audit_logs (
+        audit_id,
+        guild_id,
+        action,
+        user_id,
+        moderator_id,
+        details
+    ) VALUES (
+        'job_' || v_job_record.job_id || '_' || EXTRACT(EPOCH FROM NOW())::BIGINT,
+        v_job_record.guild_id,
+        'scheduled_job_executed',
+        COALESCE(v_job_record.user_id, 'system'),
+        'system',
+        jsonb_build_object(
+            'job_type', v_job_record.job_type,
+            'job_data', v_job_record.job_data
+        )
+    );
+END LOOP;
+
+RETURN v_executed_count;
+END;
+$$ LANGUAGE plpgsql;
+
 -- =====================================================
 -- ROW LEVEL SECURITY (RLS)
 -- =====================================================
@@ -528,21 +673,42 @@ ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE embeds ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE strikes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE moderation_audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE scheduled_jobs ENABLE ROW LEVEL SECURITY;
 
 -- Service role bypass (for backend operations)
 -- Create policies that allow service role full access
+DROP POLICY IF EXISTS "Service role full access" ON guilds;
 CREATE POLICY "Service role full access" ON guilds FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON users;
 CREATE POLICY "Service role full access" ON users FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON transactions;
 CREATE POLICY "Service role full access" ON transactions FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON shop_items;
 CREATE POLICY "Service role full access" ON shop_items FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON inventory;
 CREATE POLICY "Service role full access" ON inventory FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON tasks;
 CREATE POLICY "Service role full access" ON tasks FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON user_tasks;
 CREATE POLICY "Service role full access" ON user_tasks FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON task_settings;
 CREATE POLICY "Service role full access" ON task_settings FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON announcements;
 CREATE POLICY "Service role full access" ON announcements FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON embeds;
 CREATE POLICY "Service role full access" ON embeds FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON admin_users;
 CREATE POLICY "Service role full access" ON admin_users FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON cache;
 CREATE POLICY "Service role full access" ON cache FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON strikes;
+CREATE POLICY "Service role full access" ON strikes FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON moderation_audit_logs;
+CREATE POLICY "Service role full access" ON moderation_audit_logs FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON scheduled_jobs;
+CREATE POLICY "Service role full access" ON scheduled_jobs FOR ALL USING (true);
 
 -- =====================================================
 -- INITIAL DATA
