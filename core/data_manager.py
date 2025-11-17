@@ -492,9 +492,13 @@ class DataManager:
                 guild_id_str = str(gid)
 
                 if dtype == "config":
-                    # Update guilds table
-                    self.admin_client.table('guilds').upsert({
+                    # ✅ FIXED: Include ALL fields from data, especially server_name and owner_id
+                    guild_data = {
                         'guild_id': guild_id_str,
+                        'server_name': save_data.get('server_name'),  # ✅ CRITICAL FIELD
+                        'owner_id': save_data.get('owner_id'),  # ✅ CRITICAL FIELD
+                        'member_count': save_data.get('member_count', 0),
+                        'icon_url': save_data.get('icon_url'),
                         'prefix': save_data.get('prefix', '!'),
                         'currency_name': save_data.get('currency_name', 'coins'),
                         'currency_symbol': save_data.get('currency_symbol', '$'),
@@ -504,15 +508,29 @@ class DataManager:
                         'welcome_channel': save_data.get('welcome_channel'),
                         'task_channel_id': save_data.get('task_channel_id'),
                         'shop_channel_id': save_data.get('shop_channel_id'),
-                        'feature_currency': save_data.get('features', {}).get('currency', True),
-                        'feature_tasks': save_data.get('features', {}).get('tasks', True),
-                        'feature_shop': save_data.get('features', {}).get('shop', True),
-                        'feature_announcements': save_data.get('features', {}).get('announcements', True),
-                        'feature_moderation': save_data.get('features', {}).get('moderation', True),
+                        'feature_currency': save_data.get('feature_currency', True),
+                        'feature_tasks': save_data.get('feature_tasks', True),
+                        'feature_shop': save_data.get('feature_shop', True),
+                        'feature_announcements': save_data.get('feature_announcements', True),
+                        'feature_moderation': save_data.get('feature_moderation', True),
                         'global_shop': save_data.get('global_shop', False),
                         'global_tasks': save_data.get('global_tasks', False),
+                        'is_active': save_data.get('is_active', True),
                         'updated_at': datetime.now(timezone.utc).isoformat()
-                    }).execute()
+                    }
+
+                    # Use upsert with on_conflict to update existing or insert new
+                    result = self.admin_client.table('guilds').upsert(
+                        guild_data,
+                        on_conflict='guild_id'
+                    ).execute()
+
+                    if result.data:
+                        logger.info(f"  ✅ Config saved for guild {guild_id_str}")
+                        return True
+                    else:
+                        logger.error(f"  ❌ Failed to save config for guild {guild_id_str}")
+                        return False
 
                 elif dtype == "embeds":
                     # ENSURE data is always a dict, not a string
