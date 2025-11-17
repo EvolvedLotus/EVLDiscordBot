@@ -1050,7 +1050,7 @@ def delete_command(name):
 
 # === SHOP ITEMS ===
 
-@app.route('/api/<server_id>/shop', methods=['GET'])
+@app.route('/api/<server_id>/shop', methods=['GET'], endpoint='get_shop_items')
 def get_shop_items(server_id):
     """
     Query parameters:
@@ -1085,7 +1085,7 @@ def get_shop_items(server_id):
         logging.error(f"Error getting shop items for server {server_id}: {e}")
         return jsonify({'error': 'Failed to load shop items'}), 500
 
-@app.route('/api/<server_id>/shop/<item_id>', methods=['GET'])
+@app.route('/api/<server_id>/shop/<item_id>', methods=['GET'], endpoint='get_shop_item')
 def get_shop_item(server_id, item_id):
     """Get single item details"""
     if not data_manager_instance:
@@ -1104,7 +1104,7 @@ def get_shop_item(server_id, item_id):
         logging.error(f"Error getting shop item {item_id} for server {server_id}: {e}")
         return jsonify({'error': 'Failed to load shop item'}), 500
 
-@app.route('/api/<server_id>/shop', methods=['POST'])
+@app.route('/api/<server_id>/shop', methods=['POST'], endpoint='create_shop_item')
 @jwt_required
 def create_shop_item(server_id):
     """Create new shop item and post to Discord"""
@@ -1221,7 +1221,7 @@ def create_shop_item(server_id):
         logger.error(f"Error creating shop item: {e}", exc_info=True)
         return jsonify({'error': f'Internal server error: {str(e)}'}), 500
 
-@app.route('/api/<server_id>/shop/<item_id>', methods=['PUT'])
+@app.route('/api/<server_id>/shop/<item_id>', methods=['PUT'], endpoint='update_shop_item')
 def update_shop_item(server_id, item_id):
     """
     Update shop item.
@@ -1272,7 +1272,7 @@ def update_shop_item(server_id, item_id):
         logging.error(f"Error updating shop item in server {server_id}: {e}")
         return jsonify({'error': 'Failed to update shop item'}), 500
 
-@app.route('/api/<server_id>/shop/<item_id>', methods=['DELETE'])
+@app.route('/api/<server_id>/shop/<item_id>', methods=['DELETE'], endpoint='delete_shop_item')
 @jwt_required
 def delete_shop_item(server_id, item_id):
     """Delete shop item and remove Discord message"""
@@ -1566,10 +1566,9 @@ def get_user_details(server_id, user_id):
 
 # ===== EMBEDS =====
 
-@app.route('/api/<server_id>/embeds', methods=['GET'])
-@jwt_required
-def create_embed(server_id):
-    """Create a new embed from CMS"""
+@app.route('/api/<server_id>/embeds', methods=['GET'], endpoint='get_embeds')
+def get_embeds(server_id):
+    """Get all embeds for a server"""
     try:
         guild_id = int(server_id)
         data = request.json
@@ -2303,7 +2302,7 @@ def update_server_config(server_id):
         logging.error(f"Error updating config for server {server_id}: {e}")
         return jsonify({'error': 'Failed to update server config'}), 500
 
-@app.route('/api/<server_id>/tasks')
+@app.route('/api/<server_id>/tasks', endpoint='get_server_tasks')
 def get_server_tasks(server_id):
     """Get tasks for a specific server"""
     if not data_manager_instance:
@@ -3268,7 +3267,7 @@ def reactivate_user(server_id, user_id):
         return jsonify({'error': str(e)}), 500
 
 # Announcement API endpoints
-@app.route('/api/<server_id>/announcements', methods=['GET'])
+@app.route('/api/<server_id>/announcements', methods=['GET'], endpoint='get_announcements')
 def get_announcements(server_id):
     """Get all announcements for server"""
     try:
@@ -3442,7 +3441,7 @@ def unpin_announcement_api(server_id, announcement_id):
 
 # === EMBEDS ===
 
-@app.route('/api/<server_id>/embeds', methods=['GET'])
+@app.route('/api/<server_id>/embeds', methods=['GET'], endpoint='get_embeds')
 def get_embeds(server_id):
     """Get all embeds for a server"""
     try:
@@ -3455,8 +3454,6 @@ def get_embeds(server_id):
         return jsonify(embeds_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
 
 @app.route('/api/<server_id>/embeds/<embed_id>', methods=['PUT'])
 def update_embed(server_id, embed_id):
