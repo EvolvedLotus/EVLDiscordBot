@@ -141,88 +141,38 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 # Initialize JWTManager
 jwt = JWTManager(app)
 
-# Configure CORS for security - allow only specific frontend origins
-# No wildcard origins in production
-allowed_origins = []
+# ============================================================================
+# CORS CONFIGURATION - SIMPLE HARDCODED APPROACH
+# ============================================================================
 
-# Add Railway public domain if available (for Railway-hosted frontend)
-railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
-if railway_domain:
-    railway_url = f"https://{railway_domain}"
-    allowed_origins.append(railway_url)
+# Allow requests from GitHub Pages and localhost
+ALLOWED_ORIGINS = [
+    'https://evolvedlotus.github.io',
+    'http://localhost:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:5000'
+]
 
-# Add Netlify domain if API_BASE_URL is set (extract domain)
-api_base_url = os.getenv('API_BASE_URL')
-if api_base_url:
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(api_base_url)
-        frontend_domain = f"{parsed.scheme}://{parsed.netloc}"
-        if frontend_domain not in allowed_origins:
-            allowed_origins.append(frontend_domain)
-    except:
-        pass
+# Configure CORS
+CORS(app,
+     resources={r"/api/*": {"origins": ALLOWED_ORIGINS}},
+     supports_credentials=True,
+     allow_headers=['Content-Type', 'Authorization'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'])
 
-# Add Netlify domains from environment variables
-netlify_site_url = os.getenv('NETLIFY_SITE_URL')
-if netlify_site_url:
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(netlify_site_url)
-        netlify_domain = f"{parsed.scheme}://{parsed.netloc}"
-        if netlify_domain not in allowed_origins:
-            allowed_origins.append(netlify_domain)
-    except:
-        pass
+# Add CORS headers to all responses
+@app.after_request
+def after_request(response):
+    origin = request.headers.get('Origin')
+    if origin in ALLOWED_ORIGINS:
+        response.headers.add('Access-Control-Allow-Origin', origin)
+        response.headers.add('Access-Control-Allow-Credentials', 'true')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+    return response
 
-# Add specific allowed frontend domains from environment variable
-allowed_frontend_domains = os.getenv('ALLOWED_FRONTEND_DOMAINS', '')
-if allowed_frontend_domains:
-    domains = [d.strip() for d in allowed_frontend_domains.split(',') if d.strip()]
-    for domain in domains:
-        if domain not in allowed_origins:
-            # Ensure domain has https:// prefix
-            if not domain.startswith('http'):
-                domain = f"https://{domain}"
-            allowed_origins.append(domain)
-
-# TEMPORARY: Hardcode GitHub Pages domain for testing
-if 'https://evolvedlotus.github.io' not in allowed_origins:
-    allowed_origins.append('https://evolvedlotus.github.io')
-
-# For local development, allow localhost if no production domains configured
-is_production = os.getenv('RAILWAY_ENVIRONMENT_ID') or os.getenv('RAILWAY_PROJECT_ID') or os.getenv('PRODUCTION')
-if not is_production and not allowed_origins:
-    # Only allow localhost for development
-    allowed_origins = ['http://localhost:3000', 'http://localhost:5000', 'http://127.0.0.1:3000', 'http://127.0.0.1:5000']
-
-# If still no origins configured, log warning but don't allow wildcard
-if not allowed_origins:
-    logger.warning("⚠️  No CORS origins configured! Set ALLOWED_FRONTEND_DOMAINS environment variable")
-    # Don't allow wildcard - require explicit configuration
-    allowed_origins = []
-
-# Debug logging for CORS configuration
-logger.info(f"🔒 CORS Configuration: Allowed origins: {allowed_origins}")
-logger.info(f"🔒 ALLOWED_FRONTEND_DOMAINS env var: {os.getenv('ALLOWED_FRONTEND_DOMAINS', 'NOT SET')}")
-logger.info(f"🔒 RAILWAY_PUBLIC_DOMAIN env var: {os.getenv('RAILWAY_PUBLIC_DOMAIN', 'NOT SET')}")
-
-CORS(app, resources={
-    r"/api/*": {
-        "origins": allowed_origins,
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "X-Admin-Token", "Cache-Control"],
-        "supports_credentials": True,
-        "expose_headers": ["Content-Type", "X-CSRFToken"]
-    },
-    r"/api/stream": {
-        "origins": allowed_origins,
-        "methods": ["GET"],
-        "allow_headers": ["Cache-Control"],
-        "supports_credentials": False,
-        "expose_headers": []
-    }
-})
+# REMOVED: Complex CORS configuration - using simple hardcoded approach above
 
 # Performance monitoring decorator
 def performance_monitor(func):
