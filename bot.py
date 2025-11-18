@@ -11,6 +11,9 @@ import os
 
 # Import components
 from core.data_manager import DataManager
+from core.transaction_manager import TransactionManager
+from core.task_manager import TaskManager
+from core.shop_manager import ShopManager
 from core.initializer import GuildInitializer
 
 # Setup logging first
@@ -92,6 +95,13 @@ async def run_bot():
         # Import backend functions (delayed to avoid circular import)
         from backend import run_backend, set_bot_instance, set_data_manager
 
+        # CRITICAL: Attach managers to bot BEFORE loading cogs
+        logger.info("Initializing managers...")
+        bot.data_manager = data_manager
+        bot.transaction_manager = TransactionManager(data_manager)
+        bot.task_manager = TaskManager(data_manager, bot.transaction_manager)
+        bot.shop_manager = ShopManager(data_manager, bot.transaction_manager)
+
         # Set global references for backend
         set_bot_instance(bot)
         set_data_manager(data_manager)
@@ -99,7 +109,7 @@ async def run_bot():
         # CRITICAL: Link bot instance to data manager for sync
         data_manager.set_bot_instance(bot)
 
-        # Load cogs
+        # Load cogs AFTER managers are attached
         logger.info("Loading cogs...")
         try:
             await bot.load_extension('cogs.currency')
