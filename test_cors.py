@@ -4,12 +4,18 @@ Minimal CORS test - bypasses all your existing code
 from flask import Flask, request, jsonify, make_response
 import os
 
-app = Flask(__name__)
+print("=" * 80)
+print("🧪 MINIMAL CORS TEST SERVER STARTING...")
+print("=" * 80)
+
+try:
+    app = Flask(__name__)
+    print("✅ Flask app created successfully")
+except Exception as e:
+    print(f"❌ Failed to create Flask app: {e}")
+    exit(1)
 
 ALLOWED_ORIGIN = 'https://evolvedlotus.github.io'
-
-print("=" * 80)
-print("🧪 MINIMAL CORS TEST SERVER")
 print(f"Allowed Origin: {ALLOWED_ORIGIN}")
 print("=" * 80)
 
@@ -68,6 +74,18 @@ def login():
     return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    print(f"Starting on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    try:
+        port_str = os.environ.get('PORT', '8080')
+        print(f"PORT environment variable: '{port_str}'")
+        port = int(port_str)
+        print(f"Parsed port as: {port}")
+    except (ValueError, TypeError) as e:
+        print(f"❌ Invalid PORT value '{port_str}', using default 8080: {e}")
+        port = 8080
+
+    print(f"🚀 Starting Flask server on 0.0.0.0:{port}")
+    try:
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        print(f"❌ Failed to start Flask server: {e}")
+        exit(1)
