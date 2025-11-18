@@ -6,6 +6,7 @@ Updated: 2025-11-17 - Force redeploy
 
 ALLOWED_ORIGINS = [
     'https://evolvedlotus.github.io',
+    'https://evolvedlotus.github.io/EVLDiscordBot/',
     'http://localhost:5500',
     'http://127.0.0.1:5500',
     'http://localhost:3000',
