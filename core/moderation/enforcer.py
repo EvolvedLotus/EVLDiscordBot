@@ -88,7 +88,7 @@ class ProtectionEnforcer:
 
         return action_plan
 
-    def apply_protection_action(self, action_plan: Dict, message: discord.Message, moderator_context: str = None) -> Dict:
+    async def apply_protection_action(self, action_plan: Dict, message: discord.Message, moderator_context: str = None) -> Dict:
         """Executes the decided action"""
         try:
             action = action_plan['action']

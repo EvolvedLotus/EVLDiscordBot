@@ -3,15 +3,14 @@ from discord import app_commands
 from discord.ext import commands
 import logging
 from typing import Dict, List, Optional
-from core.data_manager import DataManager
 from core.permissions import admin_only_interaction, moderator_only_interaction
-from .moderation.protection_manager import ProtectionManager
-from .moderation.scanner import MessageScanner
-from .moderation.enforcer import ProtectionEnforcer
-from .moderation.actions import ModerationActions
-from .moderation.scheduler import ModerationScheduler
-from .moderation.logger import ModerationLogger
-from .moderation.health import ModerationHealthChecker
+from core.moderation.protection_manager import ProtectionManager
+from core.moderation.scanner import MessageScanner
+from core.moderation.enforcer import ProtectionEnforcer
+from core.moderation.actions import ModerationActions
+from core.moderation.scheduler import ModerationScheduler
+from core.moderation.logger import ModerationLogger
+from core.moderation.health import ModerationHealthChecker
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +21,8 @@ class Moderation(commands.Cog):
         self.bot = bot
         self.data_manager = None  # Will be set by set_managers
 
-        # Initialize moderation components
-        self.protection_manager = ProtectionManager(self.data_manager)
+        # Initialize moderation components with None data_manager initially
+        self.protection_manager = ProtectionManager(None)
         self.scanner = MessageScanner(self.protection_manager)
         self.enforcer = ProtectionEnforcer(self.protection_manager, self.scanner, bot)
         self.actions = ModerationActions(self.protection_manager, bot)
@@ -35,7 +34,7 @@ class Moderation(commands.Cog):
 
         logger.info("Moderation cog initialized")
 
-    def set_managers(self, data_manager: DataManager):
+    def set_managers(self, data_manager):
         """Set data manager reference"""
         self.data_manager = data_manager
         self.protection_manager.data_manager = data_manager

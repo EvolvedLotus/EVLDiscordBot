@@ -147,6 +147,29 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load bot admin cog: {e}")
 
+        try:
+            await bot.load_extension('cogs.moderation')
+            logger.info("✓ Moderation cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load moderation cog: {e}")
+
+        try:
+            await bot.load_extension('cogs.moderation_commands')
+            logger.info("✓ Moderation Commands cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load moderation commands cog: {e}")
+
+        # Set managers on cogs that need them
+        logger.info("Setting managers on cogs...")
+        for cog_name in ['Moderation', 'ModerationCommands']:
+            cog = bot.get_cog(cog_name)
+            if cog and hasattr(cog, 'set_managers'):
+                try:
+                    cog.set_managers(data_manager)
+                    logger.info(f"✓ Set managers on {cog_name} cog")
+                except Exception as e:
+                    logger.error(f"✗ Failed to set managers on {cog_name} cog: {e}")
+
         # Create initializer
         initializer = GuildInitializer(data_manager, bot)
 

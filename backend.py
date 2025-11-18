@@ -127,16 +127,52 @@ def setup_logging():
 # Initialize logging
 logger = setup_logging()
 
-# ============= CRITICAL: CORS CONFIGURATION =============
-from cors_config import setup_cors
-
 # ============================================
 # FLASK APP INITIALIZATION - MUST BE EARLY
 # ============================================
 app = Flask(__name__, static_folder='web', static_url_path='')
 
 # ============= CRITICAL: CORS CONFIGURATION =============
-# CORS is now handled by cors_config.py setup_cors() function
+from flask import Flask, request, jsonify, session, make_response
+from flask_cors import CORS
+import os
+
+# CRITICAL: CORS Configuration
+CORS(app,
+     origins=["https://evolvedlotus.github.io"],
+     supports_credentials=True,
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"]
+)
+
+# Session configuration for authentication
+app.config['SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-secret-change-in-production')
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS only
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for CORS
+
+@app.after_request
+def add_cors_headers(response):
+    """Ensure CORS headers on all responses"""
+    origin = request.headers.get('Origin', 'https://evolvedlotus.github.io')
+    if origin == 'https://evolvedlotus.github.io':
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    return response
+
+@app.before_request
+def handle_options():
+    """Handle preflight OPTIONS requests"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers['Access-Control-Allow-Origin'] = 'https://evolvedlotus.github.io'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        return response
 
 # Configure JWT
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
@@ -145,9 +181,6 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 
 # Initialize JWTManager
 jwt = JWTManager(app)
-
-# Setup CORS using the centralized configuration
-app = setup_cors(app)
 
 # Performance monitoring decorator
 def performance_monitor(func):
@@ -835,9 +868,8 @@ def health_check():
             overall_status = "unhealthy"
 
         # CORS verification logging
-        from cors_config import ALLOWED_ORIGINS
         cors_info = {
-            "allowed_origins": ALLOWED_ORIGINS,
+            "allowed_origins": ["https://evolvedlotus.github.io"],
             "railway_detected": bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_ENVIRONMENT_ID')),
             "port": os.environ.get('PORT', 'Not set'),
             "flask_env": os.environ.get('FLASK_ENV', 'production')
@@ -898,12 +930,11 @@ def test_cors():
 @app.route('/api/debug/cors', methods=['GET', 'OPTIONS'], endpoint='debug_cors')
 def debug_cors():
     """Diagnostic endpoint for CORS debugging"""
-    from cors_config import ALLOWED_ORIGINS
     return jsonify({
         'method': request.method,
         'origin': request.headers.get('Origin'),
-        'allowed_origins': ALLOWED_ORIGINS,
-        'origin_allowed': request.headers.get('Origin') in ALLOWED_ORIGINS,
+        'allowed_origins': ["https://evolvedlotus.github.io"],
+        'origin_allowed': request.headers.get('Origin') == 'https://evolvedlotus.github.io',
         'headers': dict(request.headers),
         'railway_env': bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_ENVIRONMENT_ID')),
         'port': os.environ.get('PORT', 'Not set')
@@ -4120,5 +4151,4 @@ def handle_exception(e):
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 3000))
     print(f"Starting Flask server on 0.0.0.0:{port}")
-    print(f"ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)

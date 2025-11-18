@@ -7,8 +7,8 @@ from discord.ext import commands
 import os
 from .data_manager import DataManager
 
-# Global data manager instance
-data_manager = DataManager()
+# Global data manager instance - will be set by bot.py
+data_manager = None
 
 def create_bot() -> commands.Bot:
     """Create and configure the Discord bot"""
