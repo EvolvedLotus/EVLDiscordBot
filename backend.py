@@ -926,12 +926,14 @@ def session_required(f):
         if not session_id:
             return jsonify({'error': 'Authentication required'}), 401
 
-        session = get_session(session_id)
-        if not session:
+        session_data = get_session(session_id)
+        if not session_data:
             return jsonify({'error': 'Session expired or invalid'}), 401
 
         # Add user to request context
-        request.user = session['user']
+        request.user = session_data['user']
+        # Also make session available in function scope for backward compatibility
+        kwargs['session'] = session_data
         return f(*args, **kwargs)
     return session_wrapper
 
