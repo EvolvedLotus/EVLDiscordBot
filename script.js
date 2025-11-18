@@ -6069,7 +6069,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Check authentication
     const isAuthenticated = await checkAuth();
     if (!isAuthenticated) {
-        window.location.href = '/login.html';
+        // Show login screen instead of redirecting to login.html
+        showLoginScreen();
         return;
     }
 
