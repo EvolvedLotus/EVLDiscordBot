@@ -1,7 +1,7 @@
 """
 CORS Configuration Module
 Handles all CORS setup for Flask app
-Updated: 2025-11-17 - Force redeploy
+Updated: 2025-11-17 - Manual CORS implementation
 """
 
 ALLOWED_ORIGINS = [
@@ -15,45 +15,54 @@ ALLOWED_ORIGINS = [
 
 def setup_cors(app):
     """
-    Configure CORS for Flask app
-    Must be called BEFORE any route definitions
+    Configure CORS manually for Railway compatibility
     """
-    from flask_cors import CORS
-
     print("=" * 60)
-    print("🌐 SETTING UP CORS")
+    print("🌐 SETTING UP MANUAL CORS")
     print("=" * 60)
     print(f"Allowed Origins: {ALLOWED_ORIGINS}")
 
-    # Enable CORS with explicit configuration
-    CORS(
-        app,
-        resources={
-            r"/*": {
-                "origins": ALLOWED_ORIGINS,
-                "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-                "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-                "expose_headers": ["Content-Type", "Authorization"],
-                "supports_credentials": True,
-                "max_age": 3600
-            }
-        }
-    )
-
-    print("✅ CORS configured successfully")
-    print("=" * 60)
-
-    # Add response handler to log CORS
     @app.after_request
-    def log_cors_headers(response):
-        origin = app.config.get('REQUEST_ORIGIN')
-        if origin:
-            print(f"📤 Response to {origin}: CORS headers present = {bool(response.headers.get('Access-Control-Allow-Origin'))}")
+    def add_cors_headers(response):
+        """Add CORS headers to all responses"""
+        origin = request.headers.get('Origin')
+
+        # Check if origin is allowed
+        if origin and origin in ALLOWED_ORIGINS:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            print(f"✅ CORS allowed for origin: {origin}")
+        elif not origin:
+            # Allow requests without Origin header (for same-origin or direct access)
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            print("✅ CORS allowed for request without Origin")
+
+        # Always add these headers
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response.headers['Access-Control-Max-Age'] = '3600'
+
         return response
 
     @app.before_request
-    def store_origin():
-        from flask import request
-        app.config['REQUEST_ORIGIN'] = request.headers.get('Origin')
+    def handle_options():
+        """Handle preflight OPTIONS requests"""
+        if request.method == 'OPTIONS':
+            origin = request.headers.get('Origin')
+            if origin and origin in ALLOWED_ORIGINS:
+                response = app.response_class()
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+                response.headers['Access-Control-Max-Age'] = '3600'
+                print(f"✅ Preflight OPTIONS handled for: {origin}")
+                return response, 200
+            else:
+                print(f"❌ Preflight OPTIONS rejected for: {origin}")
+                return {'error': 'CORS not allowed'}, 403
+
+    print("✅ Manual CORS configured successfully")
+    print("=" * 60)
 
     return app
