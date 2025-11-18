@@ -198,6 +198,11 @@ if not allowed_origins:
     # Don't allow wildcard - require explicit configuration
     allowed_origins = []
 
+# Debug logging for CORS configuration
+logger.info(f"🔒 CORS Configuration: Allowed origins: {allowed_origins}")
+logger.info(f"🔒 ALLOWED_FRONTEND_DOMAINS env var: {os.getenv('ALLOWED_FRONTEND_DOMAINS', 'NOT SET')}")
+logger.info(f"🔒 RAILWAY_PUBLIC_DOMAIN env var: {os.getenv('RAILWAY_PUBLIC_DOMAIN', 'NOT SET')}")
+
 CORS(app, resources={
     r"/api/*": {
         "origins": allowed_origins,
