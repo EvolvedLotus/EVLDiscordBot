@@ -5174,7 +5174,7 @@ async function giveUserItem() {
 }
 
 // Moderation functions (placeholders for now)
-function kickUser() {
+function kickUser_legacy() {
     if (!selectedUserId) {
         alert('Please select a user first');
         return;
@@ -5183,7 +5183,7 @@ function kickUser() {
     alert('Kick user - This feature requires Discord API integration and admin permissions');
 }
 
-function banUser() {
+function banUser_legacy() {
     if (!selectedUserId) {
         alert('Please select a user first');
         return;
@@ -5192,7 +5192,7 @@ function banUser() {
     alert('Ban user - This feature requires Discord API integration and admin permissions');
 }
 
-function muteUser() {
+function muteUser_legacy() {
     if (!selectedUserId) {
         alert('Please select a user first');
         return;
@@ -5201,7 +5201,7 @@ function muteUser() {
     alert('Mute user - This feature requires Discord API integration and admin permissions');
 }
 
-function unmuteUser() {
+function unmuteUser_legacy() {
     if (!selectedUserId) {
         alert('Please select a user first');
         return;
