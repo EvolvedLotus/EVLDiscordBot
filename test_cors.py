@@ -1,113 +1,105 @@
+#!/usr/bin/env python3
 """
-ULTRA-MINIMAL CORS TEST - Maximum logging for Railway debugging
+Test CORS configuration for Railway backend
 """
-import sys
-import traceback
+import requests
+import json
 
-print("=" * 80, flush=True)
-print("🚀 ULTRA-MINIMAL CORS TEST SERVER STARTING...", flush=True)
-print("=" * 80, flush=True)
+def test_cors():
+    """Test CORS preflight request"""
+    url = "https://evldiscordbot-production.up.railway.app/api/auth/login"
 
-try:
-    print("📦 Importing Flask...", flush=True)
-    from flask import Flask, request, jsonify, make_response
-    print("✅ Flask imported successfully", flush=True)
-except Exception as e:
-    print(f"❌ Failed to import Flask: {e}", flush=True)
-    print(f"Traceback: {traceback.format_exc()}", flush=True)
-    sys.exit(1)
+    headers = {
+        "Origin": "https://evolvedlotus.github.io",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "Content-Type"
+    }
 
-try:
-    print("🏗️ Creating Flask app...", flush=True)
-    app = Flask(__name__)
-    print("✅ Flask app created successfully", flush=True)
-except Exception as e:
-    print(f"❌ Failed to create Flask app: {e}", flush=True)
-    print(f"Traceback: {traceback.format_exc()}", flush=True)
-    sys.exit(1)
+    print("Testing CORS preflight request...")
+    print(f"URL: {url}")
+    print(f"Headers: {json.dumps(headers, indent=2)}")
 
-ALLOWED_ORIGIN = 'https://evolvedlotus.github.io'
-print(f"🎯 Allowed Origin: {ALLOWED_ORIGIN}", flush=True)
-print("=" * 80, flush=True)
-
-@app.before_request
-def handle_options():
-    """Handle ALL OPTIONS requests FIRST"""
-    if request.method == 'OPTIONS':
-        print(f"🔵 OPTIONS request from: {request.headers.get('Origin')}")
-        response = make_response('', 204)
-        response.headers['Access-Control-Allow-Origin'] = ALLOWED_ORIGIN
-        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Max-Age'] = '3600'
-        print(f"✅ Sent CORS headers")
-        return response
-
-@app.after_request
-def add_cors_headers(response):
-    """Add CORS headers to ALL responses"""
-    origin = request.headers.get('Origin')
-    if origin == ALLOWED_ORIGIN:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        print(f"✅ Added CORS headers to response")
-    return response
-
-@app.route('/', methods=['GET'])
-def root():
-    """Root endpoint for basic health check"""
-    print("🏠 Root endpoint hit", flush=True)
-    return jsonify({
-        'status': 'ok',
-        'message': 'Test server is running',
-        'timestamp': '2025-11-17'
-    })
-
-@app.route('/api/test', methods=['GET', 'POST', 'OPTIONS'])
-def test():
-    """Simple test endpoint"""
-    print(f"🟢 {request.method} request to /api/test from: {request.headers.get('Origin')}", flush=True)
-    return jsonify({
-        'success': True,
-        'message': 'CORS is working!',
-        'method': request.method,
-        'endpoint': '/api/test'
-    })
-
-@app.route('/api/auth/login', methods=['POST', 'OPTIONS'])
-def login():
-    """Minimal login endpoint"""
-    print(f"🔐 LOGIN {request.method} from: {request.headers.get('Origin')}")
-
-    if request.method == 'OPTIONS':
-        return '', 204
-
-    data = request.get_json() or {}
-    username = data.get('username')
-    password = data.get('password')
-
-    print(f"Username: {username}, Password provided: {bool(password)}")
-
-    # Minimal validation
-    if username == os.environ.get('ADMIN_USERNAME') and password == os.environ.get('ADMIN_PASSWORD'):
-        return jsonify({'success': True, 'message': 'Login successful'})
-
-    return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
-
-if __name__ == '__main__':
     try:
-        port_str = os.environ.get('PORT', '8080')
-        print(f"PORT environment variable: '{port_str}'")
-        port = int(port_str)
-        print(f"Parsed port as: {port}")
-    except (ValueError, TypeError) as e:
-        print(f"❌ Invalid PORT value '{port_str}', using default 8080: {e}")
-        port = 8080
+        response = requests.options(url, headers=headers, timeout=10)
 
-    print(f"🚀 Starting Flask server on 0.0.0.0:{port}")
+        print(f"\nResponse Status: {response.status_code}")
+        print(f"Response Headers:")
+        for header, value in response.headers.items():
+            print(f"  {header}: {value}")
+
+        # Check CORS headers
+        cors_headers = {
+            'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+            'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+            'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers'),
+            'Access-Control-Allow-Credentials': response.headers.get('Access-Control-Allow-Credentials')
+        }
+
+        print(f"\nCORS Headers:")
+        for header, value in cors_headers.items():
+            status = "✅" if value else "❌"
+            print(f"  {status} {header}: {value}")
+
+        # Validate CORS configuration
+        if cors_headers['Access-Control-Allow-Origin'] == 'https://evolvedlotus.github.io':
+            print("\n✅ CORS Origin is correctly configured")
+        else:
+            print(f"\n❌ CORS Origin mismatch. Expected: https://evolvedlotus.github.io, Got: {cors_headers['Access-Control-Allow-Origin']}")
+
+        if 'POST' in cors_headers['Access-Control-Allow-Methods'] or cors_headers['Access-Control-Allow-Methods'] == '*':
+            print("✅ POST method is allowed")
+        else:
+            print(f"❌ POST method not allowed. Methods: {cors_headers['Access-Control-Allow-Methods']}")
+
+        if 'Content-Type' in cors_headers['Access-Control-Allow-Headers'] or cors_headers['Access-Control-Allow-Headers'] == '*':
+            print("✅ Content-Type header is allowed")
+        else:
+            print(f"❌ Content-Type header not allowed. Headers: {cors_headers['Access-Control-Allow-Headers']}")
+
+        if cors_headers['Access-Control-Allow-Credentials'] == 'true':
+            print("✅ Credentials are allowed")
+        else:
+            print("❌ Credentials are not allowed")
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Request failed: {e}")
+
+def test_login_endpoint():
+    """Test actual login endpoint"""
+    url = "https://evldiscordbot-production.up.railway.app/api/auth/login"
+
+    headers = {
+        "Origin": "https://evolvedlotus.github.io",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "username": "test",
+        "password": "test"
+    }
+
+    print(f"\n\nTesting login endpoint...")
+    print(f"URL: {url}")
+    print(f"Data: {json.dumps(data)}")
+
     try:
-        app.run(host='0.0.0.0', port=port, debug=False)
-    except Exception as e:
-        print(f"❌ Failed to start Flask server: {e}")
-        exit(1)
+        response = requests.post(url, headers=headers, json=data, timeout=10)
+
+        print(f"\nResponse Status: {response.status_code}")
+        print(f"Response Headers:")
+        for header, value in response.headers.items():
+            if header.lower().startswith('access-control'):
+                print(f"  {header}: {value}")
+
+        try:
+            response_data = response.json()
+            print(f"Response Data: {json.dumps(response_data, indent=2)}")
+        except:
+            print(f"Response Text: {response.text}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Request failed: {e}")
+
+if __name__ == "__main__":
+    test_cors()
+    test_login_endpoint()

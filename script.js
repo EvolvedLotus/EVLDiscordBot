@@ -1,9 +1,13 @@
 // Discord Bot CMS Dashboard JavaScript
 
-// API Configuration - Direct Railway URL (no proxy needed)
+// API Configuration - Direct Railway connection (CORS configured)
 const API_BASE_URL = 'https://evldiscordbot-production.up.railway.app';
-const USE_CORS_PROXY = false; // Disable proxy - Railway handles CORS
-const CORS_PROXY = 'https://cors.io/?url=';
+const USE_CORS_PROXY = false; // Disable proxy - using direct connection
+const CORS_PROXY = 'https://cors.io/?';
+
+// Alternative configurations for testing
+// const API_BASE_URL = 'https://cors.io/?https://evldiscordbot-production.up.railway.app';
+// const USE_CORS_PROXY = true;
 
 // Helper function to construct API URL
 function getApiUrl(endpoint) {
@@ -161,6 +165,8 @@ async function login(event) {
     console.log('API_BASE_URL:', API_BASE_URL);
     console.log('USE_CORS_PROXY:', USE_CORS_PROXY);
     console.log('CORS_PROXY:', CORS_PROXY);
+    console.log('Current origin:', window.location.origin);
+    console.log('Target origin check:', window.location.origin === 'https://evolvedlotus.github.io');
 
     if (!username || !password) {
         showNotification('Please enter both username and password', 'error');
@@ -190,12 +196,23 @@ async function login(event) {
             body: '[REDACTED]' // Don't log the actual password
         });
 
-        const response = await fetch(loginUrl, fetchOptions);
+        // Add timeout for debugging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+        const response = await fetch(loginUrl, {
+            ...fetchOptions,
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
 
         console.log('Response status:', response.status);
         console.log('Response status text:', response.statusText);
         console.log('Response headers:', Object.fromEntries(response.headers.entries()));
         console.log('Response OK:', response.ok);
+        console.log('Response type:', response.type);
+        console.log('Response url:', response.url);
 
         let data;
         try {
@@ -210,6 +227,8 @@ async function login(event) {
 
         if (response.ok && data.message && data.message.includes('successful')) {
             console.log('Login successful, processing response...');
+            console.log('Session data received:', data);
+
             sessionStorage.setItem('isAuthenticated', 'true');
             sessionStorage.setItem('username', username);
 
@@ -224,18 +243,28 @@ async function login(event) {
         } else {
             console.error('Login failed:', data.message || data.error || 'Unknown error');
             console.error('Full response data:', data);
+            console.error('Response status details:', {
+                status: response.status,
+                statusText: response.statusText,
+                ok: response.ok
+            });
             showNotification(data.message || data.error || 'Invalid credentials', 'error');
         }
     } catch (error) {
         console.error('Login error details:', error);
+        console.error('Error name:', error.name);
         console.error('Error stack:', error.stack);
 
         // Enhanced error reporting
         let errorMessage = `Login failed: ${error.message}`;
-        if (error.message.includes('fetch')) {
+        if (error.name === 'AbortError') {
+            errorMessage += '\n\nRequest timed out (10 seconds). The server may be slow or unreachable.';
+        } else if (error.message.includes('fetch')) {
             errorMessage += '\n\nPossible issues:\n• Backend server is down\n• Network connectivity issues\n• CORS configuration problem\n• Wrong API URL';
         } else if (error.message.includes('JSON')) {
             errorMessage += '\n\nServer returned invalid response format';
+        } else if (error.message.includes('Failed to fetch')) {
+            errorMessage += '\n\nNetwork error. Check:\n• Internet connection\n• CORS policy\n• Server availability';
         }
 
         showNotification(errorMessage, 'error');
