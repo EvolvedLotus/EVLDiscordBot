@@ -127,10 +127,23 @@ def setup_logging():
 # Initialize logging
 logger = setup_logging()
 
+# ============= CRITICAL: CORS CONFIGURATION =============
+from flask_cors import CORS
+
+ALLOWED_ORIGINS = [
+    'https://evolvedlotus.github.io',
+    'http://localhost:5500',
+    'http://127.0.0.1:5500',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+]
+
+print(f"🌐 CORS ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
+
 # ============================================
 # FLASK APP INITIALIZATION - MUST BE EARLY
 # ============================================
-app = Flask(__name__, static_folder='.')
+app = Flask(__name__, static_folder='web', static_url_path='')
 
 # Configure JWT
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
@@ -140,53 +153,26 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 # Initialize JWTManager
 jwt = JWTManager(app)
 
-# ============================================================================
-# CORS CONFIGURATION - MANUAL HANDLING FOR RELIABILITY
-# ============================================================================
+# Enable CORS for ALL routes with credentials
+CORS(app,
+     resources={r"/*": {"origins": ALLOWED_ORIGINS}},
+     supports_credentials=True,
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     max_age=3600)
 
-# Allow requests from GitHub Pages and localhost
-ALLOWED_ORIGINS = [
-    'https://evolvedlotus.github.io',
-    'https://evolvedlotus.github.io/',
-    'http://localhost:3000',
-    'http://localhost:5000',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:5000'
-]
-
-# Railway deployment detection
-IS_RAILWAY = bool(os.environ.get('RAILWAY_ENVIRONMENT_ID') or os.environ.get('RAILWAY_PROJECT_ID'))
-
-# Disable Flask-CORS for manual control
-# CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
-
-# Manual CORS preflight handler
-@app.route('/api/auth/login', methods=['OPTIONS'])
-def login_preflight():
-    """Handle CORS preflight for login endpoint"""
-    response = app.response_class()
-    origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS:
-        response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Max-Age', '86400')  # 24 hours
-    return response, 200
-
-# Add CORS headers to all API responses
-@app.after_request
-def cors_after_request(response):
-    origin = request.headers.get('Origin')
-    if origin in ALLOWED_ORIGINS and request.path.startswith('/api/'):
-        response.headers.add('Access-Control-Allow-Origin', origin)
-        response.headers.add('Access-Control-Allow-Credentials', 'true')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        response.headers.add('Access-Control-Expose-Headers', 'Content-Type,Authorization')
-    return response
-
-# REMOVED: Complex CORS configuration - using simple hardcoded approach above
+@app.before_first_request
+def log_startup_verification():
+    """Log CORS configuration verification on first request"""
+    print("=" * 50)
+    print("🌐 CORS CONFIGURATION VERIFICATION")
+    print("=" * 50)
+    print(f"Flask version: {__import__('flask').__version__}")
+    print(f"Flask-CORS version: {__import__('flask_cors').__version__}")
+    print(f"Allowed origins: {ALLOWED_ORIGINS}")
+    print(f"Railway environment: {bool(os.getenv('RAILWAY_PROJECT_ID'))}")
+    print(f"Port: {os.getenv('PORT', 'Not set')}")
+    print("=" * 50)
 
 # Performance monitoring decorator
 def performance_monitor(func):
@@ -916,6 +902,22 @@ def health_check():
             "timestamp": time.time(),
             "emergency_contact": "Check application logs for details"
         }), 500
+
+@app.route('/api/test-cors', methods=['GET', 'POST', 'OPTIONS'], endpoint='test_cors')
+def test_cors():
+    """Test endpoint to verify CORS is working"""
+    print(f"🔍 CORS Test - Method: {request.method}, Origin: {request.headers.get('Origin')}")
+
+    if request.method == 'OPTIONS':
+        return '', 204
+
+    return jsonify({
+        'success': True,
+        'message': 'CORS is working!',
+        'method': request.method,
+        'origin': request.headers.get('Origin'),
+        'headers': dict(request.headers)
+    })
 
 @app.route('/api/debug/cors', methods=['GET', 'OPTIONS'], endpoint='debug_cors')
 def debug_cors():
