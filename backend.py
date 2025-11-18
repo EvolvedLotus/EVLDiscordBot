@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context, g
-from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 import json
 import os
@@ -154,6 +153,9 @@ ALLOWED_ORIGINS = [
     'http://127.0.0.1:3000',
     'http://127.0.0.1:5000'
 ]
+
+# Railway deployment detection
+IS_RAILWAY = bool(os.environ.get('RAILWAY_ENVIRONMENT_ID') or os.environ.get('RAILWAY_PROJECT_ID'))
 
 # Disable Flask-CORS for manual control
 # CORS(app, resources={r"/api/*": {"origins": ALLOWED_ORIGINS}})
@@ -871,6 +873,15 @@ def health_check():
         if not services_healthy["bot"] and not services_healthy["database"]:
             overall_status = "unhealthy"
 
+        # CORS verification logging
+        cors_info = {
+            "allowed_origins": ALLOWED_ORIGINS,
+            "railway_detected": IS_RAILWAY,
+            "port": os.environ.get('PORT', 'Not set'),
+            "flask_env": os.environ.get('FLASK_ENV', 'production')
+        }
+        print(f"Health check - CORS info: {cors_info}")
+
         health_data = {
             "status": overall_status,
             "timestamp": time.time(),
@@ -884,9 +895,10 @@ def health_check():
             "database": db_details,
             "system": system_info,
             "performance": performance_info,
+            "cors": cors_info,
             "environment": {
                 "python_version": f"{__import__('sys').version_info.major}.{__import__('sys').version_info.minor}",
-                "flask_env": os.getenv('FLASK_ENV', 'production'),
+                "flask_env": os.environ.get('FLASK_ENV', 'production'),
                 "railway_env": bool(os.getenv('RAILWAY_ENVIRONMENT')),
                 "netlify_env": bool(os.getenv('NETLIFY'))
             }
@@ -904,6 +916,19 @@ def health_check():
             "timestamp": time.time(),
             "emergency_contact": "Check application logs for details"
         }), 500
+
+@app.route('/api/debug/cors', methods=['GET', 'OPTIONS'], endpoint='debug_cors')
+def debug_cors():
+    """Diagnostic endpoint for CORS debugging"""
+    return jsonify({
+        'method': request.method,
+        'origin': request.headers.get('Origin'),
+        'allowed_origins': ALLOWED_ORIGINS,
+        'origin_allowed': request.headers.get('Origin') in ALLOWED_ORIGINS,
+        'headers': dict(request.headers),
+        'railway_env': IS_RAILWAY,
+        'port': os.environ.get('PORT', 'Not set')
+    })
 
 @app.route('/', endpoint='serve_frontend')
 def serve_frontend():
@@ -4114,4 +4139,7 @@ def handle_exception(e):
     return jsonify({'error': 'Server error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
-    run_backend()
+    port = int(os.environ.get('PORT', 3000))
+    print(f"Starting Flask server on 0.0.0.0:{port}")
+    print(f"ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
