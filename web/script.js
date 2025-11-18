@@ -130,11 +130,8 @@ async function login(event) {
             // We don't have access to them in JavaScript for security
             currentUser = data.user;
 
-            // Set cookies
-            setCookie('auth_token', authToken, 1); // 1 hour
-            if (refreshToken) {
-                setCookie('refresh_token', refreshToken, 7); // 7 days
-            }
+            // Set a simple session cookie to indicate authentication
+            setCookie('session_id', 'authenticated', 1); // 1 hour
 
             // Hide login screen and show dashboard
             hideLoginScreen();
@@ -280,6 +277,7 @@ async function checkAuth() {
     try {
         // Check if we have tokens
         if (!authToken && !getCookie('session_id')) {
+            showLoginScreen();
             return false;
         }
 
@@ -298,11 +296,13 @@ async function checkAuth() {
             authToken = null;
             refreshToken = null;
             isAuthenticated = false;
+            showLoginScreen();
             return false;
         }
     } catch (error) {
         console.error('Auth check failed:', error);
         isAuthenticated = false;
+        showLoginScreen();
         return false;
     }
 }
