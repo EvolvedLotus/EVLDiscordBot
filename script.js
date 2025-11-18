@@ -1,8 +1,8 @@
 // Discord Bot CMS Dashboard JavaScript
 
-// API Configuration - Uses environment variable from Netlify
+// API Configuration - Direct Railway URL (no proxy needed)
 const API_BASE_URL = 'https://evldiscordbot-production.up.railway.app';
-const USE_CORS_PROXY = true; // Toggle proxy on/off
+const USE_CORS_PROXY = false; // Disable proxy - Railway handles CORS
 const CORS_PROXY = 'https://cors.io/?url=';
 
 // Helper function to construct API URL
@@ -151,45 +151,94 @@ function hideLoginScreen() {
 }
 
 async function login(event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
 
     const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value.trim();
+    const password = document.getElementById('password').value;
+
+    console.log('=== LOGIN ATTEMPT ===');
+    console.log('Username:', username);
+    console.log('API_BASE_URL:', API_BASE_URL);
+    console.log('USE_CORS_PROXY:', USE_CORS_PROXY);
+    console.log('CORS_PROXY:', CORS_PROXY);
 
     if (!username || !password) {
-        showLoginError('Please enter both username and password');
+        showNotification('Please enter both username and password', 'error');
         return;
     }
 
-    try {
-        showLoginError(''); // Clear any previous errors
+    const loginUrl = getApiUrl('/api/auth/login');
+    console.log('Final Login URL:', loginUrl);
 
-        const data = await apiCall('/api/auth/login', {
+    try {
+        console.log('Sending login request...');
+
+        const fetchOptions = {
             method: 'POST',
-            body: JSON.stringify({ username, password })
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: USE_CORS_PROXY ? undefined : 'include',
+            body: JSON.stringify({
+                username: username,
+                password: password
+            })
+        };
+
+        console.log('Fetch options:', {
+            ...fetchOptions,
+            body: '[REDACTED]' // Don't log the actual password
         });
 
-        if (data.user) {
-            // Tokens are stored in HTTP-only cookies by the backend
-            // We don't have access to them in JavaScript for security
-            currentUser = data.user;
+        const response = await fetch(loginUrl, fetchOptions);
 
-            // Set a simple session cookie to indicate authentication
-            setCookie('session_id', 'authenticated', 1); // 1 hour
+        console.log('Response status:', response.status);
+        console.log('Response status text:', response.statusText);
+        console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+        console.log('Response OK:', response.ok);
 
-            // Hide login screen and show dashboard
-            hideLoginScreen();
+        let data;
+        try {
+            data = await response.json();
+            console.log('Response data:', data);
+        } catch (jsonError) {
+            console.error('Failed to parse JSON response:', jsonError);
+            const textResponse = await response.text();
+            console.log('Raw response text:', textResponse);
+            throw new Error('Invalid JSON response from server');
+        }
+
+        if (response.ok && data.message && data.message.includes('successful')) {
+            console.log('Login successful, processing response...');
+            sessionStorage.setItem('isAuthenticated', 'true');
+            sessionStorage.setItem('username', username);
+
+            // Clear form
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+
+            showNotification('Login successful!', 'success');
 
             // Initialize dashboard
-            initializeDashboard();
-
-            showNotification('✅ Login successful!', 'success');
+            await initializeDashboard();
         } else {
-            showLoginError(data.error || 'Login failed');
+            console.error('Login failed:', data.message || data.error || 'Unknown error');
+            console.error('Full response data:', data);
+            showNotification(data.message || data.error || 'Invalid credentials', 'error');
         }
     } catch (error) {
-        console.error('Login error:', error);
-        showLoginError('Network error. Please try again.');
+        console.error('Login error details:', error);
+        console.error('Error stack:', error.stack);
+
+        // Enhanced error reporting
+        let errorMessage = `Login failed: ${error.message}`;
+        if (error.message.includes('fetch')) {
+            errorMessage += '\n\nPossible issues:\n• Backend server is down\n• Network connectivity issues\n• CORS configuration problem\n• Wrong API URL';
+        } else if (error.message.includes('JSON')) {
+            errorMessage += '\n\nServer returned invalid response format';
+        }
+
+        showNotification(errorMessage, 'error');
     }
 }
 
