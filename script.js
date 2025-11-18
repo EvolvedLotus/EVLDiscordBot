@@ -3911,42 +3911,7 @@ async function giveUserItem() {
     }
 }
 
-// Moderation functions (placeholders for now)
-function kickUser() {
-    if (!selectedUserId) {
-        alert('Please select a user first');
-        return;
-    }
 
-    alert('Kick user - This feature requires Discord API integration and admin permissions');
-}
-
-function banUser() {
-    if (!selectedUserId) {
-        alert('Please select a user first');
-        return;
-    }
-
-    alert('Ban user - This feature requires Discord API integration and admin permissions');
-}
-
-function muteUser() {
-    if (!selectedUserId) {
-        alert('Please select a user first');
-        return;
-    }
-
-    alert('Mute user - This feature requires Discord API integration and admin permissions');
-}
-
-function unmuteUser() {
-    if (!selectedUserId) {
-        alert('Please select a user first');
-        return;
-    }
-
-    alert('Unmute user - This feature requires Discord API integration and admin permissions');
-}
 
 // Info functions
 function viewUserDetails() {
