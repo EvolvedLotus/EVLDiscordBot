@@ -1079,7 +1079,19 @@ class DataManager:
     def ensure_user_exists(self, guild_id: int, user_id: int) -> bool:
         """Ensure user exists in database with default values"""
         try:
-            # Try to insert new user
+            # First check if user exists to avoid unnecessary conflicts
+            existing = self.supabase.table("users").select("user_id").eq(
+                "guild_id", str(guild_id)
+            ).eq(
+                "user_id", str(user_id)
+            ).execute()
+
+            if existing.data and len(existing.data) > 0:
+                # User already exists
+                logger.debug(f"User {user_id} already exists in guild {guild_id}")
+                return True
+
+            # User doesn't exist, try to create
             result = self.supabase.table("users").insert({
                 "user_id": str(user_id),
                 "guild_id": str(guild_id),
@@ -1095,9 +1107,9 @@ class DataManager:
         except Exception as e:
             error_msg = str(e)
 
-            # If user already exists (duplicate key error), that's fine
-            if "duplicate" in error_msg.lower() or "unique" in error_msg.lower():
-                logger.debug(f"User {user_id} already exists in guild {guild_id}")
+            # Handle 409 Conflict or duplicate key errors
+            if "409" in error_msg or "duplicate" in error_msg.lower() or "unique" in error_msg.lower():
+                logger.debug(f"User {user_id} already exists in guild {guild_id} (handled conflict)")
                 return True
 
             logger.error(f"Failed to create user {user_id} in guild {guild_id}: {e}")

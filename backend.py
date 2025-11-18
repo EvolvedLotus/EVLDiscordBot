@@ -290,6 +290,542 @@ bot = None
 bot_thread = None
 bot_ready = False
 
+# ============= ROLE MANAGEMENT =============
+
+@app.route('/api/<server_id>/roles', methods=['GET'])
+@session_required
+def get_guild_roles(server_id):
+    """Get all roles for a guild with sync from Discord"""
+    try:
+        bot = get_bot()
+        if not bot:
+            return jsonify({'error': 'Bot not ready'}), 503
+
+        guild = bot.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+
+        # Sync roles from Discord to database
+        roles_data = []
+        for role in guild.roles:
+            role_data = {
+                'role_id': str(role.id),
+                'role_name': role.name,
+                'role_color': str(role.color),
+                'role_position': role.position,
+                'is_managed': role.managed,
+                'permissions': role.permissions.value
+            }
+            roles_data.append(role_data)
+
+            # Upsert to database
+            data_manager.supabase.table('guild_roles').upsert({
+                'guild_id': server_id,
+                **role_data,
+                'last_synced': datetime.now(timezone.utc).isoformat()
+            }, on_conflict='guild_id,role_id').execute()
+
+        return jsonify({
+            'success': True,
+            'roles': roles_data
+        })
+    except Exception as e:
+        logger.error(f"Error fetching roles: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<server_id>/users/<user_id>/roles', methods=['GET', 'PUT'])
+@session_required
+def manage_user_roles(server_id, user_id):
+    """Get or update user roles"""
+    try:
+        bot = get_bot()
+        if not bot:
+            return jsonify({'error': 'Bot not ready'}), 503
+
+        guild = bot.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+
+        member = guild.get_member(int(user_id))
+        if not member:
+            return jsonify({'error': 'Member not found'}), 404
+
+        if request.method == 'GET':
+            # Return current roles
+            roles = [{'id': str(r.id), 'name': r.name, 'color': str(r.color)}
+                     for r in member.roles if r.name != "@everyone"]
+            return jsonify({'success': True, 'roles': roles})
+
+        elif request.method == 'PUT':
+            # Update roles
+            data = request.get_json()
+            role_ids_to_add = data.get('add_roles', [])
+            role_ids_to_remove = data.get('remove_roles', [])
+            moderator_id = session.get('user', {}).get('user_id')
+
+            # Add roles
+            for role_id in role_ids_to_add:
+                role = guild.get_role(int(role_id))
+                if role and role not in member.roles:
+                    asyncio.run_coroutine_threadsafe(
+                        member.add_roles(role, reason=f"Modified by CMS admin"),
+                        bot.loop
+                    ).result(timeout=10)
+
+                    # Log to database
+                    data_manager.supabase.table('user_roles').upsert({
+                        'guild_id': server_id,
+                        'user_id': user_id,
+                        'role_id': role_id,
+                        'assigned_by': moderator_id
+                    }, on_conflict='guild_id,user_id,role_id').execute()
+
+            # Remove roles
+            for role_id in role_ids_to_remove:
+                role = guild.get_role(int(role_id))
+                if role and role in member.roles:
+                    asyncio.run_coroutine_threadsafe(
+                        member.remove_roles(role, reason=f"Modified by CMS admin"),
+                        bot.loop
+                    ).result(timeout=10)
+
+                    # Remove from database
+                    data_manager.supabase.table('user_roles').delete().match({
+                        'guild_id': server_id,
+                        'user_id': user_id,
+                        'role_id': role_id
+                    }).execute()
+
+            # Broadcast update
+            broadcast_update('user.roles.updated', {
+                'guild_id': server_id,
+                'user_id': user_id,
+                'added': role_ids_to_add,
+                'removed': role_ids_to_remove
+            })
+
+            return jsonify({'success': True, 'message': 'Roles updated'})
+
+    except Exception as e:
+        logger.error(f"Error managing user roles: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= COMMAND PERMISSIONS =============
+
+@app.route('/api/<server_id>/permissions/commands', methods=['GET'])
+@session_required
+def get_command_permissions(server_id):
+    """Get all command permissions for guild"""
+    try:
+        result = data_manager.supabase.table('command_permissions').select('*').eq('guild_id', server_id).execute()
+        return jsonify({'success': True, 'permissions': result.data})
+    except Exception as e:
+        logger.error(f"Error fetching command permissions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<server_id>/permissions/commands/<command_name>', methods=['PUT'])
+@session_required
+def update_command_permissions(server_id, command_name):
+    """Update permissions for specific command"""
+    try:
+        data = request.get_json()
+
+        permission_data = {
+            'guild_id': server_id,
+            'command_name': command_name,
+            'allowed_roles': data.get('allowed_roles', []),
+            'denied_roles': data.get('denied_roles', []),
+            'allowed_users': data.get('allowed_users', []),
+            'denied_users': data.get('denied_users', []),
+            'is_enabled': data.get('is_enabled', True),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        data_manager.supabase.table('command_permissions').upsert(
+            permission_data,
+            on_conflict='guild_id,command_name'
+        ).execute()
+
+        # Invalidate cache
+        data_manager.invalidate_cache(server_id, 'command_permissions')
+
+        broadcast_update('command.permissions.updated', {
+            'guild_id': server_id,
+            'command_name': command_name
+        })
+
+        return jsonify({'success': True, 'message': 'Permissions updated'})
+    except Exception as e:
+        logger.error(f"Error updating command permissions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= MODERATION ACTIONS =============
+
+@app.route('/api/<server_id>/moderation/kick', methods=['POST'])
+@session_required
+def kick_user(server_id):
+    """Kick user from guild"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        reason = data.get('reason', 'No reason provided')
+        moderator_id = session.get('user', {}).get('user_id')
+
+        bot = get_bot()
+        if not bot:
+            return jsonify({'error': 'Bot not ready'}), 503
+
+        guild = bot.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+
+        member = guild.get_member(int(user_id))
+        if not member:
+            return jsonify({'error': 'Member not found'}), 404
+
+        # Execute kick
+        asyncio.run_coroutine_threadsafe(
+            member.kick(reason=f"[CMS] {reason}"),
+            bot.loop
+        ).result(timeout=10)
+
+        # Log action
+        action_id = f"kick_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
+        data_manager.supabase.table('moderation_actions').insert({
+            'action_id': action_id,
+            'guild_id': server_id,
+            'user_id': user_id,
+            'action_type': 'kick',
+            'reason': reason,
+            'moderator_id': moderator_id
+        }).execute()
+
+        broadcast_update('moderation.kick', {
+            'guild_id': server_id,
+            'user_id': user_id,
+            'moderator_id': moderator_id,
+            'reason': reason
+        })
+
+        return jsonify({'success': True, 'message': 'User kicked'})
+    except Exception as e:
+        logger.error(f"Error kicking user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<server_id>/moderation/ban', methods=['POST'])
+@session_required
+def ban_user(server_id):
+    """Ban user from guild"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        reason = data.get('reason', 'No reason provided')
+        delete_message_days = data.get('delete_message_days', 0)
+        moderator_id = session.get('user', {}).get('user_id')
+
+        bot = get_bot()
+        if not bot:
+            return jsonify({'error': 'Bot not ready'}), 503
+
+        guild = bot.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+
+        # Execute ban
+        async def _ban_user():
+            user = await bot.fetch_user(int(user_id))
+            await guild.ban(user, reason=f"[CMS] {reason}", delete_message_days=delete_message_days)
+
+        asyncio.run_coroutine_threadsafe(_ban_user(), bot.loop).result(timeout=10)
+
+        # Log action
+        action_id = f"ban_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
+        data_manager.supabase.table('moderation_actions').insert({
+            'action_id': action_id,
+            'guild_id': server_id,
+            'user_id': user_id,
+            'action_type': 'ban',
+            'reason': reason,
+            'moderator_id': moderator_id
+        }).execute()
+
+        broadcast_update('moderation.ban', {
+            'guild_id': server_id,
+            'user_id': user_id,
+            'moderator_id': moderator_id,
+            'reason': reason
+        })
+
+        return jsonify({'success': True, 'message': 'User banned'})
+    except Exception as e:
+        logger.error(f"Error banning user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<server_id>/moderation/timeout', methods=['POST'])
+@session_required
+def timeout_user(server_id):
+    """Timeout user (mute) for specified duration"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        duration_minutes = data.get('duration_minutes', 60)
+        reason = data.get('reason', 'No reason provided')
+        moderator_id = session.get('user', {}).get('user_id')
+
+        bot = get_bot()
+        if not bot:
+            return jsonify({'error': 'Bot not ready'}), 503
+
+        guild = bot.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+
+        member = guild.get_member(int(user_id))
+        if not member:
+            return jsonify({'error': 'Member not found'}), 404
+
+        # Calculate timeout duration
+        until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
+
+        # Execute timeout
+        asyncio.run_coroutine_threadsafe(
+            member.timeout(until, reason=f"[CMS] {reason}"),
+            bot.loop
+        ).result(timeout=10)
+
+        # Log action
+        action_id = f"timeout_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
+        data_manager.supabase.table('moderation_actions').insert({
+            'action_id': action_id,
+            'guild_id': server_id,
+            'user_id': user_id,
+            'action_type': 'timeout',
+            'reason': reason,
+            'duration_seconds': duration_minutes * 60,
+            'moderator_id': moderator_id,
+            'expires_at': until.isoformat()
+        }).execute()
+
+        broadcast_update('moderation.timeout', {
+            'guild_id': server_id,
+            'user_id': user_id,
+            'moderator_id': moderator_id,
+            'duration_minutes': duration_minutes,
+            'reason': reason
+        })
+
+        return jsonify({'success': True, 'message': f'User timed out for {duration_minutes} minutes'})
+    except Exception as e:
+        logger.error(f"Error timing out user: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= CHANNEL CONFIGURATION =============
+
+@app.route('/api/<server_id>/channels', methods=['GET'])
+@session_required
+def get_guild_channels(server_id):
+    """Get all text channels in guild - ALREADY EXISTS but ensure it works"""
+    try:
+        bot = get_bot()
+        if not bot:
+            return jsonify({'error': 'Bot not ready'}), 503
+
+        guild = bot.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+
+        channels = [
+            {
+                'id': str(channel.id),
+                'name': channel.name,
+                'position': channel.position,
+                'category': channel.category.name if channel.category else None
+            }
+            for channel in guild.text_channels
+        ]
+
+        return jsonify({'success': True, 'channels': channels})
+    except Exception as e:
+        logger.error(f"Error fetching channels: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<server_id>/config/channels', methods=['PUT'])
+@session_required
+def update_channel_config(server_id):
+    """Update channel assignments (task, shop, welcome, logs)"""
+    try:
+        data = request.get_json()
+
+        update_data = {}
+        if 'task_channel_id' in data:
+            update_data['task_channel_id'] = data['task_channel_id']
+        if 'shop_channel_id' in data:
+            update_data['shop_channel_id'] = data['shop_channel_id']
+        if 'welcome_channel' in data:
+            update_data['welcome_channel'] = data['welcome_channel']
+        if 'logs_channel' in data:
+            update_data['logs_channel'] = data['logs_channel']
+        if 'log_channel' in data:  # Legacy support
+            update_data['log_channel'] = data['log_channel']
+
+        if not update_data:
+            return jsonify({'error': 'No channels provided'}), 400
+
+        update_data['last_channel_sync'] = datetime.now(timezone.utc).isoformat()
+        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+
+        data_manager.supabase.table('guilds').update(update_data).eq('guild_id', server_id).execute()
+
+        # Invalidate cache
+        data_manager.invalidate_cache(server_id, 'config')
+
+        broadcast_update('guild.channels.updated', {
+            'guild_id': server_id,
+            'channels': update_data
+        })
+
+        return jsonify({'success': True, 'message': 'Channel configuration updated', 'data': update_data})
+    except Exception as e:
+        logger.error(f"Error updating channel config: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============= MONEY MANAGEMENT =============
+
+@app.route('/api/<server_id>/users/<user_id>/balance/add', methods=['POST'])
+@session_required
+def add_user_balance(server_id, user_id):
+    """Add money to user balance"""
+    try:
+        data = request.get_json()
+        amount = data.get('amount')
+        reason = data.get('reason', 'Added by admin')
+
+        if not amount or amount <= 0:
+            return jsonify({'error': 'Invalid amount'}), 400
+
+        # Get current balance
+        user_result = data_manager.supabase.table('users').select('balance').match({
+            'guild_id': server_id,
+            'user_id': user_id
+        }).execute()
+
+        if not user_result.data:
+            return jsonify({'error': 'User not found'}), 404
+
+        current_balance = user_result.data[0]['balance']
+        new_balance = current_balance + amount
+
+        # Update balance
+        data_manager.supabase.table('users').update({
+            'balance': new_balance,
+            'total_earned': data_manager.supabase.rpc('increment', {'row_id': user_result.data[0]['id'], 'x': amount}),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }).match({
+            'guild_id': server_id,
+            'user_id': user_id
+        }).execute()
+
+        # Log transaction
+        transaction_id = f"admin_add_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
+        data_manager.supabase.table('transactions').insert({
+            'transaction_id': transaction_id,
+            'user_id': user_id,
+            'guild_id': server_id,
+            'amount': amount,
+            'balance_before': current_balance,
+            'balance_after': new_balance,
+            'transaction_type': 'admin_add',
+            'description': reason
+        }).execute()
+
+        broadcast_update('user.balance.updated', {
+            'guild_id': server_id,
+            'user_id': user_id,
+            'balance': new_balance
+        })
+
+        return jsonify({'success': True, 'new_balance': new_balance})
+    except Exception as e:
+        logger.error(f"Error adding balance: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/<server_id>/users/<user_id>/balance/remove', methods=['POST'])
+@session_required
+def remove_user_balance(server_id, user_id):
+    """Remove money from user balance"""
+    try:
+        data = request.get_json()
+        amount = data.get('amount')
+        reason = data.get('reason', 'Removed by admin')
+
+        if not amount or amount <= 0:
+            return jsonify({'error': 'Invalid amount'}), 400
+
+        # Get current balance
+        user_result = data_manager.supabase.table('users').select('balance').match({
+            'guild_id': server_id,
+            'user_id': user_id
+        }).execute()
+
+        if not user_result.data:
+            return jsonify({'error': 'User not found'}), 404
+
+        current_balance = user_result.data[0]['balance']
+
+        if current_balance < amount:
+            return jsonify({'error': 'Insufficient balance'}), 400
+
+        new_balance = current_balance - amount
+
+        # Update balance
+        data_manager.supabase.table('users').update({
+            'balance': new_balance,
+            'total_spent': data_manager.supabase.rpc('increment', {'row_id': user_result.data[0]['id'], 'x': amount}),
+            'updated_at': datetime.now(timezone.utc).isoformat()
+        }).match({
+            'guild_id': server_id,
+            'user_id': user_id
+        }).execute()
+
+        # Log transaction
+        transaction_id = f"admin_remove_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
+        data_manager.supabase.table('transactions').insert({
+            'transaction_id': transaction_id,
+            'user_id': user_id,
+            'guild_id': server_id,
+            'amount': -amount,
+            'balance_before': current_balance,
+            'balance_after': new_balance,
+            'transaction_type': 'admin_remove',
+            'description': reason
+        }).execute()
+
+        broadcast_update('user.balance.updated', {
+            'guild_id': server_id,
+            'user_id': user_id,
+            'balance': new_balance
+        })
+
+        return jsonify({'success': True, 'new_balance': new_balance})
+    except Exception as e:
+        logger.error(f"Error removing balance: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# Import bot instance for user data access (lazy import to avoid startup issues)
+bot = None
+bot_thread = None
+bot_ready = False
+
 def get_bot():
     """Get the bot instance"""
     global bot

@@ -752,6 +752,116 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- =====================================================
+-- COMMAND PERMISSIONS TABLE (CMS Permission Management)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS command_permissions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    command_name TEXT NOT NULL,
+    allowed_roles TEXT[] DEFAULT '{}',
+    denied_roles TEXT[] DEFAULT '{}',
+    allowed_users TEXT[] DEFAULT '{}',
+    denied_users TEXT[] DEFAULT '{}',
+    is_enabled BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(guild_id, command_name)
+);
+
+-- =====================================================
+-- GUILD ROLES TABLE (Discord Role Mirror)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS guild_roles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    role_id TEXT NOT NULL,
+    role_name TEXT NOT NULL,
+    role_color TEXT,
+    role_position INTEGER DEFAULT 0,
+    is_managed BOOLEAN DEFAULT false,
+    permissions BIGINT DEFAULT 0,
+    last_synced TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(guild_id, role_id)
+);
+
+-- =====================================================
+-- USER ROLES TABLE (Role Assignments)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS user_roles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    assigned_by TEXT,
+    UNIQUE(guild_id, user_id, role_id)
+);
+
+-- =====================================================
+-- MODERATION ACTIONS TABLE (Kick/Ban/Timeout Logging)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS moderation_actions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    action_id TEXT UNIQUE NOT NULL,
+    guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    action_type TEXT NOT NULL CHECK (action_type IN ('kick', 'ban', 'timeout', 'untimeout', 'unban')),
+    reason TEXT,
+    duration_seconds INTEGER,
+    moderator_id TEXT NOT NULL,
+    executed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    expires_at TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN DEFAULT true
+);
+
+-- =====================================================
+-- UPDATE GUILDS TABLE (Add Channel Tracking)
+-- =====================================================
+ALTER TABLE guilds
+ADD COLUMN IF NOT EXISTS logs_channel TEXT,
+ADD COLUMN IF NOT EXISTS last_channel_sync TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+
+-- Update comments
+COMMENT ON COLUMN guilds.task_channel_id IS 'Channel for task postings';
+COMMENT ON COLUMN guilds.shop_channel_id IS 'Channel for shop item listings';
+COMMENT ON COLUMN guilds.welcome_channel IS 'Channel for welcome messages';
+COMMENT ON COLUMN guilds.logs_channel IS 'Channel for moderation/action logs';
+
+-- =====================================================
+-- INDEXES FOR NEW TABLES
+-- =====================================================
+CREATE INDEX IF NOT EXISTS idx_command_permissions_guild ON command_permissions(guild_id);
+CREATE INDEX IF NOT EXISTS idx_guild_roles_guild ON guild_roles(guild_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_guild_user ON user_roles(guild_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_moderation_actions_guild ON moderation_actions(guild_id);
+
+-- =====================================================
+-- TRIGGERS FOR NEW TABLES
+-- =====================================================
+DROP TRIGGER IF EXISTS update_command_permissions_updated_at ON command_permissions;
+CREATE TRIGGER update_command_permissions_updated_at
+BEFORE UPDATE ON command_permissions
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- RLS FOR NEW TABLES
+-- =====================================================
+ALTER TABLE command_permissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE guild_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE moderation_actions ENABLE ROW LEVEL SECURITY;
+
+-- Service role bypass policies
+DROP POLICY IF EXISTS "Service role full access" ON command_permissions;
+CREATE POLICY "Service role full access" ON command_permissions FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON guild_roles;
+CREATE POLICY "Service role full access" ON guild_roles FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON user_roles;
+CREATE POLICY "Service role full access" ON user_roles FOR ALL USING (true);
+DROP POLICY IF EXISTS "Service role full access" ON moderation_actions;
+CREATE POLICY "Service role full access" ON moderation_actions FOR ALL USING (true);
+
+-- =====================================================
 -- INITIAL DATA
 -- =====================================================
 

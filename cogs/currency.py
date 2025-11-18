@@ -175,6 +175,9 @@ class Currency(commands.Cog):
     @app_commands.guild_only()
     async def balance(self, interaction: discord.Interaction, user: discord.Member = None):
         """Check balance with recent transaction summary"""
+        # Defer immediately for database operations
+        await interaction.response.defer(ephemeral=True)
+
         target = user or interaction.user
         guild_id = interaction.guild.id
 
@@ -217,15 +220,22 @@ class Currency(commands.Cog):
 
             embed.set_footer(text=f"Server: {interaction.guild.name}")
 
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
             logger = logging.getLogger(__name__)
             logger.error(f"Error in balance command: {e}")
-            await interaction.response.send_message(
-                "❌ An error occurred while checking your balance.",
-                ephemeral=True
-            )
+            # Check if already responded
+            if interaction.response.is_done():
+                await interaction.followup.send(
+                    "❌ An error occurred while checking your balance.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.response.send_message(
+                    "❌ An error occurred while checking your balance.",
+                    ephemeral=True
+                )
 
     @app_commands.command(name="daily", description="Claim your daily reward of 100 coins")
     @app_commands.guild_only()
@@ -387,17 +397,25 @@ class Currency(commands.Cog):
     @app_commands.guild_only()
     async def give_money(self, interaction: discord.Interaction, user: discord.Member, amount: int):
         """Give money to another user in this server"""
-        if amount <= 0:
-            await interaction.response.send_message("❌ Amount must be positive!", ephemeral=True)
-            return
-
-        if user == interaction.user:
-            await interaction.response.send_message("❌ You cannot give money to yourself!", ephemeral=True)
-            return
-
-        guild_id = interaction.guild.id
+        # Defer immediately for database operations
+        await interaction.response.defer(ephemeral=True)
 
         try:
+            # Early validation checks
+            if amount <= 0:
+                await interaction.followup.send("❌ Amount must be positive!", ephemeral=True)
+                return
+
+            if user == interaction.user:
+                await interaction.followup.send("❌ You cannot give money to yourself!", ephemeral=True)
+                return
+
+            if user.bot:
+                await interaction.followup.send("❌ You cannot give money to bots!", ephemeral=True)
+                return
+
+            guild_id = interaction.guild.id
+
             # Ensure both users exist FIRST
             self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
             self.data_manager.ensure_user_exists(guild_id, user.id)
@@ -406,37 +424,36 @@ class Currency(commands.Cog):
 
             if sender_balance < amount:
                 symbol = self._get_currency_symbol(guild_id)
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"❌ Insufficient funds! You have {symbol}{sender_balance:,} but need {symbol}{amount:,}",
                     ephemeral=True
                 )
                 return
 
+            # Deduct from sender
+            sender_result = self._add_balance(guild_id, interaction.user.id, -amount, f"Gave to {user.name}",
+                                             transaction_type='transfer_send',
+                                             metadata={"source": "discord_command", "command": "/give", "recipient_id": str(user.id)})
+
+            # Add to receiver
+            receiver_result = self._add_balance(guild_id, user.id, amount, f"Received from {interaction.user.name}",
+                                               transaction_type='transfer_receive',
+                                               metadata={"source": "discord_command", "command": "/give", "sender_id": str(interaction.user.id)})
+
+            if sender_result is False or receiver_result is False:
+                await interaction.followup.send("❌ Transfer failed!", ephemeral=True)
+                return
+
+            symbol = self._get_currency_symbol(guild_id)
+            await interaction.followup.send(
+                f"✅ {interaction.user.mention} gave {symbol}{amount:,} to {user.mention}!",
+                ephemeral=True
+            )
+
         except Exception as e:
             logger = logging.getLogger(__name__)
-            logger.error(f"Error in give command setup: {e}")
-            await interaction.response.send_message("❌ An error occurred while setting up transfer!", ephemeral=True)
-            return
-
-        # Deduct from sender
-        sender_result = self._add_balance(guild_id, interaction.user.id, -amount, f"Gave to {user.name}",
-                                         transaction_type='transfer_send',
-                                         metadata={"source": "discord_command", "command": "/give", "recipient_id": str(user.id)})
-
-        # Add to receiver
-        receiver_result = self._add_balance(guild_id, user.id, amount, f"Received from {interaction.user.name}",
-                                           transaction_type='transfer_receive',
-                                           metadata={"source": "discord_command", "command": "/give", "sender_id": str(interaction.user.id)})
-
-        if sender_result is False or receiver_result is False:
-            await interaction.response.send_message("❌ Transfer failed!", ephemeral=True)
-            return
-
-        symbol = self._get_currency_symbol(guild_id)
-        await interaction.response.send_message(
-            f"✅ {interaction.user.mention} gave {symbol}{amount:,} to {user.mention}!",
-            ephemeral=True
-        )
+            logger.error(f"Error in give_money command: {e}")
+            await interaction.followup.send("❌ An error occurred during the transfer.", ephemeral=True)
 
     def _add_to_inventory(self, guild_id: int, user_id: int, item_id: str, quantity: int):
         """Add items to user inventory"""

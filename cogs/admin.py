@@ -642,8 +642,7 @@ class Admin(commands.Cog):
                 price,
                 category=category,
                 stock=stock,
-                emoji=emoji,
-                channel_id=str(interaction.channel_id)
+                emoji=emoji
             )
 
             # Sync Discord message

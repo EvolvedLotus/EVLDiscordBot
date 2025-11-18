@@ -4,7 +4,7 @@ import asyncio
 import logging
 import threading
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 import discord
 from discord.ext import commands, tasks
 import os
@@ -313,6 +313,173 @@ async def run_bot():
 
             except Exception as e:
                 logger.error(f"Error handling member remove for {member.name}: {e}")
+
+        # ============= DISCORD SYNC EVENT HANDLERS =============
+
+        @bot.event
+        async def on_guild_role_create(role):
+            """Sync new role to database"""
+            try:
+                data_manager.supabase.table('guild_roles').insert({
+                    'guild_id': str(role.guild.id),
+                    'role_id': str(role.id),
+                    'role_name': role.name,
+                    'role_color': str(role.color),
+                    'role_position': role.position,
+                    'is_managed': role.managed,
+                    'permissions': role.permissions.value,
+                    'last_synced': datetime.now(timezone.utc).isoformat()
+                }).execute()
+
+                # Broadcast update
+                from backend import sse_manager
+                sse_manager.broadcast_event('guild.role.created', {
+                    'guild_id': str(role.guild.id),
+                    'role_id': str(role.id),
+                    'role_name': role.name
+                })
+
+                logger.info(f"Synced new role '{role.name}' to database for guild {role.guild.id}")
+            except Exception as e:
+                logger.error(f"Error syncing role create: {e}")
+
+
+        @bot.event
+        async def on_guild_role_delete(role):
+            """Remove deleted role from database"""
+            try:
+                data_manager.supabase.table('guild_roles').delete().match({
+                    'guild_id': str(role.guild.id),
+                    'role_id': str(role.id)
+                }).execute()
+
+                # Broadcast update
+                from backend import sse_manager
+                sse_manager.broadcast_event('guild.role.deleted', {
+                    'guild_id': str(role.guild.id),
+                    'role_id': str(role.id)
+                })
+
+                logger.info(f"Removed deleted role '{role.name}' from database for guild {role.guild.id}")
+            except Exception as e:
+                logger.error(f"Error syncing role delete: {e}")
+
+
+        @bot.event
+        async def on_guild_role_update(before, after):
+            """Sync role updates to database"""
+            try:
+                data_manager.supabase.table('guild_roles').update({
+                    'role_name': after.name,
+                    'role_color': str(after.color),
+                    'role_position': after.position,
+                    'permissions': after.permissions.value,
+                    'last_synced': datetime.now(timezone.utc).isoformat()
+                }).match({
+                    'guild_id': str(after.guild.id),
+                    'role_id': str(after.id)
+                }).execute()
+
+                # Broadcast update
+                from backend import sse_manager
+                sse_manager.broadcast_event('guild.role.updated', {
+                    'guild_id': str(after.guild.id),
+                    'role_id': str(after.id),
+                    'role_name': after.name
+                })
+
+                logger.info(f"Synced role update for '{after.name}' in guild {after.guild.id}")
+            except Exception as e:
+                logger.error(f"Error syncing role update: {e}")
+
+
+        @bot.event
+        async def on_member_update(before, after):
+            """Sync member role changes to database"""
+            try:
+                if before.roles != after.roles:
+                    # Get added/removed roles
+                    added_roles = set(after.roles) - set(before.roles)
+                    removed_roles = set(before.roles) - set(after.roles)
+
+                    guild_id = str(after.guild.id)
+                    user_id = str(after.id)
+
+                    # Add new roles to database
+                    for role in added_roles:
+                        if role.name != "@everyone":
+                            data_manager.supabase.table('user_roles').upsert({
+                                'guild_id': guild_id,
+                                'user_id': user_id,
+                                'role_id': str(role.id),
+                                'assigned_at': datetime.now(timezone.utc).isoformat()
+                            }, on_conflict='guild_id,user_id,role_id').execute()
+
+                    # Remove old roles from database
+                    for role in removed_roles:
+                        if role.name != "@everyone":
+                            data_manager.supabase.table('user_roles').delete().match({
+                                'guild_id': guild_id,
+                                'user_id': user_id,
+                                'role_id': str(role.id)
+                            }).execute()
+
+                    # Broadcast update
+                    from backend import sse_manager
+                    sse_manager.broadcast_event('member.roles.updated', {
+                        'guild_id': guild_id,
+                        'user_id': user_id,
+                        'added': [str(r.id) for r in added_roles if r.name != "@everyone"],
+                        'removed': [str(r.id) for r in removed_roles if r.name != "@everyone"]
+                    })
+
+                    logger.info(f"Synced role changes for user {after.display_name} in guild {guild_id}")
+            except Exception as e:
+                logger.error(f"Error syncing member roles: {e}")
+
+
+        @bot.event
+        async def on_guild_channel_create(channel):
+            """Broadcast channel creation for CMS refresh"""
+            if isinstance(channel, discord.TextChannel):
+                # Broadcast update
+                from backend import sse_manager
+                sse_manager.broadcast_event('guild.channel.created', {
+                    'guild_id': str(channel.guild.id),
+                    'channel_id': str(channel.id),
+                    'channel_name': channel.name
+                })
+
+                logger.info(f"Channel '{channel.name}' created in guild {channel.guild.id}")
+
+
+        @bot.event
+        async def on_guild_channel_delete(channel):
+            """Broadcast channel deletion for CMS refresh"""
+            if isinstance(channel, discord.TextChannel):
+                # Broadcast update
+                from backend import sse_manager
+                sse_manager.broadcast_event('guild.channel.deleted', {
+                    'guild_id': str(channel.guild.id),
+                    'channel_id': str(channel.id)
+                })
+
+                logger.info(f"Channel '{channel.name}' deleted in guild {channel.guild.id}")
+
+
+        @bot.event
+        async def on_guild_channel_update(before, after):
+            """Broadcast channel updates for CMS refresh"""
+            if isinstance(after, discord.TextChannel) and before.name != after.name:
+                # Broadcast update
+                from backend import sse_manager
+                sse_manager.broadcast_event('guild.channel.updated', {
+                    'guild_id': str(after.guild.id),
+                    'channel_id': str(after.id),
+                    'channel_name': after.name
+                })
+
+                logger.info(f"Channel '{before.name}' renamed to '{after.name}' in guild {after.guild.id}")
 
         @tasks.loop(minutes=10)
         async def sync_pending_discord_messages():

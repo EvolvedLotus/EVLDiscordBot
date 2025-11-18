@@ -4466,6 +4466,1629 @@ function closeModal() {
     }
 }
 
+// === SERVER SETTINGS FUNCTIONS ===
+
+// Load server settings tab
+async function loadServerSettingsTab() {
+    if (!currentServerId) {
+        showNotification('Please select a server first', 'error');
+        return;
+    }
+
+    try {
+        showNotification('Loading server settings...', 'info');
+
+        // Load channels for dropdowns
+        await loadChannelsForDropdowns();
+
+        // Load current server configuration
+        const response = await fetch(`/api/${currentServerId}/config`);
+        const config = await response.json();
+
+        // Populate form fields with current values
+        document.getElementById('currency-name').value = config.currency_name || 'coins';
+        document.getElementById('currency-symbol').value = config.currency_symbol || '$';
+        document.getElementById('starting-balance').value = config.starting_balance || 0;
+
+        // Set feature toggles
+        document.getElementById('feature-currency').checked = config.feature_currency !== false;
+        document.getElementById('feature-tasks').checked = config.feature_tasks !== false;
+        document.getElementById('feature-shop').checked = config.feature_shop !== false;
+        document.getElementById('feature-announcements').checked = config.feature_announcements !== false;
+        document.getElementById('feature-moderation').checked = config.feature_moderation !== false;
+
+        // Set bot behavior
+        document.getElementById('inactivity-days').value = config.inactivity_days || 30;
+        document.getElementById('auto-expire-tasks').checked = config.auto_expire_enabled !== false;
+        document.getElementById('require-task-proof').checked = config.require_proof !== false;
+
+        showNotification('✅ Server settings loaded!', 'success');
+
+    } catch (error) {
+        console.error('Error loading server settings:', error);
+        showNotification('❌ Failed to load server settings', 'error');
+    }
+}
+
+// Load channels for dropdowns
+async function loadChannelsForDropdowns() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/channels`);
+        const channels = await response.json();
+
+        // Filter for text channels only
+        const textChannels = channels.filter(channel => channel.type === 0); // 0 = text channel
+
+        // Populate all channel dropdowns
+        const dropdowns = ['welcome-channel', 'log-channel', 'task-channel', 'shop-channel'];
+        dropdowns.forEach(dropdownId => {
+            const dropdown = document.getElementById(dropdownId);
+            dropdown.innerHTML = '<option value="">None</option>';
+
+            textChannels.forEach(channel => {
+                const option = document.createElement('option');
+                option.value = channel.id;
+                option.textContent = `#${channel.name}`;
+                dropdown.appendChild(option);
+            });
+        });
+
+        // Load current values from config
+        await loadCurrentChannelSettings();
+
+    } catch (error) {
+        console.error('Error loading channels:', error);
+        showNotification('Failed to load channels', 'error');
+    }
+}
+
+// Load current channel settings from server config
+async function loadCurrentChannelSettings() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/config`);
+        const config = await response.json();
+
+        document.getElementById('welcome-channel').value = config.welcome_channel || '';
+        document.getElementById('log-channel').value = config.log_channel || '';
+        document.getElementById('task-channel').value = config.task_channel_id || '';
+        document.getElementById('shop-channel').value = config.shop_channel_id || '';
+
+    } catch (error) {
+        console.error('Error loading current channel settings:', error);
+    }
+}
+
+// Save individual channel setting
+async function saveChannelSetting(channelType) {
+    if (!currentServerId) return;
+
+    const dropdownId = `${channelType}-channel`;
+    const statusId = `${channelType}-channel-status`;
+    const channelId = document.getElementById(dropdownId).value;
+
+    const statusElement = document.getElementById(statusId);
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const configKey = channelType === 'task' ? 'task_channel_id' :
+                         channelType === 'shop' ? 'shop_channel_id' :
+                         channelType === 'welcome' ? 'welcome_channel' : 'log_channel';
+
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [configKey]: channelId })
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast(`${channelType.charAt(0).toUpperCase() + channelType.slice(1)} channel updated`, 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast(`Failed to save ${channelType} channel`, 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// Save currency settings
+async function saveCurrencySettings() {
+    if (!currentServerId) return;
+
+    const statusElement = document.getElementById('currency-settings-status');
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const settings = {
+            currency_name: document.getElementById('currency-name').value,
+            currency_symbol: document.getElementById('currency-symbol').value,
+            starting_balance: parseInt(document.getElementById('starting-balance').value)
+        };
+
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast('Currency settings updated', 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast('Failed to save currency settings', 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// Save feature toggle
+async function saveFeatureToggle(feature) {
+    if (!currentServerId) return;
+
+    const checkboxId = `feature-${feature}`;
+    const statusId = `feature-${feature}-status`;
+    const enabled = document.getElementById(checkboxId).checked;
+
+    const statusElement = document.getElementById(statusId);
+    statusElement.textContent = '⏳';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const configKey = `feature_${feature}`;
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [configKey]: enabled })
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅';
+            statusElement.className = 'save-status success';
+            showToast(`${feature.charAt(0).toUpperCase() + feature.slice(1)} system ${enabled ? 'enabled' : 'disabled'}`, 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 2000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌';
+        statusElement.className = 'save-status error';
+        showToast(`Failed to update ${feature} feature`, 'error');
+
+        // Revert checkbox
+        document.getElementById(checkboxId).checked = !enabled;
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 2000);
+    }
+}
+
+// Save bot behavior settings
+async function saveBotBehavior() {
+    if (!currentServerId) return;
+
+    const statusElement = document.getElementById('bot-behavior-status');
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const settings = {
+            inactivity_days: parseInt(document.getElementById('inactivity-days').value),
+            auto_expire_enabled: document.getElementById('auto-expire-tasks').checked,
+            require_proof: document.getElementById('require-task-proof').checked
+        };
+
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast('Bot behavior settings updated', 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast('Failed to save bot behavior settings', 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// === PERMISSIONS FUNCTIONS ===
+
+// Load permissions tab
+async function loadPermissionsTab() {
+    if (!currentServerId) {
+        showNotification('Please select a server first', 'error');
+        return;
+    }
+
+    try {
+        showNotification('Loading permissions...', 'info');
+
+        // Load server roles
+        await loadServerRoles();
+
+        // Load users for dropdowns
+        await loadUsersForDropdown();
+
+        // Load command permissions
+        await loadCommandPermissions();
+
+        showNotification('✅ Permissions loaded!', 'success');
+
+    } catch (error) {
+        console.error('Error loading permissions:', error);
+        showNotification('❌ Failed to load permissions', 'error');
+    }
+}
+
+// Load server roles
+async function loadServerRoles() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/roles`);
+        const roles = await response.json();
+
+        // Display roles in the roles list
+        const rolesList = document.getElementById('roles-list');
+        rolesList.innerHTML = roles.map(role => `
+            <div class="role-item" style="border-left: 4px solid ${role.color || '#99aab5'};">
+                <div class="role-info">
+                    <span class="role-name">${role.name}</span>
+                    <span class="role-members">${role.member_count} members</span>
+                </div>
+                <div class="role-permissions">
+                    ${role.permissions.administrator ? '<span class="perm-badge admin">Admin</span>' : ''}
+                    ${role.permissions.manage_guild ? '<span class="perm-badge">Manage Server</span>' : ''}
+                    ${role.permissions.manage_roles ? '<span class="perm-badge">Manage Roles</span>' : ''}
+                    ${role.permissions.manage_channels ? '<span class="perm-badge">Manage Channels</span>' : ''}
+                </div>
+            </div>
+        `).join('');
+
+        // Populate dropdowns
+        populateRoleDropdowns(roles);
+
+        // Load current admin/mod roles
+        await loadCurrentAdminModRoles();
+
+    } catch (error) {
+        console.error('Error loading roles:', error);
+        showToast('Failed to load server roles', 'error');
+    }
+}
+
+// Populate role dropdowns
+function populateRoleDropdowns(roles) {
+    const adminDropdown = document.getElementById('admin-roles-dropdown');
+    const modDropdown = document.getElementById('mod-roles-dropdown');
+    const assignRoleDropdown = document.getElementById('assign-role-select');
+
+    // Filter out @everyone role
+    const selectableRoles = roles.filter(r => r.name !== '@everyone');
+
+    [adminDropdown, modDropdown, assignRoleDropdown].forEach(dropdown => {
+        dropdown.innerHTML = '';
+        selectableRoles.forEach(role => {
+            const option = document.createElement('option');
+            option.value = role.id;
+            option.textContent = role.name;
+            dropdown.appendChild(option);
+        });
+    });
+}
+
+// Load current admin and moderator roles from config
+async function loadCurrentAdminModRoles() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/config`);
+        const config = await response.json();
+
+        const adminRoles = config.admin_roles || [];
+        const modRoles = config.moderator_roles || [];
+
+        // Select options in multiselect dropdowns
+        Array.from(document.getElementById('admin-roles-dropdown').options).forEach(option => {
+            option.selected = adminRoles.includes(option.value);
+        });
+
+        Array.from(document.getElementById('mod-roles-dropdown').options).forEach(option => {
+            option.selected = modRoles.includes(option.value);
+        });
+
+    } catch (error) {
+        console.error('Error loading current admin/mod roles:', error);
+    }
+}
+
+// Save admin roles
+async function saveAdminRoles() {
+    if (!currentServerId) return;
+
+    const dropdown = document.getElementById('admin-roles-dropdown');
+    const selectedRoles = Array.from(dropdown.selectedOptions).map(opt => opt.value);
+
+    const statusElement = document.getElementById('admin-roles-status');
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ admin_roles: selectedRoles })
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast('Admin roles updated successfully', 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast('Failed to save admin roles', 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// Save moderator roles
+async function saveModRoles() {
+    if (!currentServerId) return;
+
+    const dropdown = document.getElementById('mod-roles-dropdown');
+    const selectedRoles = Array.from(dropdown.selectedOptions).map(opt => opt.value);
+
+    const statusElement = document.getElementById('mod-roles-status');
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ moderator_roles: selectedRoles })
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast('Moderator roles updated successfully', 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast('Failed to save moderator roles', 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// Load users for user dropdown
+async function loadUsersForDropdown() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users`);
+        const data = await response.json();
+        const users = data.users || [];
+
+        const userDropdowns = ['target-user-select', 'mod-target-user'];
+        userDropdowns.forEach(dropdownId => {
+            const dropdown = document.getElementById(dropdownId);
+            dropdown.innerHTML = '<option value="">Select a user...</option>';
+
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.user_id;
+                option.textContent = user.username || `User ${user.user_id}`;
+                dropdown.appendChild(option);
+            });
+        });
+
+    } catch (error) {
+        console.error('Error loading users:', error);
+        showToast('Failed to load users', 'error');
+    }
+}
+
+// Assign role to user
+async function assignRoleToUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('target-user-select').value;
+    const roleId = document.getElementById('assign-role-select').value;
+
+    if (!userId || !roleId) {
+        showToast('Please select both a user and a role', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users/${userId}/roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_id: roleId, action: 'add' })
+        });
+
+        if (response.ok) {
+            showToast('Role assigned successfully', 'success');
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to assign role');
+        }
+    } catch (error) {
+        console.error('Error assigning role:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Remove role from user
+async function removeRoleFromUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('target-user-select').value;
+    const roleId = document.getElementById('assign-role-select').value;
+
+    if (!userId || !roleId) {
+        showToast('Please select both a user and a role', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users/${userId}/roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_id: roleId, action: 'remove' })
+        });
+
+        if (response.ok) {
+            showToast('Role removed successfully', 'success');
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to remove role');
+        }
+    } catch (error) {
+        console.error('Error removing role:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Kick user
+async function kickUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('mod-target-user').value;
+    const reason = document.getElementById('mod-reason').value || 'No reason provided';
+
+    if (!userId) {
+        showToast('Please select a user to kick', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to KICK this user?\nReason: ${reason}`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/moderation/kick`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, reason: reason })
+        });
+
+        if (response.ok) {
+            showToast('User kicked successfully', 'success');
+            document.getElementById('mod-reason').value = '';
+            document.getElementById('mod-target-user').value = '';
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to kick user');
+        }
+    } catch (error) {
+        console.error('Error kicking user:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Ban user
+async function banUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('mod-target-user').value;
+    const reason = document.getElementById('mod-reason').value || 'No reason provided';
+
+    if (!userId) {
+        showToast('Please select a user to ban', 'error');
+        return;
+    }
+
+    if (!confirm(`⚠️ Are you sure you want to BAN this user?\nThis is a serious action.\nReason: ${reason}`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/moderation/ban`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, reason: reason })
+        });
+
+        if (response.ok) {
+            showToast('User banned successfully', 'success');
+            document.getElementById('mod-reason').value = '';
+            document.getElementById('mod-target-user').value = '';
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to ban user');
+        }
+    } catch (error) {
+        console.error('Error banning user:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Unban user
+async function unbanUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('mod-target-user').value;
+
+    if (!userId) {
+        showToast('Please enter a user ID to unban', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to UNBAN user ${userId}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/moderation/unban`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+
+        if (response.ok) {
+            showToast('User unbanned successfully', 'success');
+            document.getElementById('mod-target-user').value = '';
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to unban user');
+        }
+    } catch (error) {
+        console.error('Error unbanning user:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Load command permissions
+async function loadCommandPermissions() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/permissions/commands`);
+        const permissions = await response.json();
+
+        const container = document.getElementById('command-permissions-list');
+        container.innerHTML = '';
+
+        permissions.commands.forEach(cmd => {
+            const div = document.createElement('div');
+            div.className = 'command-perm-row';
+            div.innerHTML = `
+                <div class="command-info">
+                    <strong>/${cmd.name}</strong>
+                    <span class="command-desc">${cmd.description}</span>
+                </div>
+                <div class="command-perm-controls">
+                    <select class="role-dropdown" id="perm-${cmd.name}" multiple>
+                        ${permissions.roles.map(role => `
+                            <option value="${role.id}" ${cmd.allowed_roles.includes(role.id) ? 'selected' : ''}>
+                                ${role.name}
+                            </option>
+                        `).join('')}
+                    </select>
+                    <button onclick="saveCommandPermission('${cmd.name}')" class="save-btn small">💾</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+
+    } catch (error) {
+        console.error('Error loading command permissions:', error);
+    }
+}
+
+// Save command permission
+async function saveCommandPermission(commandName) {
+    if (!currentServerId) return;
+
+    const dropdown = document.getElementById(`perm-${commandName}`);
+    const allowedRoles = Array.from(dropdown.selectedOptions).map(opt => opt.value);
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/permissions/commands/${commandName}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ allowed_roles: allowedRoles })
+        });
+
+        if (response.ok) {
+            showToast(`Permissions updated for /${commandName}`, 'success');
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        showToast(`Failed to update permissions for /${commandName}`, 'error');
+    }
+}
+
+// Toast notification function
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.classList.add('show'), 100);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// ============= ROLE MANAGEMENT =============
+
+let currentGuildRoles = [];
+
+async function syncRoles() {
+    if (!currentServerId) {
+        showNotification('Please select a server first', 'error');
+        return;
+    }
+
+    try {
+        showNotification('Syncing roles from Discord...', 'info');
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/roles`);
+        const data = await response.json();
+
+        if (data.success) {
+            currentGuildRoles = data.roles;
+            displayRoles(data.roles);
+            showNotification('Roles synced successfully', 'success');
+        } else {
+            throw new Error(data.error || 'Failed to sync roles');
+        }
+    } catch (error) {
+        console.error('Error syncing roles:', error);
+        showNotification('Failed to sync roles: ' + error.message, 'error');
+    }
+}
+
+function displayRoles(roles) {
+    const rolesContainer = document.getElementById('roles-list');
+
+    if (!roles || roles.length === 0) {
+        rolesContainer.innerHTML = '<p class="text-center">No roles found</p>';
+        return;
+    }
+
+    // Sort by position
+    roles.sort((a, b) => b.role_position - a.role_position);
+
+    rolesContainer.innerHTML = roles.map(role => {
+        if (role.role_name === '@everyone') return '';
+
+        return `
+            <div class="role-card" style="border-left: 4px solid ${role.role_color}">
+                <div class="role-name">${escapeHtml(role.role_name)}</div>
+                <div class="role-info">
+                    <span class="badge">${role.is_managed ? 'Managed' : 'Manual'}</span>
+                    <span class="role-position">Position: ${role.role_position}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ============= COMMAND PERMISSIONS =============
+
+async function loadCommandPermissions() {
+    if (!currentServerId) {
+        showNotification('Please select a server first', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/permissions/commands`);
+        const data = await response.json();
+
+        if (data.success) {
+            displayCommandPermissions(data.permissions);
+        } else {
+            throw new Error(data.error || 'Failed to load permissions');
+        }
+    } catch (error) {
+        console.error('Error loading permissions:', error);
+        showNotification('Failed to load permissions: ' + error.message, 'error');
+    }
+}
+
+function displayCommandPermissions(permissions) {
+    const tbody = document.getElementById('permissions-list');
+
+    // Get all available commands
+    const allCommands = [
+        'balance', 'daily', 'give_money', 'shop', 'buy', 'inventory',
+        'tasks', 'claim', 'mytasks', 'task_submit',
+        'additem', 'updateitem', 'restock', 'completetask',
+        'announce', 'embed', 'setprefix', 'validate'
+    ];
+
+    tbody.innerHTML = allCommands.map(cmd => {
+        const perm = permissions.find(p => p.command_name === cmd) || {
+            command_name: cmd,
+            is_enabled: true,
+            allowed_roles: [],
+            denied_roles: []
+        };
+
+        return `
+            <tr>
+                <td><code>${escapeHtml(cmd)}</code></td>
+                <td>
+                    <label class="toggle">
+                        <input type="checkbox" ${perm.is_enabled ? 'checked' : ''}
+                               onchange="toggleCommandEnabled('${cmd}', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </td>
+                <td>
+                    <div class="role-tags" id="allowed-roles-${cmd}">
+                        ${(perm.allowed_roles || []).map(roleId => {
+                            const role = currentGuildRoles.find(r => r.role_id === roleId);
+                            return role ? `<span class="role-tag">${escapeHtml(role.role_name)}</span>` : '';
+                        }).join('')}
+                    </div>
+                </td>
+                <td>
+                    <div class="role-tags" id="denied-roles-${cmd}">
+                        ${(perm.denied_roles || []).map(roleId => {
+                            const role = currentGuildRoles.find(r => r.role_id === roleId);
+                            return role ? `<span class="role-tag denied">${escapeHtml(role.role_name)}</span>` : '';
+                        }).join('')}
+                    </div>
+                </td>
+                <td>
+                    <button onclick="editCommandPermissions('${cmd}')" class="btn btn-sm btn-secondary">
+                        Edit
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function toggleCommandEnabled(commandName, enabled) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/permissions/commands/${commandName}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_enabled: enabled })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification(`Command ${commandName} ${enabled ? 'enabled' : 'disabled'}`, 'success');
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error toggling command:', error);
+        showNotification('Failed to update command: ' + error.message, 'error');
+    }
+}
+
+function editCommandPermissions(commandName) {
+    // Create modal for editing permissions
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.style.display = 'block';
+
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
+            <h2>Edit Permissions: ${commandName}</h2>
+
+            <div class="form-group">
+                <label>Allowed Roles:</label>
+                <select id="allowed-roles-select" multiple class="form-input" style="height: 150px;">
+                    ${currentGuildRoles.filter(r => r.role_name !== '@everyone').map(role =>
+                        `<option value="${role.role_id}">${escapeHtml(role.role_name)}</option>`
+                    ).join('')}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Denied Roles:</label>
+                <select id="denied-roles-select" multiple class="form-input" style="height: 150px;">
+                    ${currentGuildRoles.filter(r => r.role_name !== '@everyone').map(role =>
+                        `<option value="${role.role_id}">${escapeHtml(role.role_name)}</option>`
+                    ).join('')}
+                </select>
+            </div>
+
+            <button onclick="saveCommandPermissions('${commandName}')" class="btn btn-primary">
+                Save Permissions
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+}
+
+async function saveCommandPermissions(commandName) {
+    const allowedRoles = Array.from(document.getElementById('allowed-roles-select').selectedOptions).map(o => o.value);
+    const deniedRoles = Array.from(document.getElementById('denied-roles-select').selectedOptions).map(o => o.value);
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/permissions/commands/${commandName}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                allowed_roles: allowedRoles,
+                denied_roles: deniedRoles
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification('Permissions updated successfully', 'success');
+            document.querySelector('.modal').remove();
+            loadCommandPermissions();
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error saving permissions:', error);
+        showNotification('Failed to save permissions: ' + error.message, 'error');
+    }
+}
+
+// ============= MODERATION ACTIONS =============
+
+async function kickUser() {
+    const userId = document.getElementById('kick-user-id').value.trim();
+    const reason = document.getElementById('kick-reason').value.trim();
+
+    if (!userId) {
+        showNotification('Please enter a user ID', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to kick user ${userId}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/moderation/kick`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, reason: reason || 'No reason provided' })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification('User kicked successfully', 'success');
+            document.getElementById('kick-user-id').value = '';
+            document.getElementById('kick-reason').value = '';
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error kicking user:', error);
+        showNotification('Failed to kick user: ' + error.message, 'error');
+    }
+}
+
+async function banUser() {
+    const userId = document.getElementById('ban-user-id').value.trim();
+    const deleteDays = parseInt(document.getElementById('ban-delete-days').value) || 0;
+    const reason = document.getElementById('ban-reason').value.trim();
+
+    if (!userId) {
+        showNotification('Please enter a user ID', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to BAN user ${userId}? This action is severe.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/moderation/ban`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                reason: reason || 'No reason provided',
+                delete_message_days: deleteDays
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification('User banned successfully', 'success');
+            document.getElementById('ban-user-id').value = '';
+            document.getElementById('ban-reason').value = '';
+            document.getElementById('ban-delete-days').value = '0';
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error banning user:', error);
+        showNotification('Failed to ban user: ' + error.message, 'error');
+    }
+}
+
+async function timeoutUser() {
+    const userId = document.getElementById('timeout-user-id').value.trim();
+    const duration = parseInt(document.getElementById('timeout-duration').value) || 60;
+    const reason = document.getElementById('timeout-reason').value.trim();
+
+    if (!userId) {
+        showNotification('Please enter a user ID', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to timeout user ${userId} for ${duration} minutes?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/moderation/timeout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: userId,
+                duration_minutes: duration,
+                reason: reason || 'No reason provided'
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification(`User timed out for ${duration} minutes`, 'success');
+            document.getElementById('timeout-user-id').value = '';
+            document.getElementById('timeout-reason').value = '';
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error timing out user:', error);
+        showNotification('Failed to timeout user: ' + error.message, 'error');
+    }
+}
+
+// ============= USER MANAGEMENT ENHANCEMENTS =============
+
+let currentManagedUserId = null;
+let currentUserRoles = [];
+
+async function openUserManagement(userId, userName) {
+    currentManagedUserId = userId;
+    document.getElementById('manage-user-name').textContent = userName;
+    document.getElementById('user-management-modal').style.display = 'block';
+
+    // Load user roles
+    await loadUserRoles(userId);
+}
+
+function closeUserManagementModal() {
+    document.getElementById('user-management-modal').style.display = 'none';
+    currentManagedUserId = null;
+}
+
+async function loadUserRoles(userId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/users/${userId}/roles`);
+        const data = await response.json();
+
+        if (data.success) {
+            currentUserRoles = data.roles.map(r => r.id);
+            displayUserRolesManager(data.roles);
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error loading user roles:', error);
+        document.getElementById('user-roles-container').innerHTML =
+            '<p class="text-error">Failed to load roles</p>';
+    }
+}
+
+function displayUserRolesManager(userRoles) {
+    const container = document.getElementById('user-roles-container');
+
+    container.innerHTML = `
+        <div class="roles-checklist">
+            ${currentGuildRoles.filter(r => r.role_name !== '@everyone' && !r.is_managed).map(role => {
+                const hasRole = userRoles.some(ur => ur.id === role.role_id);
+                return `
+                    <label class="role-checkbox">
+                        <input type="checkbox"
+                               value="${role.role_id}"
+                               ${hasRole ? 'checked' : ''}
+                               onchange="updateTempRoles()">
+                        <span style="color: ${role.role_color}">${escapeHtml(role.role_name)}</span>
+                    </label>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function updateTempRoles() {
+    // Track changes for saving later
+    const checkboxes = document.querySelectorAll('.role-checkbox input[type="checkbox"]');
+    currentUserRoles = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+}
+
+async function saveUserRoles() {
+    if (!currentManagedUserId) return;
+
+    try {
+        const checkboxes = document.querySelectorAll('.role-checkbox input[type="checkbox"]');
+        const newRoles = new Set(Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value));
+        const oldRoles = new Set(currentUserRoles);
+
+        const toAdd = [...newRoles].filter(r => !oldRoles.has(r));
+        const toRemove = [...oldRoles].filter(r => !newRoles.has(r));
+
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/users/${currentManagedUserId}/roles`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                add_roles: toAdd,
+                remove_roles: toRemove
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification('User roles updated successfully', 'success');
+            await loadUserRoles(currentManagedUserId);
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error saving user roles:', error);
+        showNotification('Failed to save roles: ' + error.message, 'error');
+    }
+}
+
+async function addBalance() {
+    if (!currentManagedUserId) return;
+
+    const amount = parseInt(document.getElementById('balance-amount').value);
+    const reason = document.getElementById('balance-reason').value.trim();
+
+    if (!amount || amount <= 0) {
+        showNotification('Please enter a valid amount', 'error');
+        return;
+    }
+
+    if (!reason) {
+        showNotification('Reason is required', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/users/${currentManagedUserId}/balance/add`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount, reason: reason || 'Added by admin' })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification(`Added ${amount} to user balance`, 'success');
+            document.getElementById('balance-amount').value = '';
+            document.getElementById('balance-reason').value = '';
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error adding balance:', error);
+        showNotification('Failed to add balance: ' + error.message, 'error');
+    }
+}
+
+async function removeBalance() {
+    if (!currentManagedUserId) return;
+
+    const amount = parseInt(document.getElementById('balance-amount').value);
+    const reason = document.getElementById('balance-reason').value.trim();
+
+    if (!amount || amount <= 0) {
+        showNotification('Please enter a valid amount', 'error');
+        return;
+    }
+
+    if (!confirm(`Remove ${amount} from user balance?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/users/${currentManagedUserId}/balance/remove`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ amount, reason: reason || 'Removed by admin' })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification(`Removed ${amount} from user balance`, 'success');
+            document.getElementById('balance-amount').value = '';
+            document.getElementById('balance-reason').value = '';
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error removing balance:', error);
+        showNotification('Failed to remove balance: ' + error.message, 'error');
+    }
+}
+
+async function kickUserFromModal() {
+    if (!currentManagedUserId) return;
+
+    const reason = prompt('Enter reason for kick:');
+    if (reason === null) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/moderation/kick`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentManagedUserId, reason })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification('User kicked successfully', 'success');
+            closeUserManagementModal();
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error kicking user:', error);
+        showNotification('Failed to kick user: ' + error.message, 'error');
+    }
+}
+
+async function banUserFromModal() {
+    if (!currentManagedUserId) return;
+
+    const reason = prompt('Enter reason for ban:');
+    if (reason === null) return;
+
+    if (!confirm('Are you sure you want to BAN this user?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/moderation/ban`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentManagedUserId, reason, delete_message_days: 0 })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification('User banned successfully', 'success');
+            closeUserManagementModal();
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error banning user:', error);
+        showNotification('Failed to ban user: ' + error.message, 'error');
+    }
+}
+
+async function timeoutUserFromModal() {
+    if (!currentManagedUserId) return;
+
+    const duration = prompt('Enter timeout duration in minutes:', '60');
+    if (duration === null) return;
+
+    const reason = prompt('Enter reason for timeout:');
+    if (reason === null) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/moderation/timeout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: currentManagedUserId,
+                duration_minutes: parseInt(duration),
+                reason
+            })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            showNotification('User timed out successfully', 'success');
+        } else {
+            throw new Error(data.error);
+        }
+    } catch (error) {
+        console.error('Error timing out user:', error);
+        showNotification('Failed to timeout user: ' + error.message, 'error');
+    }
+}
+
+// ============= CHANNEL CONFIGURATION =============
+
+async function loadChannelConfiguration() {
+    if (!currentServerId) return;
+
+    try {
+        // Load available channels
+        const channelsResponse = await fetch(`${API_BASE_URL}/api/${currentServerId}/channels`);
+        const channelsData = await channelsResponse.json();
+
+        if (channelsData.success) {
+            populateChannelSelects(channelsData.channels);
+        }
+
+        // Load current config
+        const configResponse = await fetch(`${API_BASE_URL}/api/${currentServerId}/config`);
+        const configData = await configResponse.json();
+
+        if (configData.success) {
+            setCurrentChannelValues(configData.config);
+        }
+    } catch (error) {
+        console.error('Error loading channel configuration:', error);
+        showNotification('Failed to load channel configuration', 'error');
+    }
+}
+
+function populateChannelSelects(channels) {
+    const selects = [
+        'task-channel-select',
+        'shop-channel-select',
+        'welcome-channel-select',
+        'logs-channel-select'
+    ];
+
+    const channelOptions = channels
+        .sort((a, b) => a.position - b.position)
+        .map(channel => {
+            const categoryPrefix = channel.category ? `${channel.category} / ` : '';
+            return `<option value="${channel.id}">${categoryPrefix}${escapeHtml(channel.name)}</option>`;
+        }).join('');
+
+    selects.forEach(selectId => {
+        const select = document.getElementById(selectId);
+        if (select) {
+            select.innerHTML = '<option value="">None (Disabled)</option>' + channelOptions;
+        }
+    });
+}
+
+function setCurrentChannelValues(config) {
+    if (config.task_channel_id) {
+        document.getElementById('task-channel-select').value = config.task_channel_id;
+    }
+    if (config.shop_channel_id) {
+        document.getElementById('shop-channel-select').value = config.shop_channel_id;
+    }
+    if (config.welcome_channel) {
+        document.getElementById('welcome-channel-select').value = config.welcome_channel;
+    }
+    if (config.logs_channel || config.log_channel) {
+        document.getElementById('logs-channel-select').value = config.logs_channel || config.log_channel;
+    }
+}
+
+async function saveChannelConfig() {
+    if (!currentServerId) {
+        showNotification('Please select a server first', 'error');
+        return;
+    }
+
+    const statusEl = document.getElementById('channel-config-status');
+    statusEl.textContent = 'Saving...';
+    statusEl.className = 'status-message status-info';
+
+    const taskChannel = document.getElementById('task-channel-select').value || null;
+    const shopChannel = document.getElementById('shop-channel-select').value || null;
+    const welcomeChannel = document.getElementById('welcome-channel-select').value || null;
+    const logsChannel = document.getElementById('logs-channel-select').value || null;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/config/channels`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                task_channel_id: taskChannel,
+                shop_channel_id: shopChannel,
+                welcome_channel: welcomeChannel,
+                logs_channel: logsChannel
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            statusEl.textContent = '✓ Saved successfully!';
+            statusEl.className = 'status-message status-success';
+            showNotification('Channel configuration saved', 'success');
+
+            setTimeout(() => {
+                statusEl.textContent = '';
+            }, 3000);
+        } else {
+            throw new Error(data.error || 'Failed to save configuration');
+        }
+    } catch (error) {
+        console.error('Error saving channel config:', error);
+        statusEl.textContent = '✗ Save failed';
+        statusEl.className = 'status-message status-error';
+        showNotification('Failed to save channel configuration: ' + error.message, 'error');
+    }
+}
+
+// ============= ENHANCED SERVER SWITCHING =============
+
+async function switchServer(serverId) {
+    currentServerId = serverId;
+
+    // Update UI
+    document.getElementById('current-server-name').textContent =
+        servers.find(s => s.id === serverId)?.name || 'Unknown';
+
+    // Load all data for new server
+    await Promise.all([
+        loadUsers(),
+        loadTasks(),
+        loadShopItems(),
+        loadAnnouncements(),
+        loadEmbeds(),
+        loadTransactions(),
+        loadServerSettings(),
+        syncRoles(),
+        loadCommandPermissions(),
+        loadChannelConfiguration()
+    ]);
+
+    showNotification('Server switched successfully', 'success');
+}
+
+// ============= ENHANCED USERS TAB =============
+
+// Modify existing displayUsers function to add management button
+function displayUsers(users) {
+    const tbody = document.getElementById('users-list');
+
+    if (!users || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">No users found</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = users.map(user => `
+        <tr>
+            <td>
+                <div class="user-info">
+                    <img src="${user.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png'}"
+                         alt="Avatar" class="user-avatar">
+                    <span>${escapeHtml(user.username || user.user_id)}</span>
+                </div>
+            </td>
+            <td class="text-right">${formatCurrency(user.balance)}</td>
+            <td class="text-right">${formatCurrency(user.total_earned)}</td>
+            <td class="text-right">${formatCurrency(user.total_spent)}</td>
+            <td><span class="badge ${user.is_active ? 'badge-success' : 'badge-error'}">
+                ${user.is_active ? 'Active' : 'Inactive'}</span></td>
+            <td>
+                <button onclick="openUserManagement('${user.user_id}', '${escapeHtml(user.username || user.user_id)}')"
+                        class="btn btn-sm btn-primary">
+                    <i class="fas fa-cog"></i> Manage
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// ============= SSE EVENT HANDLERS =============
+
+// Add to existing SSE listener
+function handleSSEMessage(event) {
+    const data = JSON.parse(event.data);
+
+    // Existing handlers...
+
+    // New handlers for roles and permissions
+    if (data.type === 'guild.role.created' || data.type === 'guild.role.updated' || data.type === 'guild.role.deleted') {
+        if (data.data.guild_id === currentServerId) {
+            syncRoles();
+        }
+    }
+
+    if (data.type === 'member.roles.updated') {
+        if (data.data.guild_id === currentServerId && data.data.user_id === currentManagedUserId) {
+            loadUserRoles(currentManagedUserId);
+        }
+    }
+
+    if (data.type === 'command.permissions.updated') {
+        if (data.data.guild_id === currentServerId) {
+            loadCommandPermissions();
+        }
+    }
+
+    if (data.type === 'moderation.kick' || data.type === 'moderation.ban' || data.type === 'moderation.timeout') {
+        if (data.data.guild_id === currentServerId) {
+            showNotification(`Moderation action: ${data.type.split('.')[1]} on user ${data.data.user_id}`, 'info');
+            loadUsers(); // Refresh user list
+        }
+    }
+
+    if (data.type === 'guild.channels.updated') {
+        if (data.data.guild_id === currentServerId) {
+            loadChannelConfiguration();
+        }
+    }
+
+    if (data.type === 'guild.channel.created' || data.type === 'guild.channel.deleted' || data.type === 'guild.channel.updated') {
+        if (data.data.guild_id === currentServerId) {
+            loadChannelConfiguration();
+        }
+    }
+}
+
+// ============= INITIALIZATION =============
+
+// Modify existing init function
+document.addEventListener('DOMContentLoaded', async function() {
+    // Existing initialization...
+
+    // Check authentication
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+        window.location.href = '/login.html';
+        return;
+    }
+
+    // Load servers
+    await loadServers();
+
+    // If server selected, load initial data
+    if (currentServerId) {
+        await switchServer(currentServerId);
+    }
+
+    // Setup SSE
+    setupSSE();
+});
+
+// ============= UTILITY FUNCTIONS =============
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&',
+        '<': '<',
+        '>': '>',
+        '"': '"',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+function formatCurrency(amount) {
+    return new Intl.NumberFormat('en-US').format(amount);
+}
+
+function showNotification(message, type = 'info') {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+
+    // Add to page
+    document.body.appendChild(notification);
+
+    // Animate in
+    setTimeout(() => notification.classList.add('show'), 10);
+
+    // Remove after 5 seconds
+    setTimeout(() => {
+        notification.classList.remove('show');
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
+}
+
 // Add announcements tab to navigation
 function initializeTabs() {
     const tabs = document.querySelectorAll('.tab');
@@ -4496,6 +6119,15 @@ function initializeTabs() {
                     break;
                 case 'transactions':
                     await loadTransactionsTab();
+                    break;
+                case 'config':
+                    await loadServerSettings();
+                    break;
+                case 'server-settings':
+                    await loadServerSettingsTab();
+                    break;
+                case 'permissions':
+                    await loadPermissionsTab();
                     break;
                 case 'settings':
                     await loadSettingsTab();
@@ -6047,6 +7679,12 @@ function loadTabData(tabName) {
         case 'config':
             loadServerSettings();
             break;
+        case 'server-settings':
+            loadServerSettingsTab();
+            break;
+        case 'permissions':
+            loadPermissionsTab();
+            break;
         case 'settings':
             loadSettings();
             break;
@@ -6054,4 +7692,754 @@ function loadTabData(tabName) {
             loadLogs();
             break;
     }
+}
+
+// === SERVER SETTINGS TAB FUNCTIONS ===
+
+// Load server settings tab
+async function loadServerSettingsTab() {
+    if (!currentServerId) {
+        showNotification('Please select a server first', 'error');
+        return;
+    }
+
+    try {
+        showNotification('Loading server settings...', 'info');
+
+        // Load channels for dropdowns
+        await loadChannelsForDropdowns();
+
+        // Load current server configuration
+        const response = await fetch(`/api/${currentServerId}/config`);
+        const config = await response.json();
+
+        // Populate form fields with current values
+        document.getElementById('currency-name').value = config.currency_name || 'coins';
+        document.getElementById('currency-symbol').value = config.currency_symbol || '$';
+        document.getElementById('starting-balance').value = config.starting_balance || 0;
+
+        // Set feature toggles
+        document.getElementById('feature-currency').checked = config.feature_currency !== false;
+        document.getElementById('feature-tasks').checked = config.feature_tasks !== false;
+        document.getElementById('feature-shop').checked = config.feature_shop !== false;
+        document.getElementById('feature-announcements').checked = config.feature_announcements !== false;
+        document.getElementById('feature-moderation').checked = config.feature_moderation !== false;
+
+        // Set bot behavior
+        document.getElementById('inactivity-days').value = config.inactivity_days || 30;
+        document.getElementById('auto-expire-tasks').checked = config.auto_expire_enabled !== false;
+        document.getElementById('require-task-proof').checked = config.require_proof !== false;
+
+        showNotification('✅ Server settings loaded!', 'success');
+
+    } catch (error) {
+        console.error('Error loading server settings:', error);
+        showNotification('❌ Failed to load server settings', 'error');
+    }
+}
+
+// Load channels for dropdowns
+async function loadChannelsForDropdowns() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/channels`);
+        const channels = await response.json();
+
+        // Filter for text channels only
+        const textChannels = channels.filter(channel => channel.type === 0); // 0 = text channel
+
+        // Populate all channel dropdowns
+        const dropdowns = ['welcome-channel', 'log-channel', 'task-channel', 'shop-channel'];
+        dropdowns.forEach(dropdownId => {
+            const dropdown = document.getElementById(dropdownId);
+            dropdown.innerHTML = '<option value="">None</option>';
+
+            textChannels.forEach(channel => {
+                const option = document.createElement('option');
+                option.value = channel.id;
+                option.textContent = `#${channel.name}`;
+                dropdown.appendChild(option);
+            });
+        });
+
+        // Load current values from config
+        await loadCurrentChannelSettings();
+
+    } catch (error) {
+        console.error('Error loading channels:', error);
+        showNotification('Failed to load channels', 'error');
+    }
+}
+
+// Load current channel settings from server config
+async function loadCurrentChannelSettings() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/config`);
+        const config = await response.json();
+
+        document.getElementById('welcome-channel').value = config.welcome_channel || '';
+        document.getElementById('log-channel').value = config.log_channel || '';
+        document.getElementById('task-channel').value = config.task_channel_id || '';
+        document.getElementById('shop-channel').value = config.shop_channel_id || '';
+
+    } catch (error) {
+        console.error('Error loading current channel settings:', error);
+    }
+}
+
+// Save individual channel setting
+async function saveChannelSetting(channelType) {
+    if (!currentServerId) return;
+
+    const dropdownId = `${channelType}-channel`;
+    const statusId = `${channelType}-channel-status`;
+    const channelId = document.getElementById(dropdownId).value;
+
+    const statusElement = document.getElementById(statusId);
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const configKey = channelType === 'task' ? 'task_channel_id' :
+                         channelType === 'shop' ? 'shop_channel_id' :
+                         channelType === 'welcome' ? 'welcome_channel' : 'log_channel';
+
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [configKey]: channelId })
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast(`${channelType.charAt(0).toUpperCase() + channelType.slice(1)} channel updated`, 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast(`Failed to save ${channelType} channel`, 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// Save currency settings
+async function saveCurrencySettings() {
+    if (!currentServerId) return;
+
+    const statusElement = document.getElementById('currency-settings-status');
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const settings = {
+            currency_name: document.getElementById('currency-name').value,
+            currency_symbol: document.getElementById('currency-symbol').value,
+            starting_balance: parseInt(document.getElementById('starting-balance').value)
+        };
+
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast('Currency settings updated', 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast('Failed to save currency settings', 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// Save feature toggle
+async function saveFeatureToggle(feature) {
+    if (!currentServerId) return;
+
+    const checkboxId = `feature-${feature}`;
+    const statusId = `feature-${feature}-status`;
+    const enabled = document.getElementById(checkboxId).checked;
+
+    const statusElement = document.getElementById(statusId);
+    statusElement.textContent = '⏳';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const configKey = `feature_${feature}`;
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [configKey]: enabled })
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅';
+            statusElement.className = 'save-status success';
+            showToast(`${feature.charAt(0).toUpperCase() + feature.slice(1)} system ${enabled ? 'enabled' : 'disabled'}`, 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 2000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌';
+        statusElement.className = 'save-status error';
+        showToast(`Failed to update ${feature} feature`, 'error');
+
+        // Revert checkbox
+        document.getElementById(checkboxId).checked = !enabled;
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 2000);
+    }
+}
+
+// Save bot behavior settings
+async function saveBotBehavior() {
+    if (!currentServerId) return;
+
+    const statusElement = document.getElementById('bot-behavior-status');
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const settings = {
+            inactivity_days: parseInt(document.getElementById('inactivity-days').value),
+            auto_expire_enabled: document.getElementById('auto-expire-tasks').checked,
+            require_proof: document.getElementById('require-task-proof').checked
+        };
+
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(settings)
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast('Bot behavior settings updated', 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast('Failed to save bot behavior settings', 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// === PERMISSIONS TAB FUNCTIONS ===
+
+// Load permissions tab
+async function loadPermissionsTab() {
+    if (!currentServerId) {
+        showNotification('Please select a server first', 'error');
+        return;
+    }
+
+    try {
+        showNotification('Loading permissions...', 'info');
+
+        // Load server roles
+        await loadServerRoles();
+
+        // Load users for dropdowns
+        await loadUsersForDropdown();
+
+        // Load command permissions
+        await loadCommandPermissions();
+
+        showNotification('✅ Permissions loaded!', 'success');
+
+    } catch (error) {
+        console.error('Error loading permissions:', error);
+        showNotification('❌ Failed to load permissions', 'error');
+    }
+}
+
+// Load server roles
+async function loadServerRoles() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/roles`);
+        const roles = await response.json();
+
+        // Display roles in the roles list
+        const rolesList = document.getElementById('roles-list');
+        rolesList.innerHTML = roles.map(role => `
+            <div class="role-item" style="border-left: 4px solid ${role.color || '#99aab5'};">
+                <div class="role-info">
+                    <span class="role-name">${role.name}</span>
+                    <span class="role-members">${role.member_count} members</span>
+                </div>
+                <div class="role-permissions">
+                    ${role.permissions.administrator ? '<span class="perm-badge admin">Admin</span>' : ''}
+                    ${role.permissions.manage_guild ? '<span class="perm-badge">Manage Server</span>' : ''}
+                    ${role.permissions.manage_roles ? '<span class="perm-badge">Manage Roles</span>' : ''}
+                    ${role.permissions.manage_channels ? '<span class="perm-badge">Manage Channels</span>' : ''}
+                </div>
+            </div>
+        `).join('');
+
+        // Populate dropdowns
+        populateRoleDropdowns(roles);
+
+        // Load current admin/mod roles
+        await loadCurrentAdminModRoles();
+
+    } catch (error) {
+        console.error('Error loading roles:', error);
+        showToast('Failed to load server roles', 'error');
+    }
+}
+
+// Populate role dropdowns
+function populateRoleDropdowns(roles) {
+    const adminDropdown = document.getElementById('admin-roles-dropdown');
+    const modDropdown = document.getElementById('mod-roles-dropdown');
+    const assignRoleDropdown = document.getElementById('assign-role-select');
+
+    // Filter out @everyone role
+    const selectableRoles = roles.filter(r => r.name !== '@everyone');
+
+    [adminDropdown, modDropdown, assignRoleDropdown].forEach(dropdown => {
+        dropdown.innerHTML = '';
+        selectableRoles.forEach(role => {
+            const option = document.createElement('option');
+            option.value = role.id;
+            option.textContent = role.name;
+            dropdown.appendChild(option);
+        });
+    });
+}
+
+// Load current admin and moderator roles from config
+async function loadCurrentAdminModRoles() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/config`);
+        const config = await response.json();
+
+        const adminRoles = config.admin_roles || [];
+        const modRoles = config.moderator_roles || [];
+
+        // Select options in multiselect dropdowns
+        Array.from(document.getElementById('admin-roles-dropdown').options).forEach(option => {
+            option.selected = adminRoles.includes(option.value);
+        });
+
+        Array.from(document.getElementById('mod-roles-dropdown').options).forEach(option => {
+            option.selected = modRoles.includes(option.value);
+        });
+
+    } catch (error) {
+        console.error('Error loading current admin/mod roles:', error);
+    }
+}
+
+// Save admin roles
+async function saveAdminRoles() {
+    if (!currentServerId) return;
+
+    const dropdown = document.getElementById('admin-roles-dropdown');
+    const selectedRoles = Array.from(dropdown.selectedOptions).map(opt => opt.value);
+
+    const statusElement = document.getElementById('admin-roles-status');
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ admin_roles: selectedRoles })
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast('Admin roles updated successfully', 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast('Failed to save admin roles', 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// Save moderator roles
+async function saveModRoles() {
+    if (!currentServerId) return;
+
+    const dropdown = document.getElementById('mod-roles-dropdown');
+    const selectedRoles = Array.from(dropdown.selectedOptions).map(opt => opt.value);
+
+    const statusElement = document.getElementById('mod-roles-status');
+    statusElement.textContent = '⏳ Saving...';
+    statusElement.className = 'save-status saving';
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ moderator_roles: selectedRoles })
+        });
+
+        if (response.ok) {
+            statusElement.textContent = '✅ Saved!';
+            statusElement.className = 'save-status success';
+            showToast('Moderator roles updated successfully', 'success');
+
+            setTimeout(() => {
+                statusElement.textContent = '';
+                statusElement.className = 'save-status';
+            }, 3000);
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        statusElement.textContent = '❌ Failed';
+        statusElement.className = 'save-status error';
+        showToast('Failed to save moderator roles', 'error');
+
+        setTimeout(() => {
+            statusElement.textContent = '';
+            statusElement.className = 'save-status';
+        }, 3000);
+    }
+}
+
+// Load users for user dropdown
+async function loadUsersForDropdown() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users`);
+        const data = await response.json();
+        const users = data.users || [];
+
+        const userDropdowns = ['target-user-select', 'mod-target-user'];
+        userDropdowns.forEach(dropdownId => {
+            const dropdown = document.getElementById(dropdownId);
+            dropdown.innerHTML = '<option value="">Select a user...</option>';
+
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.user_id;
+                option.textContent = user.username || `User ${user.user_id}`;
+                dropdown.appendChild(option);
+            });
+        });
+
+    } catch (error) {
+        console.error('Error loading users:', error);
+        showToast('Failed to load users', 'error');
+    }
+}
+
+// Assign role to user
+async function assignRoleToUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('target-user-select').value;
+    const roleId = document.getElementById('assign-role-select').value;
+
+    if (!userId || !roleId) {
+        showToast('Please select both a user and a role', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users/${userId}/roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_id: roleId, action: 'add' })
+        });
+
+        if (response.ok) {
+            showToast('Role assigned successfully', 'success');
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to assign role');
+        }
+    } catch (error) {
+        console.error('Error assigning role:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Remove role from user
+async function removeRoleFromUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('target-user-select').value;
+    const roleId = document.getElementById('assign-role-select').value;
+
+    if (!userId || !roleId) {
+        showToast('Please select both a user and a role', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users/${userId}/roles`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role_id: roleId, action: 'remove' })
+        });
+
+        if (response.ok) {
+            showToast('Role removed successfully', 'success');
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to remove role');
+        }
+    } catch (error) {
+        console.error('Error removing role:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Kick user
+async function kickUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('mod-target-user').value;
+    const reason = document.getElementById('mod-reason').value || 'No reason provided';
+
+    if (!userId) {
+        showToast('Please select a user to kick', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to KICK this user?\nReason: ${reason}`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/moderation/kick`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, reason: reason })
+        });
+
+        if (response.ok) {
+            showToast('User kicked successfully', 'success');
+            document.getElementById('mod-reason').value = '';
+            document.getElementById('mod-target-user').value = '';
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to kick user');
+        }
+    } catch (error) {
+        console.error('Error kicking user:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Ban user
+async function banUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('mod-target-user').value;
+    const reason = document.getElementById('mod-reason').value || 'No reason provided';
+
+    if (!userId) {
+        showToast('Please select a user to ban', 'error');
+        return;
+    }
+
+    if (!confirm(`⚠️ Are you sure you want to BAN this user?\nThis is a serious action.\nReason: ${reason}`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/moderation/ban`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, reason: reason })
+        });
+
+        if (response.ok) {
+            showToast('User banned successfully', 'success');
+            document.getElementById('mod-reason').value = '';
+            document.getElementById('mod-target-user').value = '';
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to ban user');
+        }
+    } catch (error) {
+        console.error('Error banning user:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Unban user
+async function unbanUser() {
+    if (!currentServerId) return;
+
+    const userId = document.getElementById('mod-target-user').value;
+
+    if (!userId) {
+        showToast('Please enter a user ID to unban', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to UNBAN user ${userId}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/moderation/unban`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+
+        if (response.ok) {
+            showToast('User unbanned successfully', 'success');
+            document.getElementById('mod-target-user').value = '';
+        } else {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to unban user');
+        }
+    } catch (error) {
+        console.error('Error unbanning user:', error);
+        showToast(error.message, 'error');
+    }
+}
+
+// Load command permissions
+async function loadCommandPermissions() {
+    if (!currentServerId) return;
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/permissions/commands`);
+        const permissions = await response.json();
+
+        const container = document.getElementById('command-permissions-list');
+        container.innerHTML = '';
+
+        permissions.commands.forEach(cmd => {
+            const div = document.createElement('div');
+            div.className = 'command-perm-row';
+            div.innerHTML = `
+                <div class="command-info">
+                    <strong>/${cmd.name}</strong>
+                    <span class="command-desc">${cmd.description}</span>
+                </div>
+                <div class="command-perm-controls">
+                    <select class="role-dropdown" id="perm-${cmd.name}" multiple>
+                        ${permissions.roles.map(role => `
+                            <option value="${role.id}" ${cmd.allowed_roles.includes(role.id) ? 'selected' : ''}>
+                                ${role.name}
+                            </option>
+                        `).join('')}
+                    </select>
+                    <button onclick="saveCommandPermission('${cmd.name}')" class="save-btn small">💾</button>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+
+    } catch (error) {
+        console.error('Error loading command permissions:', error);
+    }
+}
+
+// Save command permission
+async function saveCommandPermission(commandName) {
+    if (!currentServerId) return;
+
+    const dropdown = document.getElementById(`perm-${commandName}`);
+    const allowedRoles = Array.from(dropdown.selectedOptions).map(opt => opt.value);
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/permissions/commands/${commandName}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ allowed_roles: allowedRoles })
+        });
+
+        if (response.ok) {
+            showToast(`Permissions updated for /${commandName}`, 'success');
+        } else {
+            throw new Error('Save failed');
+        }
+    } catch (error) {
+        showToast(`Failed to update permissions for /${commandName}`, 'error');
+    }
+}
+
+// Toast notification function
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.classList.add('show'), 100);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }

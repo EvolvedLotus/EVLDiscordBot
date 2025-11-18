@@ -173,3 +173,83 @@ def moderator_only_interaction():
             return False
         return True
     return discord.app_commands.check(predicate)
+
+def check_command_permissions(guild_id: str, user_id: str, user_roles: list, command_name: str) -> bool:
+    """
+    Check if user has permission to execute command based on CMS configuration
+
+    Args:
+        guild_id: Guild ID
+        user_id: User ID
+        user_roles: List of user's role IDs
+        command_name: Command name to check
+
+    Returns:
+        True if user has permission, False otherwise
+    """
+    try:
+        # Fetch command permissions from database
+        result = data_manager.supabase.table('command_permissions').select('*').match({
+            'guild_id': guild_id,
+            'command_name': command_name
+        }).execute()
+
+        if not result.data:
+            # No permissions configured, allow by default
+            return True
+
+        perms = result.data[0]
+
+        # Check if command is disabled
+        if not perms.get('is_enabled', True):
+            return False
+
+        # Check denied users first (highest priority)
+        if user_id in perms.get('denied_users', []):
+            return False
+
+        # Check denied roles
+        if any(role_id in perms.get('denied_roles', []) for role_id in user_roles):
+            return False
+
+        # Check allowed users
+        if user_id in perms.get('allowed_users', []):
+            return True
+
+        # Check allowed roles
+        if perms.get('allowed_roles') and any(role_id in perms.get('allowed_roles', []) for role_id in user_roles):
+            return True
+
+        # If allowed lists exist but user not in them, deny
+        if perms.get('allowed_users') or perms.get('allowed_roles'):
+            return False
+
+        # Default allow if no restrictions
+        return True
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Error checking command permissions: {e}")
+        return True  # Fail open for safety
+
+
+# Add decorator for commands
+def check_permissions():
+    """Decorator to check command permissions from CMS"""
+    async def predicate(ctx):
+        guild_id = str(ctx.guild.id) if ctx.guild else None
+        if not guild_id:
+            return True
+
+        user_id = str(ctx.author.id)
+        user_roles = [str(r.id) for r in ctx.author.roles]
+        command_name = ctx.command.name
+
+        has_permission = check_command_permissions(guild_id, user_id, user_roles, command_name)
+
+        if not has_permission:
+            raise commands.CheckFailure(f"You don't have permission to use `{command_name}`")
+
+        return True
+
+    return commands.check(predicate)
