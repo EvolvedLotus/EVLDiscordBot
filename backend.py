@@ -886,6 +886,24 @@ TASKS_FILE = os.path.join(DATA_DIR, 'tasks.json')
 SESSIONS = {}  # session_id -> user_data
 SESSION_TIMEOUT = 3600  # 1 hour in seconds
 
+# Session-based authentication middleware decorator
+def session_required(f):
+    """Decorator to require session-based authentication"""
+    @functools.wraps(f)
+    def session_wrapper(*args, **kwargs):
+        session_id = request.cookies.get('session_id')
+        if not session_id:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        session = get_session(session_id)
+        if not session:
+            return jsonify({'error': 'Session expired or invalid'}), 401
+
+        # Add user to request context
+        request.user = session['user']
+        return f(*args, **kwargs)
+    return session_wrapper
+
 def create_session(user_data: dict):
     """Create a new session and return session ID"""
     session_id = secrets.token_hex(32)
@@ -927,24 +945,6 @@ def authenticate_user(username: str, password: str):
     if username == admin_username and hashed_password == stored_hash:
         return {"username": username, "role": "admin"}
     return None
-
-# Session-based authentication middleware decorator
-def session_required(f):
-    """Decorator to require session-based authentication"""
-    @functools.wraps(f)
-    def session_wrapper(*args, **kwargs):
-        session_id = request.cookies.get('session_id')
-        if not session_id:
-            return jsonify({'error': 'Authentication required'}), 401
-
-        session = get_session(session_id)
-        if not session:
-            return jsonify({'error': 'Session expired or invalid'}), 401
-
-        # Add user to request context
-        request.user = session['user']
-        return f(*args, **kwargs)
-    return session_wrapper
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
