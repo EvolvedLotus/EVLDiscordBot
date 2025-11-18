@@ -1,0 +1,10 @@
+{
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "python test_cors.py",
+    "healthcheckPath": "/api/test",
+    "healthcheckTimeout": 100
+  }
+}

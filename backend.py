@@ -135,6 +135,50 @@ from cors_config import setup_cors
 # ============================================
 app = Flask(__name__, static_folder='web', static_url_path='')
 
+# ============= CRITICAL: CORS MUST BE FIRST =============
+ALLOWED_ORIGINS = [
+    'https://evolvedlotus.github.io',
+    'http://localhost:5500',
+    'http://127.0.0.1:5500'
+]
+
+print("=" * 80)
+print("🌐 CORS CONFIGURATION")
+print(f"Allowed Origins: {ALLOWED_ORIGINS}")
+print("=" * 80)
+
+@app.before_request
+def handle_preflight_first():
+    """MUST be first handler - handles OPTIONS"""
+    if request.method == 'OPTIONS':
+        origin = request.headers.get('Origin', '')
+        print(f"🔵 OPTIONS from {origin}")
+
+        if origin in ALLOWED_ORIGINS:
+            response = make_response('', 204)
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Max-Age'] = '3600'
+            print(f"✅ CORS headers added for {origin}")
+            return response
+        else:
+            print(f"❌ Origin {origin} not allowed")
+            return make_response('', 403)
+
+@app.after_request
+def add_cors_to_all_responses(response):
+    """Add CORS to every response"""
+    origin = request.headers.get('Origin', '')
+
+    if origin in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        print(f"✅ CORS headers added to {request.method} {request.path}")
+
+    return response
+
 # Configure JWT
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
