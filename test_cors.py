@@ -1,23 +1,34 @@
 """
-Minimal CORS test - bypasses all your existing code
+ULTRA-MINIMAL CORS TEST - Maximum logging for Railway debugging
 """
-from flask import Flask, request, jsonify, make_response
-import os
+import sys
+import traceback
 
-print("=" * 80)
-print("🧪 MINIMAL CORS TEST SERVER STARTING...")
-print("=" * 80)
+print("=" * 80, flush=True)
+print("🚀 ULTRA-MINIMAL CORS TEST SERVER STARTING...", flush=True)
+print("=" * 80, flush=True)
 
 try:
-    app = Flask(__name__)
-    print("✅ Flask app created successfully")
+    print("📦 Importing Flask...", flush=True)
+    from flask import Flask, request, jsonify, make_response
+    print("✅ Flask imported successfully", flush=True)
 except Exception as e:
-    print(f"❌ Failed to create Flask app: {e}")
-    exit(1)
+    print(f"❌ Failed to import Flask: {e}", flush=True)
+    print(f"Traceback: {traceback.format_exc()}", flush=True)
+    sys.exit(1)
+
+try:
+    print("🏗️ Creating Flask app...", flush=True)
+    app = Flask(__name__)
+    print("✅ Flask app created successfully", flush=True)
+except Exception as e:
+    print(f"❌ Failed to create Flask app: {e}", flush=True)
+    print(f"Traceback: {traceback.format_exc()}", flush=True)
+    sys.exit(1)
 
 ALLOWED_ORIGIN = 'https://evolvedlotus.github.io'
-print(f"Allowed Origin: {ALLOWED_ORIGIN}")
-print("=" * 80)
+print(f"🎯 Allowed Origin: {ALLOWED_ORIGIN}", flush=True)
+print("=" * 80, flush=True)
 
 @app.before_request
 def handle_options():
@@ -43,14 +54,25 @@ def add_cors_headers(response):
         print(f"✅ Added CORS headers to response")
     return response
 
+@app.route('/', methods=['GET'])
+def root():
+    """Root endpoint for basic health check"""
+    print("🏠 Root endpoint hit", flush=True)
+    return jsonify({
+        'status': 'ok',
+        'message': 'Test server is running',
+        'timestamp': '2025-11-17'
+    })
+
 @app.route('/api/test', methods=['GET', 'POST', 'OPTIONS'])
 def test():
     """Simple test endpoint"""
-    print(f"🟢 {request.method} request from: {request.headers.get('Origin')}")
+    print(f"🟢 {request.method} request to /api/test from: {request.headers.get('Origin')}", flush=True)
     return jsonify({
         'success': True,
         'message': 'CORS is working!',
-        'method': request.method
+        'method': request.method,
+        'endpoint': '/api/test'
     })
 
 @app.route('/api/auth/login', methods=['POST', 'OPTIONS'])
