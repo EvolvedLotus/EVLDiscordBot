@@ -78,6 +78,16 @@ class DataManager:
 
         logger.info("✅ DataManager initialized with Supabase client")
 
+    def _serialize_datetime_field(self, value):
+        """Safely serialize datetime fields from database"""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.isoformat()
+        if isinstance(value, str):
+            return value  # Already serialized from Supabase
+        return str(value)  # Fallback
+
     def _create_supabase_client(self, url: str, key: str) -> Client:
         """Create Supabase client with enhanced configuration"""
         try:
@@ -257,7 +267,7 @@ class DataManager:
                         'total_spent': user['total_spent'],
                         'last_daily': user.get('last_daily'),
                         'is_active': user['is_active'],
-                        'created_at': user['created_at'].isoformat() if user['created_at'] else None,
+                        'created_at': self._serialize_datetime_field(user.get('created_at')),
                         'username': user.get('username', 'Unknown'),
                         'display_name': user.get('display_name', 'Unknown')
                     }
@@ -276,7 +286,7 @@ class DataManager:
                         'is_active': item['is_active'],
                         'message_id': item['message_id'],
                         'channel_id': item['channel_id'],
-                        'created_at': item['created_at'].isoformat() if item['created_at'] else None
+                        'created_at': self._serialize_datetime_field(item.get('created_at'))
                     }
 
                 # Get inventory for this guild
@@ -289,7 +299,7 @@ class DataManager:
                         inventory[user_id] = {}
                     inventory[user_id][item_id] = {
                         'quantity': inv['quantity'],
-                        'acquired_at': inv['acquired_at'].isoformat() if inv['acquired_at'] else None
+                        'acquired_at': self._serialize_datetime_field(inv.get('acquired_at'))
                     }
 
                 data = {
@@ -314,8 +324,8 @@ class DataManager:
                         'reward': task['reward'],
                         'duration_hours': task['duration_hours'],
                         'status': task['status'],
-                        'created_at': task['created_at'].isoformat() if task['created_at'] else None,
-                        'expires_at': task['expires_at'].isoformat() if task['expires_at'] else None,
+                        'created_at': self._serialize_datetime_field(task.get('created_at')),
+                        'expires_at': self._serialize_datetime_field(task.get('expires_at')),
                         'channel_id': task['channel_id'],
                         'message_id': task['message_id'],
                         'max_claims': task['max_claims'],
@@ -334,14 +344,14 @@ class DataManager:
                     if user_id not in user_tasks:
                         user_tasks[user_id] = {}
                     user_tasks[user_id][task_id] = {
-                        'claimed_at': ut['claimed_at'].isoformat() if ut['claimed_at'] else None,
-                        'deadline': ut['deadline'].isoformat() if ut['deadline'] else None,
+                        'claimed_at': self._serialize_datetime_field(ut.get('claimed_at')),
+                        'deadline': self._serialize_datetime_field(ut.get('deadline')),
                         'status': ut['status'],
                         'proof_message_id': ut['proof_message_id'],
                         'proof_attachments': ut.get('proof_attachments', []),
                         'proof_content': ut['proof_content'],
-                        'submitted_at': ut['submitted_at'].isoformat() if ut['submitted_at'] else None,
-                        'completed_at': ut['completed_at'].isoformat() if ut['completed_at'] else None,
+                        'submitted_at': self._serialize_datetime_field(ut.get('submitted_at')),
+                        'completed_at': self._serialize_datetime_field(ut.get('completed_at')),
                         'notes': ut['notes']
                     }
 
@@ -381,7 +391,7 @@ class DataManager:
                         'balance_after': txn['balance_after'],
                         'type': txn['transaction_type'],
                         'description': txn['description'],
-                        'timestamp': txn['timestamp'].isoformat() if txn['timestamp'] else None,
+                        'timestamp': self._serialize_datetime_field(txn.get('timestamp')),
                         'metadata': txn.get('metadata', {})
                     })
 
@@ -400,7 +410,7 @@ class DataManager:
                         'channel_id': ann['channel_id'],
                         'message_id': ann['message_id'],
                         'is_pinned': ann['is_pinned'],
-                        'created_at': ann['created_at'].isoformat() if ann['created_at'] else None,
+                        'created_at': self._serialize_datetime_field(ann.get('created_at')),
                         'created_by': ann['created_by']
                     }
 
@@ -422,7 +432,7 @@ class DataManager:
                         'image': emb.get('image'),
                         'channel_id': emb['channel_id'],
                         'message_id': emb['message_id'],
-                        'created_at': emb['created_at'].isoformat() if emb['created_at'] else None,
+                        'created_at': self._serialize_datetime_field(emb.get('created_at')),
                         'created_by': emb['created_by']
                     }
 
