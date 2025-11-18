@@ -3,6 +3,7 @@ CORS Configuration Module
 Handles all CORS setup for Flask app
 Updated: 2025-11-17 - Manual CORS implementation
 """
+from flask import request
 
 ALLOWED_ORIGINS = [
     'https://evolvedlotus.github.io',
