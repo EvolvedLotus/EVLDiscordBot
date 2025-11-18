@@ -275,6 +275,38 @@ function deleteCookie(name) {
     document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;SameSite=Strict;Secure`;
 }
 
+// Check authentication status
+async function checkAuth() {
+    try {
+        // Check if we have tokens
+        if (!authToken && !getCookie('session_id')) {
+            return false;
+        }
+
+        // Validate session
+        const response = await fetch(apiUrl('/api/auth/validate'), {
+            credentials: 'include' // Include cookies
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            currentUser = data.user;
+            isAuthenticated = true;
+            return true;
+        } else {
+            // Clear invalid tokens
+            authToken = null;
+            refreshToken = null;
+            isAuthenticated = false;
+            return false;
+        }
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        isAuthenticated = false;
+        return false;
+    }
+}
+
 // Authenticated fetch wrapper
 async function authenticatedFetch(url, options = {}) {
     if (!isAuthenticated || !authToken) {

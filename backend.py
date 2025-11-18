@@ -144,6 +144,18 @@ if railway_domain:
     railway_url = f"https://{railway_domain}"
     allowed_origins.append(railway_url)
 
+# Add Railway static URL if available (for Railway-hosted frontend)
+railway_static_url = os.getenv('RAILWAY_STATIC_URL')
+if railway_static_url:
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(railway_static_url)
+        railway_static_domain = f"{parsed.scheme}://{parsed.netloc}"
+        if railway_static_domain not in allowed_origins:
+            allowed_origins.append(railway_static_domain)
+    except:
+        pass
+
 # Add Netlify domain if API_BASE_URL is set (extract domain)
 api_base_url = os.getenv('API_BASE_URL')
 if api_base_url:
@@ -179,17 +191,36 @@ if allowed_frontend_domains:
                 domain = f"https://{domain}"
             allowed_origins.append(domain)
 
+# For Railway deployments, if no specific origins configured, allow Railway domains
+is_railway = os.getenv('RAILWAY_ENVIRONMENT_ID') or os.getenv('RAILWAY_PROJECT_ID')
+if is_railway and not allowed_origins:
+    # Allow Railway domains by default for Railway deployments
+    railway_project_id = os.getenv('RAILWAY_PROJECT_ID')
+    if railway_project_id:
+        # Allow common Railway domain patterns
+        allowed_origins.extend([
+            f"https://{railway_project_id}.up.railway.app",
+            f"https://railway.app",
+            "https://railway.app"
+        ])
+    # Also allow localhost for development on Railway
+    allowed_origins.extend(['http://localhost:3000', 'http://localhost:5000'])
+
 # For local development, allow localhost if no production domains configured
-is_production = os.getenv('RAILWAY_ENVIRONMENT_ID') or os.getenv('RAILWAY_PROJECT_ID') or os.getenv('PRODUCTION')
+is_production = is_railway or os.getenv('PRODUCTION')
 if not is_production and not allowed_origins:
     # Only allow localhost for development
     allowed_origins = ['http://localhost:3000', 'http://localhost:5000', 'http://127.0.0.1:3000', 'http://127.0.0.1:5000']
 
-# If still no origins configured, log warning but don't allow wildcard
+# If still no origins configured, log warning but allow Railway domains for Railway deployments
 if not allowed_origins:
-    logger.warning("⚠️  No CORS origins configured! Set ALLOWED_FRONTEND_DOMAINS environment variable")
-    # Don't allow wildcard - require explicit configuration
-    allowed_origins = []
+    if is_railway:
+        logger.info("🚂 Railway deployment detected - allowing Railway domains for CORS")
+        allowed_origins = ["https://railway.app", "https://*.up.railway.app"]
+    else:
+        logger.warning("⚠️  No CORS origins configured! Set ALLOWED_FRONTEND_DOMAINS environment variable")
+        # Don't allow wildcard - require explicit configuration
+        allowed_origins = []
 
 CORS(app, resources={
     r"/api/*": {
