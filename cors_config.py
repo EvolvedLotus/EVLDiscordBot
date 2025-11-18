@@ -1,6 +1,7 @@
 """
 CORS Configuration Module
 Handles all CORS setup for Flask app
+Updated: 2025-11-17 - Force redeploy
 """
 
 ALLOWED_ORIGINS = [
