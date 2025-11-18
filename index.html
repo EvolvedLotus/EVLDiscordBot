@@ -1,0 +1,865 @@
+<!-- index.html - Complete with proper user management -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Economy Bot - Admin Dashboard</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./config.js"></script>
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>🤖 Discord Economy Bot</h1>
+                <p>Admin Dashboard Login</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required placeholder="Enter username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="Enter password">
+                </div>
+                <button type="submit" class="btn-primary btn-large">Login</button>
+            </form>
+            <div id="login-error" class="login-error" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard (hidden initially) -->
+    <div id="main-dashboard" class="dashboard-container" style="display: none;">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h1>🤖 Economy Bot</h1>
+                <p class="version">v2.0</p>
+            </div>
+
+            <div class="server-selector">
+                <label for="server-select">Select Server:</label>
+                <select id="server-select" onchange="onServerChange()">
+                    <option value="">-- Loading servers --</option>
+                </select>
+            </div>
+
+            <nav class="nav-menu">
+                <button class="tab-button active" onclick="showTab('dashboard')" data-tab="dashboard">
+                    📊 Dashboard
+                </button>
+                <button class="tab-button" onclick="showTab('users')" data-tab="users">
+                    👥 Users
+                </button>
+                <button class="tab-button" onclick="showTab('shop')" data-tab="shop">
+                    🛒 Shop
+                </button>
+                <button class="tab-button" onclick="showTab('tasks')" data-tab="tasks">
+                    📋 Tasks
+                </button>
+                <button class="tab-button" onclick="showTab('announcements')" data-tab="announcements">
+                    📢 Announcements
+                </button>
+                <button class="tab-button" onclick="showTab('embeds')" data-tab="embeds">
+                    📧 Embeds
+                </button>
+                <button class="tab-button" onclick="showTab('transactions')" data-tab="transactions">
+                    💳 Transactions
+                </button>
+                <button class="tab-button" onclick="showTab('server-settings')" data-tab="server-settings">
+                    🔧 Server Settings
+                </button>
+                <button class="tab-button" onclick="showTab('permissions')" data-tab="permissions">
+                    👥 Permissions
+                </button>
+                <button class="tab-button" onclick="showTab('permissions-tab')" data-tab="permissions-tab">
+                    🔐 Command Permissions
+                </button>
+                <button class="tab-button" onclick="showTab('roles-tab')" data-tab="roles-tab">
+                    👥 Roles
+                </button>
+                <button class="tab-button" onclick="showTab('moderation-tab')" data-tab="moderation-tab">
+                    🔨 Moderation
+                </button>
+                <button class="tab-button" onclick="showTab('config')" data-tab="config">
+                    🔧 Server Config
+                </button>
+                <button class="tab-button" onclick="showTab('settings')" data-tab="settings">
+                    ⚙️ Settings
+                </button>
+                <button class="tab-button" onclick="showTab('logs')" data-tab="logs">
+                    📝 Logs
+                </button>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button onclick="restartBot()" class="btn-danger btn-small" id="restart-btn" style="display: none;">🔄 Restart Bot</button>
+                <div class="bot-status" id="bot-status">
+                    <span class="status-indicator"></span>
+                    <span class="status-text">Checking...</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Tab -->
+            <div id="dashboard" class="tab-content active">
+                <div class="section-header">
+                    <h2>📊 Dashboard</h2>
+                    <button onclick="loadDashboard()" class="btn-primary">🔄 Refresh</button>
+                </div>
+                <div id="dashboard-content" class="content-area">
+                    <div class="loading">Loading dashboard...</div>
+                </div>
+            </div>
+
+            <!-- Users Tab -->
+            <div id="users" class="tab-content">
+                <div class="section-header">
+                    <h2>👥 User Management</h2>
+                    <div class="header-actions">
+                        <select id="user-selector" style="display: none;">
+                            <option value="">-- Select User --</option>
+                        </select>
+                        <button onclick="loadUsers()" class="btn-primary">🔄 Refresh</button>
+                    </div>
+                </div>
+
+                <div id="users-list" class="content-area">
+                    <div class="loading">Loading users...</div>
+                </div>
+
+                <!-- User selector dropdown (dynamically created) -->
+                <div id="user-selector-dropdown" class="user-selector-dropdown" style="display: none;"></div>
+
+                <!-- User Management Panel (dynamically created) -->
+            </div>
+
+            <!-- Shop Tab -->
+            <div id="shop" class="tab-content">
+                <div class="section-header">
+                    <h2>🛒 Shop Management</h2>
+                </div>
+
+                <!-- Shop Controls -->
+                <div class="shop-controls">
+                    <div class="shop-controls-left">
+                        <button onclick="showAddItemModal()" class="btn-success">➕ Add Item</button>
+                        <button onclick="viewShopStatistics()" class="btn-secondary">📊 Statistics</button>
+                        <button onclick="validateShopIntegrity()" class="btn-secondary">🔍 Validate</button>
+                    </div>
+                    <div class="shop-controls-right">
+                        <button onclick="loadShop()" class="btn-primary">🔄 Refresh</button>
+                    </div>
+                </div>
+
+                <!-- Shop Filters -->
+                <div class="filters-section">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label for="category-filter">Category:</label>
+                            <select id="category-filter" onchange="filterShopItems()">
+                                <option value="">All Categories</option>
+                                <option value="consumable">Consumables</option>
+                                <option value="role">Roles</option>
+                                <option value="collectible">Collectibles</option>
+                                <option value="general">General</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="active-only-filter" checked onchange="filterShopItems()">
+                                Active Only
+                            </label>
+                        </div>
+                        <div class="filter-group">
+                            <label class="checkbox-group">
+                                <input type="checkbox" id="in-stock-only-filter" checked onchange="filterShopItems()">
+                                In Stock Only
+                            </label>
+                        </div>
+                        <div class="filter-group">
+                            <input type="text" id="shop-search" placeholder="Search items..." onkeyup="filterShopItems()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Shop Statistics -->
+                <div id="shop-stats" class="stats-section" style="display: none;">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h4>Total Items</h4>
+                            <div class="stat-value" id="total-shop-items">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Active Items</h4>
+                            <div class="stat-value" id="active-shop-items">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Total Sales</h4>
+                            <div class="stat-value" id="total-shop-sales">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Revenue</h4>
+                            <div class="stat-value" id="shop-revenue">$0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="shop-list" class="content-area">
+                    <div class="loading">Loading shop items...</div>
+                </div>
+            </div>
+
+            <!-- Tasks Tab -->
+            <div id="tasks" class="tab-content">
+                <div class="section-header">
+                    <h2>📋 Task Management</h2>
+                    <div class="header-actions">
+                        <button onclick="showCreateTaskModal()" class="btn-success">➕ Add Task</button>
+                        <button onclick="loadTasks()" class="btn-primary">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div id="tasks-list" class="content-area">
+                    <div class="loading">Loading tasks...</div>
+                </div>
+            </div>
+
+            <!-- Announcements Tab -->
+            <div id="announcements" class="tab-content">
+                <div id="tab-content" class="content-area">
+                    <div class="loading">Loading announcements...</div>
+                </div>
+            </div>
+
+            <!-- Embeds Tab -->
+            <div id="embeds" class="tab-content">
+                <div class="section-header">
+                    <h2>📧 Embed Management</h2>
+                    <div class="header-actions">
+                        <button onclick="showCreateEmbedModal()" class="btn-success">➕ Create Embed</button>
+                        <button onclick="refreshEmbeds()" class="btn-primary">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div id="embeds-list" class="content-area">
+                    <div class="loading">Loading embeds...</div>
+                </div>
+            </div>
+
+            <!-- Transactions Tab -->
+            <div id="transactions" class="tab-content">
+                <div class="section-header">
+                    <h2>💳 Transaction History</h2>
+                    <div class="header-actions">
+                        <button onclick="showTransactionFilters()" class="btn-secondary">🔍 Filters</button>
+                        <button onclick="archiveOldTransactions()" class="btn-warning">📦 Archive Old</button>
+                        <button onclick="exportTransactions()" class="btn-secondary">📥 Export CSV</button>
+                        <button onclick="loadTransactions()" class="btn-primary">🔄 Refresh</button>
+                    </div>
+                </div>
+
+                <!-- Transaction Statistics -->
+                <div id="transaction-stats" class="stats-section" style="display: none;">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <h4>Total Transactions</h4>
+                            <div class="stat-value" id="total-transactions">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Total Volume</h4>
+                            <div class="stat-value" id="total-volume">$0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Most Active User</h4>
+                            <div class="stat-value" id="most-active-user">-</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Avg Transaction</h4>
+                            <div class="stat-value" id="avg-transaction">$0</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transaction Filters (hidden by default) -->
+                <div id="transaction-filters" class="filters-section" style="display: none;">
+                    <div class="filters-grid">
+                        <div class="filter-group">
+                            <label>Date Range:</label>
+                            <div class="date-inputs">
+                                <input type="date" id="start-date" placeholder="Start date">
+                                <input type="date" id="end-date" placeholder="End date">
+                            </div>
+                        </div>
+                        <div class="filter-group">
+                            <label>User:</label>
+                            <select id="user-filter">
+                                <option value="">All Users</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Type:</label>
+                            <select id="type-filter">
+                                <option value="">All Types</option>
+                                <option value="daily">Daily Rewards</option>
+                                <option value="earn">Earnings</option>
+                                <option value="spend">Spending</option>
+                                <option value="transfer_send">Transfers Sent</option>
+                                <option value="transfer_receive">Transfers Received</option>
+                                <option value="shop">Shop Purchases</option>
+                                <option value="task">Task Rewards</option>
+                                <option value="admin_adjust">Admin Adjustments</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Amount Range:</label>
+                            <div class="amount-inputs">
+                                <input type="number" id="min-amount" placeholder="Min" step="0.01">
+                                <input type="number" id="max-amount" placeholder="Max" step="0.01">
+                            </div>
+                        </div>
+                        <div class="filter-actions">
+                            <button onclick="applyFilters()" class="btn-primary">Apply Filters</button>
+                            <button onclick="clearFilters()" class="btn-secondary">Clear</button>
+                            <button onclick="hideTransactionFilters()" class="btn-secondary">Hide Filters</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="transactions-list" class="content-area">
+                    <div class="loading">Loading transactions...</div>
+                </div>
+            </div>
+
+            <!-- Server Config Tab -->
+            <div id="config" class="tab-content">
+                <div class="section-header">
+                    <h2>🔧 Server Configuration</h2>
+                    <div class="header-actions">
+                        <button onclick="loadServerSettings()" class="btn-primary">🔄 Refresh</button>
+                        <button onclick="saveServerSettings()" class="btn-success">💾 Save Changes</button>
+                    </div>
+                </div>
+
+                <div id="config-content" class="content-area">
+                    <div class="loading">Loading server configuration...</div>
+                </div>
+
+                <!-- Bot Status Section -->
+                <div id="bot-status-section" class="content-area" style="margin-top: 20px; display: none;">
+                    <h3>🤖 Bot Status Configuration</h3>
+                    <div class="bot-status-control">
+                        <div class="form-group">
+                            <label for="bot-status-type">Status Type:</label>
+                            <select id="bot-status-type" name="bot_status_type">
+                                <option value="playing">Playing</option>
+                                <option value="watching">Watching</option>
+                                <option value="listening">Listening to</option>
+                                <option value="competing">Competing in</option>
+                                <option value="streaming">Streaming</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="bot-status-message">Status Message:</label>
+                            <input
+                                type="text"
+                                id="bot-status-message"
+                                name="bot_status_message"
+                                maxlength="128"
+                                placeholder="Enter custom status message"
+                            >
+                            <small>Max 128 characters. Example: "with the economy" or "your requests"</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="bot-presence">Bot Presence:</label>
+                            <select id="bot-presence" name="bot_presence">
+                                <option value="online">🟢 Online</option>
+                                <option value="idle">🟠 Idle</option>
+                                <option value="dnd">🔴 Do Not Disturb</option>
+                                <option value="invisible">⚫ Invisible</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="streaming-url-group" style="display: none;">
+                            <label for="streaming-url">Streaming URL:</label>
+                            <input
+                                type="url"
+                                id="streaming-url"
+                                name="streaming_url"
+                                placeholder="https://twitch.tv/yourname"
+                            >
+                            <small>Required when Status Type is "Streaming"</small>
+                        </div>
+
+                        <button type="button" onclick="updateBotStatus()" class="btn-primary">Update Bot Status</button>
+                        <div id="bot-status-preview" class="status-preview">
+                            <strong>Preview:</strong> <span id="status-preview-text"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="settings" class="tab-content">
+                <div class="section-header">
+                    <h2>⚙️ Global Settings</h2>
+                    <button onclick="saveSettings()" class="btn-success">💾 Save Changes</button>
+                </div>
+                <div id="settings-content" class="content-area">
+                    <div class="loading">Loading settings...</div>
+                </div>
+            </div>
+
+            <!-- Server Settings Tab -->
+            <div id="server-settings" class="tab-content">
+                <div class="section-header">
+                    <h2>🔧 Server Settings</h2>
+                    <button onclick="loadServerSettingsTab()" class="btn-primary">🔄 Refresh</button>
+                </div>
+                <div id="server-settings-content" class="content-area">
+                    <div class="settings-container">
+                        <!-- Channel Configuration Section -->
+                        <div class="settings-section">
+                            <h3>📢 Channel Configuration</h3>
+
+                            <div class="setting-item">
+                                <label for="welcome-channel">Welcome Channel:</label>
+                                <select id="welcome-channel" class="channel-dropdown">
+                                    <option value="">Loading channels...</option>
+                                </select>
+                                <button onclick="saveChannelSetting('welcome')" class="save-btn">
+                                    💾 Save Welcome Channel
+                                </button>
+                                <span id="welcome-channel-status" class="save-status"></span>
+                            </div>
+
+                            <div class="setting-item">
+                                <label for="log-channel">Log Channel:</label>
+                                <select id="log-channel" class="channel-dropdown">
+                                    <option value="">Loading channels...</option>
+                                </select>
+                                <button onclick="saveChannelSetting('log')" class="save-btn">
+                                    💾 Save Log Channel
+                                </button>
+                                <span id="log-channel-status" class="save-status"></span>
+                            </div>
+
+                            <div class="setting-item">
+                                <label for="task-channel">Task Announcement Channel:</label>
+                                <select id="task-channel" class="channel-dropdown">
+                                    <option value="">Loading channels...</option>
+                                </select>
+                                <button onclick="saveChannelSetting('task')" class="save-btn">
+                                    💾 Save Task Channel
+                                </button>
+                                <span id="task-channel-status" class="save-status"></span>
+                            </div>
+
+                            <div class="setting-item">
+                                <label for="shop-channel">Shop Channel:</label>
+                                <select id="shop-channel" class="channel-dropdown">
+                                    <option value="">Loading channels...</option>
+                                </select>
+                                <button onclick="saveChannelSetting('shop')" class="save-btn">
+                                    💾 Save Shop Channel
+                                </button>
+                                <span id="shop-channel-status" class="save-status"></span>
+                            </div>
+                        </div>
+
+                        <!-- Currency Settings Section -->
+                        <div class="settings-section">
+                            <h3>💰 Currency Settings</h3>
+
+                            <div class="setting-item">
+                                <label for="currency-name">Currency Name:</label>
+                                <input type="text" id="currency-name" placeholder="coins" maxlength="20">
+                            </div>
+
+                            <div class="setting-item">
+                                <label for="currency-symbol">Currency Symbol:</label>
+                                <input type="text" id="currency-symbol" placeholder="$" maxlength="3">
+                            </div>
+
+                            <div class="setting-item">
+                                <label for="starting-balance">Starting Balance:</label>
+                                <input type="number" id="starting-balance" value="0" min="0">
+                            </div>
+
+                            <button onclick="saveCurrencySettings()" class="save-btn primary">
+                                💾 Save Currency Settings
+                            </button>
+                            <span id="currency-settings-status" class="save-status"></span>
+                        </div>
+
+                        <!-- Feature Toggles Section -->
+                        <div class="settings-section">
+                            <h3>🎛️ Feature Toggles</h3>
+
+                            <div class="setting-item toggle-item">
+                                <label>
+                                    <input type="checkbox" id="feature-currency" class="toggle-switch">
+                                    <span>Currency System</span>
+                                </label>
+                                <button onclick="saveFeatureToggle('currency')" class="save-btn">💾 Save</button>
+                                <span id="feature-currency-status" class="save-status"></span>
+                            </div>
+
+                            <div class="setting-item toggle-item">
+                                <label>
+                                    <input type="checkbox" id="feature-tasks" class="toggle-switch">
+                                    <span>Tasks System</span>
+                                </label>
+                                <button onclick="saveFeatureToggle('tasks')" class="save-btn">💾 Save</button>
+                                <span id="feature-tasks-status" class="save-status"></span>
+                            </div>
+
+                            <div class="setting-item toggle-item">
+                                <label>
+                                    <input type="checkbox" id="feature-shop" class="toggle-switch">
+                                    <span>Shop System</span>
+                                </label>
+                                <button onclick="saveFeatureToggle('shop')" class="save-btn">💾 Save</button>
+                                <span id="feature-shop-status" class="save-status"></span>
+                            </div>
+
+                            <div class="setting-item toggle-item">
+                                <label>
+                                    <input type="checkbox" id="feature-announcements" class="toggle-switch">
+                                    <span>Announcements</span>
+                                </label>
+                                <button onclick="saveFeatureToggle('announcements')" class="save-btn">💾 Save</button>
+                                <span id="feature-announcements-status" class="save-status"></span>
+                            </div>
+
+                            <div class="setting-item toggle-item">
+                                <label>
+                                    <input type="checkbox" id="feature-moderation" class="toggle-switch">
+                                    <span>Moderation System</span>
+                                </label>
+                                <button onclick="saveFeatureToggle('moderation')" class="save-btn">💾 Save</button>
+                                <span id="feature-moderation-status" class="save-status"></span>
+                            </div>
+                        </div>
+
+                        <!-- Bot Behavior Section -->
+                        <div class="settings-section">
+                            <h3>🤖 Bot Behavior</h3>
+
+                            <div class="setting-item">
+                                <label for="inactivity-days">Inactivity Threshold (days):</label>
+                                <input type="number" id="inactivity-days" value="30" min="1" max="365">
+                            </div>
+
+                            <div class="setting-item toggle-item">
+                                <label>
+                                    <input type="checkbox" id="auto-expire-tasks" class="toggle-switch">
+                                    <span>Auto-expire Tasks</span>
+                                </label>
+                            </div>
+
+                            <div class="setting-item toggle-item">
+                                <label>
+                                    <input type="checkbox" id="require-task-proof" class="toggle-switch">
+                                    <span>Require Task Proof</span>
+                                </label>
+                            </div>
+
+                            <button onclick="saveBotBehavior()" class="save-btn primary">
+                                💾 Save Bot Behavior
+                            </button>
+                            <span id="bot-behavior-status" class="save-status"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Permissions Tab -->
+            <div id="permissions" class="tab-content">
+                <div class="section-header">
+                    <h2>👥 Permissions & Role Management</h2>
+                    <button onclick="loadPermissionsTab()" class="btn-primary">🔄 Refresh</button>
+                </div>
+                <div id="permissions-content" class="content-area">
+                    <div class="permissions-container">
+
+                        <!-- Role Management Section -->
+                        <div class="section-card">
+                            <h3>👥 Role Management</h3>
+                            <div id="roles-list"></div>
+                        </div>
+
+                        <!-- Admin & Moderator Roles -->
+                        <div class="section-card">
+                            <h3>🛡️ Admin & Moderator Roles</h3>
+
+                            <div class="role-assignment">
+                                <label>Admin Roles:</label>
+                                <select id="admin-roles-dropdown" multiple class="role-multiselect">
+                                    <!-- Populated dynamically -->
+                                </select>
+                                <button onclick="saveAdminRoles()" class="save-btn">💾 Save Admin Roles</button>
+                                <span id="admin-roles-status" class="save-status"></span>
+                            </div>
+
+                            <div class="role-assignment">
+                                <label>Moderator Roles:</label>
+                                <select id="mod-roles-dropdown" multiple class="role-multiselect">
+                                    <!-- Populated dynamically -->
+                                </select>
+                                <button onclick="saveModRoles()" class="save-btn">💾 Save Moderator Roles</button>
+                                <span id="mod-roles-status" class="save-status"></span>
+                            </div>
+                        </div>
+
+                        <!-- User Role Assignment -->
+                        <div class="section-card">
+                            <h3>🎭 Assign Roles to Users</h3>
+
+                            <div class="user-role-form">
+                                <select id="target-user-select" class="user-dropdown">
+                                    <option value="">Select a user...</option>
+                                </select>
+
+                                <select id="assign-role-select" class="role-dropdown">
+                                    <option value="">Select a role...</option>
+                                </select>
+
+                                <button onclick="assignRoleToUser()" class="action-btn">➕ Assign Role</button>
+                                <button onclick="removeRoleFromUser()" class="action-btn danger">➖ Remove Role</button>
+                            </div>
+                        </div>
+
+                        <!-- Command Permissions -->
+                        <div class="section-card">
+                            <h3>⚙️ Command Permissions</h3>
+                            <p class="info-text">Configure which roles can use specific commands</p>
+
+                            <div id="command-permissions-list">
+                                <!-- Dynamically generated command permission rows -->
+                            </div>
+                        </div>
+
+                        <!-- User Moderation Actions -->
+                        <div class="section-card">
+                            <h3>🔨 User Moderation</h3>
+
+                            <div class="moderation-form">
+                                <select id="mod-target-user" class="user-dropdown">
+                                    <option value="">Select a user...</option>
+                                </select>
+
+                                <button onclick="kickUser()" class="action-btn warning">👢 Kick User</button>
+                                <button onclick="banUser()" class="action-btn danger">🔨 Ban User</button>
+                                <button onclick="unbanUser()" class="action-btn success">✅ Unban User</button>
+                            </div>
+
+                            <div class="moderation-reason">
+                                <label>Reason:</label>
+                                <input type="text" id="mod-reason" placeholder="Enter moderation reason..." maxlength="200">
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- Permissions Tab -->
+            <div id="permissions-tab" class="tab-content" style="display: none;">
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Command Permissions</h2>
+                        <button onclick="loadCommandPermissions()" class="btn btn-secondary">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
+                    </div>
+
+                    <div class="card">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Command</th>
+                                    <th>Enabled</th>
+                                    <th>Allowed Roles</th>
+                                    <th>Denied Roles</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="permissions-list">
+                                <tr>
+                                    <td colspan="5" class="text-center">Loading permissions...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Roles Tab -->
+            <div id="roles-tab" class="tab-content" style="display: none;">
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Server Roles</h2>
+                        <button onclick="syncRoles()" class="btn btn-secondary">
+                            <i class="fas fa-sync"></i> Sync from Discord
+                        </button>
+                    </div>
+
+                    <div id="roles-list" class="roles-grid">
+                        <p class="text-center">Loading roles...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Moderation Tab -->
+            <div id="moderation-tab" class="tab-content" style="display: none;">
+                <div class="section">
+                    <div class="section-header">
+                        <h2>Moderation Actions</h2>
+                    </div>
+
+                    <div class="moderation-grid">
+                        <div class="card">
+                            <h3>Kick User</h3>
+                            <input type="text" id="kick-user-id" placeholder="User ID" class="form-input">
+                            <textarea id="kick-reason" placeholder="Reason" class="form-input"></textarea>
+                            <button onclick="kickUser()" class="btn btn-danger">Kick User</button>
+                        </div>
+
+                        <div class="card">
+                            <h3>Ban User</h3>
+                            <input type="text" id="ban-user-id" placeholder="User ID" class="form-input">
+                            <input type="number" id="ban-delete-days" placeholder="Delete message days (0-7)" class="form-input" min="0" max="7" value="0">
+                            <textarea id="ban-reason" placeholder="Reason" class="form-input"></textarea>
+                            <button onclick="banUser()" class="btn btn-danger">Ban User</button>
+                        </div>
+
+                        <div class="card">
+                            <h3>Timeout User</h3>
+                            <input type="text" id="timeout-user-id" placeholder="User ID" class="form-input">
+                            <input type="number" id="timeout-duration" placeholder="Duration (minutes)" class="form-input" min="1" value="60">
+                            <textarea id="timeout-reason" placeholder="Reason" class="form-input"></textarea>
+                            <button onclick="timeoutUser()" class="btn btn-warning">Timeout User</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div id="logs" class="tab-content">
+                <div class="section-header">
+                    <h2>📝 System Logs</h2>
+                    <div class="header-actions">
+                        <select id="log-level" onchange="loadLogs()">
+                            <option value="all">All Levels</option>
+                            <option value="error">Errors Only</option>
+                            <option value="warning">Warnings</option>
+                            <option value="info">Info</option>
+                        </select>
+                        <button onclick="clearLogs()" class="btn-danger">🗑️ Clear Logs</button>
+                        <button onclick="loadLogs()" class="btn-primary">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div id="logs-content" class="content-area">
+                    <div class="loading">Loading logs...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="notification-container"></div>
+
+    <!-- Error and Success Notifications -->
+    <div id="error-notification" class="notification error"></div>
+    <div id="success-notification" class="notification success"></div>
+
+    <!-- User Management Modal Enhancement -->
+    <div id="user-management-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeUserManagementModal()">&times;</span>
+            <h2>Manage User: <span id="manage-user-name"></span></h2>
+
+            <div class="modal-section">
+                <h3>Balance Management</h3>
+                <div class="balance-controls">
+                    <input type="number" id="balance-amount" placeholder="Amount" class="form-input">
+                    <input type="text" id="balance-reason" placeholder="Reason" class="form-input">
+                    <button onclick="addBalance()" class="btn btn-success">Add Money</button>
+                    <button onclick="removeBalance()" class="btn btn-danger">Remove Money</button>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <h3>Role Management</h3>
+                <div id="user-roles-container">
+                    <p>Loading roles...</p>
+                </div>
+                <button onclick="saveUserRoles()" class="btn btn-primary">Save Role Changes</button>
+            </div>
+
+            <div class="modal-section">
+                <h3>Moderation</h3>
+                <button onclick="kickUserFromModal()" class="btn btn-warning">Kick User</button>
+                <button onclick="banUserFromModal()" class="btn btn-danger">Ban User</button>
+                <button onclick="timeoutUserFromModal()" class="btn btn-warning">Timeout User</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Channel Configuration Enhancement in Config Tab -->
+    <div class="card" id="channel-config-section" style="display: none;">
+        <h3>Channel Configuration</h3>
+        <p class="help-text">Configure which channels the bot uses for specific features</p>
+
+        <div class="form-group">
+            <label for="task-channel-select">Task Channel:</label>
+            <select id="task-channel-select" class="form-input">
+                <option value="">Select a channel...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="shop-channel-select">Shop Channel:</label>
+            <select id="shop-channel-select" class="form-input">
+                <option value="">Select a channel...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="welcome-channel-select">Welcome Channel:</label>
+            <select id="welcome-channel-select" class="form-input">
+                <option value="">Select a channel...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="logs-channel-select">Logs Channel:</label>
+            <select id="logs-channel-select" class="form-input">
+                <option value="">Select a channel...</option>
+            </select>
+        </div>
+
+        <button onclick="saveChannelConfig()" class="btn btn-primary">
+            <i class="fas fa-save"></i> Save Channel Configuration
+        </button>
+        <span id="channel-config-status" class="status-message"></span>
+    </div>
+
+    <!-- Add tab buttons to navigation -->
+    <nav class="tabs" style="display: none;">
+        <button class="tab-btn" onclick="switchTab('permissions')">Permissions</button>
+        <button class="tab-btn" onclick="switchTab('roles')">Roles</button>
+        <button class="tab-btn" onclick="switchTab('moderation')">Moderation</button>
+    </nav>
+
+    <!-- Modals (dynamically created by JavaScript) -->
+
+    <script src="./script.js?v=2"></script>
+</body>
+</html>

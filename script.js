@@ -6069,7 +6069,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Check authentication
     const isAuthenticated = await checkAuth();
     if (!isAuthenticated) {
-        window.location.href = '/login.html';
+        window.location.href = '/';
         return;
     }
 
@@ -7725,32 +7725,6 @@ function loadTabData(tabName) {
             break;
     }
 }
-
-// ============= INITIALIZATION =============
-
-// Modify existing init function
-document.addEventListener('DOMContentLoaded', async function() {
-    // Check authentication first
-    const isAuthenticated = await checkAuth();
-    if (!isAuthenticated) {
-        // Show login screen instead of redirecting to login.html
-        showLoginScreen();
-        return;
-    }
-
-    // Existing initialization...
-
-    // Load servers
-    await loadServers();
-
-    // If server selected, load initial data
-    if (currentServerId) {
-        await switchServer(currentServerId);
-    }
-
-    // Setup SSE
-    setupSSE();
-});
 
 // === SERVER SETTINGS TAB FUNCTIONS ===
 
