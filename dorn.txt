@@ -1,0 +1,493 @@
+FIX It
+
+CursorAI Prompt: Comprehensive Code Analysis and Alignment with outcome.txt
+Objective
+Analyze the entire Discord bot codebase and ensure it matches the specifications in outcome.txt. Identify missing components, incorrect implementations, and provide fixes.
+Analysis Instructions
+Phase 1: Database Schema Verification
+Analyze schema.sql:
+Compare the database schema with outcome.txt specifications and verify:
+
+1. All 20+ tables exist with correct columns:
+   - guilds (with all 20+ columns including feature flags)
+   - users (with balance, total_earned, total_spent, is_active)
+   - transactions (with CHECK constraint: balance_after = balance_before + amount)
+   - shop_items (with stock, metadata JSONB, message_id)
+   - inventory (with quantity tracking)
+   - tasks (with status enum, expires_at, channel_id, message_id)
+   - user_tasks (with proof fields, deadline, status enum)
+   - task_settings (with next_task_id counter)
+   - announcements (with embed_data JSONB, is_pinned)
+   - embeds (with fields JSONB, footer, thumbnail, image)
+   - admin_users (with password_hash, is_superadmin)
+   - cache (with expires_at, created_at)
+   - strikes (with expires_at, is_active, auto_generated)
+   - moderation_audit_logs (with details JSONB, can_undo)
+   - scheduled_jobs (with execute_at, is_executed, job_data JSONB)
+   - command_permissions (with allowed_roles[], denied_roles[])
+   - guild_roles (with role_position, permissions BIGINT)
+   - user_roles (with assigned_at, assigned_by)
+   - moderation_actions (with action_type enum, duration_seconds)
+
+2. Stored procedures exist:
+   - get_user_balance(p_user_id TEXT, p_guild_id TEXT)
+   - update_user_balance() trigger function
+   - cleanup_expired_cache()
+   - cleanup_expired_strikes()
+   - execute_scheduled_jobs()
+   - mark_inactive_users()
+
+3. Triggers exist:
+   - Auto-update updated_at on all tables
+   - Row Level Security (RLS) enabled
+
+4. Constraints and indexes:
+   - UNIQUE constraints on (guild_id, item_id), (user_id, guild_id), etc.
+   - CHECK constraints on balance >= 0, price > 0, etc.
+   - Foreign key CASCADE deletes
+   - Indexes on frequently queried columns
+
+**Missing/Incorrect Schema Items:**
+List any tables, columns, constraints, or procedures that don't match outcome.txt
+Provide SQL statements to add missing items
+Phase 2: Core Manager Verification
+Analyze core/data_manager.py:
+Verify DataManager implementation matches outcome.txt:
+
+REQUIRED METHODS:
+✓ load_guild_data(guild_id, data_type) - with caching
+✓ save_guild_data(guild_id, data_type, data) - with atomic operations
+✓ atomic_transaction(guild_id, updates) - multi-table updates
+✓ ensure_user_exists(guild_id, user_id) - auto-create users
+✓ sync_all_guilds() - Discord synchronization
+✓ get_connection_status() - health monitoring
+
+REQUIRED FEATURES:
+✓ Supabase client initialization
+✓ 5-minute TTL caching with LRU eviction
+✓ Cache invalidation on updates
+✓ Bot instance linking for Discord sync
+✓ Error handling and logging
+
+MISSING/INCORRECT:
+List missing methods, incorrect caching behavior, or broken sync logic
+Provide corrected implementation
+Analyze core/transaction_manager.py:
+Verify TransactionManager matches outcome.txt:
+
+REQUIRED METHODS:
+✓ log_transaction(**data) - with validation
+✓ get_transactions(filters) - with pagination
+✓ get_user_statistics(user_id, period) - analytics
+✓ validate_transaction_integrity(user_id) - consistency checks
+✓ deduct_balance(user_id, amount, description) - safe deduction
+✓ cleanup_old_transactions(days) - archiving
+
+REQUIRED FEATURES:
+✓ Atomic two-phase commit for transfers
+✓ Balance validation before updates
+✓ Transaction ID generation (uuid)
+✓ metadata JSONB support
+✓ Timestamp with timezone
+
+MISSING/INCORRECT:
+List missing validation, broken atomicity, or incorrect balance tracking
+Analyze core/task_manager.py:
+Verify TaskManager matches outcome.txt:
+
+REQUIRED METHODS:
+✓ create_task(guild_id, task_data) - with Discord message
+✓ claim_task(guild_id, user_id, task_id) - atomic claiming
+✓ submit_task(guild_id, user_id, task_id, proof) - proof submission
+✓ approve_task(guild_id, user_id, task_id, approver_id) - with reward
+✓ expire_overdue_tasks(guild_id) - auto-expiration
+✓ get_user_tasks(guild_id, user_id, status_filter) - queries
+
+REQUIRED FEATURES:
+✓ Race condition prevention on claiming
+✓ Deadline calculation (created_at + duration_hours)
+✓ Max claims enforcement
+✓ User task limit (10 per user default)
+✓ Discord message sync on updates
+✓ Status enum validation
+
+MISSING/INCORRECT:
+List race conditions, broken deadlines, or missing Discord sync
+Analyze core/shop_manager.py:
+Verify ShopManager matches outcome.txt:
+
+REQUIRED METHODS:
+✓ get_shop_items(guild_id, filters) - with category filtering
+✓ purchase_item(guild_id, user_id, item_id, quantity) - atomic
+✓ update_stock(guild_id, item_id, quantity, operation) - management
+✓ get_inventory(guild_id, user_id, include_details) - with shop data
+✓ sync_discord_message(guild_id, item_id, bot) - message updates
+
+REQUIRED FEATURES:
+✓ Stock validation (prevent negative)
+✓ Price validation (must be > 0)
+✓ Inventory quantity tracking
+✓ Sales count in metadata JSONB
+✓ Atomic purchase (balance + inventory + stock)
+
+MISSING/INCORRECT:
+List broken atomicity, stock bugs, or missing inventory updates
+Analyze core/announcement_manager.py, core/embed_builder.py, core/cache_manager.py, core/auth_manager.py, core/audit_manager.py, core/sync_manager.py:
+For each manager, verify:
+✓ All methods from outcome.txt exist
+✓ Correct implementation of business logic
+✓ Proper error handling
+✓ Database integration working
+✓ Discord API integration (where applicable)
+
+List missing managers or incomplete implementations
+Phase 3: Discord Bot Commands Verification
+Analyze all cog files in cogs/:
+Verify EVERY command from outcome.txt exists and works correctly:
+
+CURRENCY COMMANDS (cogs/currency.py):
+✓ /balance - with transaction history
+✓ /daily - 24-hour cooldown, UTC timezone
+✓ /give - atomic two-user transfer
+✓ /leaderboard - top 10, ignores inactive
+✓ /buy - with confirmation dialog
+✓ /shop - with category filter
+✓ /inventory - with value calculation
+✓ /transactions - with pagination
+
+TASK COMMANDS (cogs/tasks.py, cogs/currency.py):
+✓ /view_tasks - channel filtering
+✓ /claim - atomic claiming
+✓ /mytasks - all statuses
+✓ /task_submit - proof validation
+✓ /tasks - advanced filtering
+✓ /task_assign - assign to user
+✓ /task_archive - archive completed
+
+ADMIN COMMANDS (cogs/admin.py):
+✓ /setprefix - update prefix
+✓ /reinitialize - recreate all Discord messages
+✓ /validate - data integrity check
+✓ /additem - create shop item
+✓ /updateitem - update item
+✓ /restock - update stock
+✓ /shopstats - sales statistics
+✓ /completetask - manual completion
+✓ /add_command - custom commands
+✓ /remove_command - delete command
+✓ /embed - create embed
+✓ /announce - send announcement
+
+GENERAL COMMANDS (cogs/general.py):
+✓ /help - dynamic command list
+✓ /ping - latency check
+✓ /stats - bot statistics
+✓ /serverinfo - server details
+✓ /botinfo - bot details
+
+BOT ADMIN COMMANDS (cogs/bot_admin.py):
+✓ /user_balance - cross-server balance
+✓ /create_task - for specific server
+✓ /list_tasks - server tasks
+✓ /create_item - shop item
+✓ /list_items - shop items
+✓ /create_announcement - announcement
+✓ /server_stats - comprehensive stats
+✓ /set_config - update config
+✓ /get_config - view config
+
+MODERATION COMMANDS (cogs/moderation_commands.py):
+✓ /add_profanity - add to filter
+✓ /remove_profanity - remove from filter
+✓ /list_profanity - show filter
+✓ /add_whitelist - domain whitelist
+✓ /remove_whitelist - remove domain
+✓ /set_protection_level - strictness level
+
+ANNOUNCEMENT COMMANDS (cogs/announcements.py):
+✓ /announce - create announcement
+✓ /announce_task - task announcement
+✓ /pin_announcement - pin message
+✓ /unpin_announcement - unpin message
+
+EMBED COMMANDS (cogs/embeds.py):
+✓ /create_embed - custom embed
+✓ /edit_embed - update embed
+✓ /delete_embed - remove embed
+✓ /list_embeds - show all embeds
+
+MISSING/INCORRECT COMMANDS:
+List any commands missing from cogs
+List commands with incorrect parameters
+List broken command functionality
+Provide corrected implementations
+Phase 4: Flask API Endpoints Verification
+Analyze backend.py:
+Verify ALL 71+ endpoints from outcome.txt exist and work:
+
+AUTHENTICATION (4 endpoints):
+✓ POST /api/auth/login
+✓ GET /api/auth/me
+✓ POST /api/auth/logout
+✓ GET /api/auth/validate
+
+HEALTH & SYSTEM (16 endpoints):
+✓ GET /api/health
+✓ GET / (serve HTML)
+✓ GET /styles.css
+✓ GET /script.js
+✓ GET /favicon.ico
+✓ GET /api/servers
+✓ GET /api/status
+✓ GET /api/logs
+✓ DELETE /api/logs
+✓ GET /api/commands
+✓ POST /api/commands
+✓ DELETE /api/commands/<name>
+✓ GET /api/settings
+✓ PUT /api/settings
+✓ POST /api/restart
+✓ GET /api/export
+
+SERVER MANAGEMENT (4 endpoints):
+✓ GET /api/{server_id}/config
+✓ PUT /api/{server_id}/config
+✓ PUT /api/{server_id}/status
+✓ GET /api/{server_id}/channels
+
+USER MANAGEMENT (6 endpoints):
+✓ GET /api/{server_id}/users
+✓ GET /api/{server_id}/users/{user_id}
+✓ PUT /api/{server_id}/users/{user_id}/balance
+✓ GET /api/{server_id}/users/inactive
+✓ POST /api/{server_id}/users/reactivate/{user_id}
+✓ POST /api/{server_id}/users/cleanup
+
+TASK MANAGEMENT (4 endpoints):
+✓ GET /api/{server_id}/tasks
+✓ POST /api/{server_id}/tasks
+✓ PUT /api/{server_id}/tasks/{task_id}
+✓ DELETE /api/{server_id}/tasks/{task_id}
+
+SHOP MANAGEMENT (9 endpoints):
+✓ GET /api/{server_id}/shop
+✓ POST /api/{server_id}/shop
+✓ GET /api/{server_id}/shop/{item_id}
+✓ PUT /api/{server_id}/shop/{item_id}
+✓ DELETE /api/{server_id}/shop/{item_id}
+✓ GET /api/{server_id}/shop/{item_id}/stock
+✓ PUT /api/{server_id}/shop/{item_id}/stock
+✓ GET /api/{server_id}/shop/statistics
+✓ POST /api/{server_id}/shop/validate
+
+INVENTORY MANAGEMENT (3 endpoints):
+✓ GET /api/{server_id}/inventory/{user_id}
+✓ GET /api/{server_id}/inventory/{user_id}/export
+✓ GET /api/{server_id}/inventory/export
+
+ANNOUNCEMENTS (7 endpoints):
+✓ GET /api/{server_id}/announcements
+✓ POST /api/{server_id}/announcements
+✓ POST /api/{server_id}/announcements/task/{task_id}
+✓ PUT /api/{server_id}/announcements/{announcement_id}
+✓ DELETE /api/{server_id}/announcements/{announcement_id}
+✓ POST /api/{server_id}/announcements/{announcement_id}/pin
+✓ POST /api/{server_id}/announcements/{announcement_id}/unpin
+
+EMBEDS (3 endpoints):
+✓ GET /api/{server_id}/embeds
+✓ PUT /api/{server_id}/embeds/{embed_id}
+✓ DELETE /api/{server_id}/embeds/{embed_id}
+
+TRANSACTIONS (6 endpoints):
+✓ GET /api/{server_id}/transactions
+✓ GET /api/{server_id}/transactions/statistics
+✓ GET /api/{server_id}/transactions/{transaction_id}
+✓ POST /api/{server_id}/transactions/validate
+✓ GET /api/{server_id}/transactions/export
+✓ POST /api/{server_id}/transactions/archive
+
+BOT MANAGEMENT (3 endpoints):
+✓ PUT /api/bot/status
+✓ GET /api/bot/status
+✓ PUT /api/{server_id}/status
+
+MODERATION (1 endpoint):
+✓ GET /api/{server_id}/moderation/logs/export
+
+REAL-TIME (2 endpoints):
+✓ GET /api/stream (SSE)
+✓ POST /api/stream/test
+
+VERIFY EACH ENDPOINT:
+✓ Correct HTTP methods
+✓ Proper authentication/authorization
+✓ Input validation
+✓ Error handling (try/except)
+✓ Correct status codes (200, 201, 400, 401, 404, 500)
+✓ JSON responses
+✓ Database operations work
+✓ Discord sync when needed
+
+MISSING/INCORRECT ENDPOINTS:
+List missing endpoints from backend.py
+List endpoints with wrong methods or broken logic
+Provide corrected implementations
+Phase 5: Background Tasks Verification
+Analyze bot.py background tasks:
+Verify all background tasks from outcome.txt exist:
+
+REQUIRED BACKGROUND TASKS:
+✓ Discord Message Sync (10-minute intervals)
+  - Verifies message existence
+  - Recreates orphaned messages
+  - Updates message_ids in database
+
+✓ Cache Cleanup (Hourly)
+  - Removes expired cache entries
+  - Reports statistics
+  - Prevents memory bloat
+
+✓ Guild Sync (Hourly)
+  - Syncs with Discord API
+  - Updates member counts
+  - Marks inactive guilds
+  - Broadcasts sync events
+
+✓ Transaction Integrity Validation (Daily)
+  - Validates balance consistency
+  - Reports discrepancies
+  - Generates integrity reports
+
+✓ Inactive User Management (Daily)
+  - Marks users inactive (30 days default)
+  - Cancels in-progress tasks
+  - Updates activity status
+
+✓ Data Backup (6-hour intervals)
+  - Creates timestamped backups
+  - Maintains retention (28 days)
+  - Archives to backups/ directory
+
+✓ Task Expiration (Continuous)
+  - Expires overdue tasks
+  - Updates status and messages
+  - Sends notifications
+
+VERIFY EACH TASK:
+✓ Uses @tasks.loop decorator correctly
+✓ Proper interval timing
+✓ Error handling in task
+✓ Logging of task execution
+✓ Database operations work
+✓ Discord API calls succeed
+
+MISSING/INCORRECT TASKS:
+List missing background tasks
+List tasks with wrong intervals or broken logic
+Phase 6: Moderation System Verification
+Analyze core/moderation/ directory:
+Verify all moderation components exist:
+
+REQUIRED FILES:
+✓ protection_manager.py - config and profanity lists
+✓ scanner.py - message content analysis
+✓ actions.py - warnings, strikes, mutes
+✓ scheduler.py - scheduled unmutes
+✓ logger.py - audit logging
+✓ health.py - system health checks
+
+VERIFY EACH COMPONENT:
+✓ All methods from outcome.txt implemented
+✓ Profanity detection working
+✓ Link whitelist/blacklist working
+✓ Protection levels (off/monitor/moderate/strict)
+✓ Strike system with expiration
+✓ Scheduled job execution
+✓ Audit trail creation
+
+MISSING/INCORRECT:
+List missing moderation components
+List broken functionality
+Phase 7: Frontend Dashboard Verification
+Analyze web/ directory files:
+Verify frontend matches outcome.txt:
+
+REQUIRED FILES:
+✓ index.html - main dashboard
+✓ script.js - frontend logic with cors.io proxy
+✓ styles.css - responsive design
+
+REQUIRED FEATURES IN script.js:
+✓ cors.io proxy integration (USE_CORS_PROXY = true)
+✓ apiCall() helper function
+✓ Login functionality
+✓ Multi-server switching
+✓ All 13 dashboard tabs functional
+✓ Real-time SSE updates
+✓ Session management
+✓ Error boundaries
+
+REQUIRED TABS:
+✓ Dashboard - server statistics
+✓ Users - user management
+✓ Shop - item management
+✓ Tasks - task management
+✓ Announcements - announcement system
+✓ Embeds - embed creator
+✓ Transactions - transaction history
+✓ Server Settings - configuration
+✓ Permissions - role management
+✓ Moderation - mod actions
+✓ Config - server config
+✓ Settings - global settings
+✓ Logs - system logs
+
+MISSING/INCORRECT:
+List missing tabs or broken functionality
+List UI bugs or missing features
+Phase 8: Configuration Files Verification
+Analyze deployment configuration:
+Verify all required config files exist:
+
+✓ requirements.txt - all dependencies with correct versions
+  - flask>=3.0.0
+  - flask-cors>=4.0.0 (if used)
+  - discord.py>=2.3.2
+  - supabase>=2.0.0
+  - gunicorn>=21.2.0
+  - All other dependencies
+
+✓ Procfile - correct start command
+  - web: python railway_start.py
+  OR
+  - web: gunicorn --bind 0.0.0.0:$PORT backend:app
+
+✓ railway.json or railway.toml - Railway configuration
+✓ .gitignore - proper exclusions
+✓ README.md - documentation
+
+ENVIRONMENT VARIABLES REQUIRED:
+✓ DISCORD_TOKEN
+✓ SUPABASE_URL
+✓ SUPABASE_SERVICE_ROLE_KEY
+✓ JWT_SECRET_KEY
+✓ ADMIN_USERNAME
+✓ ADMIN_PASSWORD
+✓ PORT (auto-assigned by Railway)
+
+MISSING/INCORRECT:
+List missing config files
+List incorrect dependencies or versions
+Phase 9: Integration Testing
+Verify cross-component integration:
+Test that components work together:
+
+✓ Discord bot can access DataManager
+✓ Flask API can access bot instance
+✓ Managers can access database
+✓ Background tasks can update Discord
+✓ SSE broadcasts work across components
+✓ Cache invalidation triggers correctly
+✓ Transaction atomicity across tables
+✓ Discord message sync updates database

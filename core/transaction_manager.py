@@ -314,7 +314,7 @@ class TransactionManager:
 
     def validate_transaction_integrity(self, guild_id: int, user_id: int) -> dict:
         transactions = self.get_transactions(guild_id, user_id=user_id)['transactions']
-        currency_data = self.data_manager.load_currency_data(guild_id)
+        currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
         current_balance = currency_data.get('users', {}).get(str(user_id), {}).get('balance', 0)
 
         calculated_balance = 0

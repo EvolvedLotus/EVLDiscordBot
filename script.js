@@ -1,13 +1,62 @@
 // Discord Bot CMS Dashboard JavaScript
 
 // API Configuration - Uses environment variable from Netlify
-const API_BASE_URL = window.location.hostname === 'localhost'
-    ? 'http://localhost:3000'  // Local development
-    : (window.API_BASE_URL || process.env.API_BASE_URL || 'https://your-railway-app.railway.app'); // Production
+const API_BASE_URL = 'https://evldiscordbot-production.up.railway.app';
+const USE_CORS_PROXY = true; // Toggle proxy on/off
+const CORS_PROXY = 'https://cors.io/?url=';
 
-// Helper function to build API URLs
+// Helper function to construct API URL
+function getApiUrl(endpoint) {
+    const fullUrl = `${API_BASE_URL}${endpoint}`;
+    return USE_CORS_PROXY ? `${CORS_PROXY}${encodeURIComponent(fullUrl)}` : fullUrl;
+}
+
+// Helper function to make API calls with cors.io proxy support
+async function apiCall(endpoint, options = {}) {
+    try {
+        // Default options
+        const defaultOptions = {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        };
+
+        // Merge options
+        const fetchOptions = { ...defaultOptions, ...options };
+
+        // Remove credentials when using cors.io proxy
+        if (USE_CORS_PROXY) {
+            delete fetchOptions.credentials;
+        }
+
+        // Make request
+        const response = await fetch(getApiUrl(endpoint), fetchOptions);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        // Unwrap cors.io response
+        if (USE_CORS_PROXY) {
+            if (data.status && data.body) {
+                // cors.io wraps response in {status, headers, body}
+                return JSON.parse(data.body);
+            }
+        }
+
+        return data;
+    } catch (error) {
+        console.error(`API Error (${endpoint}):`, error);
+        throw error;
+    }
+}
+
+// Legacy helper function for backward compatibility
 function apiUrl(endpoint) {
-    return `${API_BASE_URL}${endpoint}`;
+    return getApiUrl(endpoint);
 }
 
 // Global variables
@@ -115,17 +164,12 @@ async function login(event) {
     try {
         showLoginError(''); // Clear any previous errors
 
-        const response = await fetch(apiUrl('/api/auth/login'), {
+        const data = await apiCall('/api/auth/login', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
             body: JSON.stringify({ username, password })
         });
 
-        const data = await response.json();
-
-        if (response.ok && data.user) {
+        if (data.user) {
             // Tokens are stored in HTTP-only cookies by the backend
             // We don't have access to them in JavaScript for security
             currentUser = data.user;
@@ -421,8 +465,7 @@ async function loadTabData(tabName) {
 // Load overview data
 async function loadOverviewData() {
     try {
-        const response = await fetch(apiUrl('/api/status'));
-        const data = await response.json();
+        const data = await apiCall('/api/status');
 
         // Update dashboard content with overview data
         const dashboardContent = document.getElementById('dashboard-content');
@@ -458,6 +501,7 @@ async function loadOverviewData() {
         updateStatusDisplay(data.botOnline);
     } catch (error) {
         console.error('Error loading overview data:', error);
+        showNotification('Failed to load overview data', 'error');
         const dashboardContent = document.getElementById('dashboard-content');
         if (dashboardContent) {
             dashboardContent.innerHTML = '<div class="error-state">Error loading dashboard data</div>';
@@ -469,13 +513,12 @@ async function loadOverviewData() {
 async function loadLogs() {
     try {
         const logLevel = document.getElementById('log-level').value;
-        const response = await fetch(apiUrl(`/api/logs?level=${logLevel}`));
-        const logs = await response.json();
+        const data = await apiCall(`/api/logs?level=${logLevel}`);
 
         const logContainer = document.getElementById('logs-content');
         logContainer.innerHTML = '';
 
-        logs.forEach(log => {
+        data.forEach(log => {
             const logEntry = document.createElement('div');
             logEntry.className = `log-entry log-${log.level}`;
             logEntry.textContent = `[${log.timestamp}] ${log.level.toUpperCase()}: ${log.message}`;
@@ -483,14 +526,14 @@ async function loadLogs() {
         });
     } catch (error) {
         console.error('Error loading logs:', error);
+        showNotification('Failed to load logs', 'error');
     }
 }
 
 // Load commands
 async function loadCommands() {
     try {
-        const response = await fetch(apiUrl('/api/commands'));
-        const commands = await response.json();
+        const commands = await apiCall('/api/commands');
 
         const commandList = document.getElementById('command-list');
         commandList.innerHTML = '';
@@ -507,6 +550,7 @@ async function loadCommands() {
         });
     } catch (error) {
         console.error('Error loading commands:', error);
+        showNotification('Failed to load commands', 'error');
     }
 
     // Also load available bot commands
@@ -566,8 +610,7 @@ async function loadSettings() {
         let html = '<div class="settings-sections">';
 
         // Global Settings
-        const globalResponse = await fetch(apiUrl('/api/settings'));
-        const globalSettings = await globalResponse.json();
+        const globalSettings = await apiCall('/api/settings');
 
         html += `
             <div class="settings-section">
@@ -591,8 +634,7 @@ async function loadSettings() {
 
         // Server-specific Settings
         if (currentServerId) {
-            const serverResponse = await fetch(`/api/${currentServerId}/config`);
-            const serverConfig = await serverResponse.json();
+            const serverConfig = await apiCall(`/api/${currentServerId}/config`);
 
             html += `
                 <div class="settings-section">
@@ -622,6 +664,7 @@ async function loadSettings() {
 
     } catch (error) {
         console.error('Error loading settings:', error);
+        showNotification('Failed to load settings', 'error');
         const container = document.getElementById('settings-content');
         if (container) {
             container.innerHTML = '<div class="error-state">Error loading settings</div>';
@@ -654,27 +697,26 @@ function formatUptime(seconds) {
 // Quick actions
 async function restartBot() {
     if (!currentServerId) {
-        alert('Please select a server first');
+        showNotification('Please select a server first', 'error');
         return;
     }
 
     if (confirm('Are you sure you want to restart the bot?')) {
         try {
-            const response = await fetch(`/api/restart?server_id=${currentServerId}`, { method: 'POST' });
-            if (response.ok) {
-                alert('Bot restart initiated successfully');
+            const response = await apiCall(`/api/restart?server_id=${currentServerId}`, { method: 'POST' });
+            if (response) {
+                showNotification('Bot restart initiated successfully', 'success');
                 updateStatusDisplay(false);
                 // Refresh status after a short delay
                 setTimeout(() => {
                     loadOverviewData();
                 }, 3000);
             } else {
-                const error = await response.json();
-                alert('Failed to restart bot: ' + (error.error || 'Unknown error'));
+                showNotification('Failed to restart bot', 'error');
             }
         } catch (error) {
             console.error('Error restarting bot:', error);
-            alert('Error restarting bot');
+            showNotification('Error restarting bot', 'error');
         }
     }
 }
@@ -682,24 +724,23 @@ async function restartBot() {
 async function clearLogs() {
     if (confirm('Are you sure you want to clear all logs?')) {
         try {
-            const response = await fetch(apiUrl('/api/logs'), { method: 'DELETE' });
-            if (response.ok) {
-                alert('Logs cleared');
+            const response = await apiCall('/api/logs', { method: 'DELETE' });
+            if (response) {
+                showNotification('Logs cleared', 'success');
                 loadLogs();
             } else {
-                alert('Failed to clear logs');
+                showNotification('Failed to clear logs', 'error');
             }
         } catch (error) {
             console.error('Error clearing logs:', error);
-            alert('Error clearing logs');
+            showNotification('Error clearing logs', 'error');
         }
     }
 }
 
 async function exportData() {
     try {
-        const response = await fetch(apiUrl('/api/export'));
-        const data = await response.json();
+        const data = await apiCall('/api/export');
 
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
@@ -712,7 +753,7 @@ async function exportData() {
         URL.revokeObjectURL(url);
     } catch (error) {
         console.error('Error exporting data:', error);
-        alert('Error exporting data');
+        showNotification('Error exporting data', 'error');
     }
 }
 
@@ -722,47 +763,43 @@ async function addCommand() {
     const response = document.getElementById('cmd-response').value.trim();
 
     if (!name || !response) {
-        alert('Please fill in both command name and response');
+        showNotification('Please fill in both command name and response', 'error');
         return;
     }
 
     try {
-        const result = await fetch(apiUrl('/api/commands'), {
+        const result = await apiCall('/api/commands', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
             body: JSON.stringify({ name, response })
         });
 
-        if (result.ok) {
-            alert('Command added successfully');
+        if (result) {
+            showNotification('Command added successfully', 'success');
             document.getElementById('cmd-name').value = '';
             document.getElementById('cmd-response').value = '';
             loadCommands(); // Refresh the commands list
         } else {
-            const error = await result.json();
-            alert('Failed to add command: ' + (error.error || 'Unknown error'));
+            showNotification('Failed to add command', 'error');
         }
     } catch (error) {
         console.error('Error adding command:', error);
-        alert('Error adding command');
+        showNotification('Error adding command', 'error');
     }
 }
 
 async function deleteCommand(name) {
     if (confirm(`Are you sure you want to delete the command "${name}"?`)) {
         try {
-            const response = await fetch(`/api/commands/${name}`, { method: 'DELETE' });
-            if (response.ok) {
-                alert('Command deleted');
+            const response = await apiCall(`/api/commands/${name}`, { method: 'DELETE' });
+            if (response) {
+                showNotification('Command deleted', 'success');
                 loadCommands();
             } else {
-                alert('Failed to delete command');
+                showNotification('Failed to delete command', 'error');
             }
         } catch (error) {
             console.error('Error deleting command:', error);
-            alert('Error deleting command');
+            showNotification('Error deleting command', 'error');
         }
     }
 }
@@ -778,11 +815,8 @@ async function saveSettings() {
 
     try {
         // Save global settings
-        const globalResponse = await fetch(apiUrl('/api/settings'), {
+        const globalResponse = await apiCall('/api/settings', {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json'
-            },
             body: JSON.stringify(settings)
         });
 
@@ -793,23 +827,20 @@ async function saveSettings() {
             if (settings.global_shop !== undefined) serverSettings.global_shop = settings.global_shop;
             if (settings.global_tasks !== undefined) serverSettings.global_tasks = settings.global_tasks;
 
-            serverResponse = await fetch(`/api/${currentServerId}/config`, {
+            serverResponse = await apiCall(`/api/${currentServerId}/config`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
                 body: JSON.stringify(serverSettings)
             });
         }
 
-        if (globalResponse.ok && (!serverResponse || serverResponse.ok)) {
-            alert('Settings saved successfully');
+        if (globalResponse && (!serverResponse || serverResponse)) {
+            showNotification('Settings saved successfully', 'success');
         } else {
-            alert('Failed to save some settings');
+            showNotification('Failed to save some settings', 'error');
         }
     } catch (error) {
         console.error('Error saving settings:', error);
-        alert('Error saving settings');
+        showNotification('Error saving settings', 'error');
     }
 }
 
@@ -826,8 +857,7 @@ async function loadTasks() {
     try {
         showLoading('tasks');
 
-        const response = await fetch(`/api/${currentServerId}/tasks`);
-        const tasks = await response.json();
+        const tasks = await apiCall(`/api/${currentServerId}/tasks`);
 
         const tasksList = document.getElementById('tasks-list');
         if (!tasksList) return;
@@ -961,21 +991,13 @@ async function claimTask(taskId) {
 
         // In a real implementation, this would use the Discord bot's API
         // For now, simulate the claim process
-        const response = await fetch(`/api/${currentServerId}/tasks/${taskId}/claim`, {
+        const result = await apiCall(`/api/${currentServerId}/tasks/${taskId}/claim`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 user_id: 'dashboard_user', // In real implementation, get from session
                 channel_id: 'dashboard' // Indicate this came from dashboard
             })
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to claim task');
-        }
-
-        const result = await response.json();
 
         showNotification('✅ Task claimed successfully!', 'success');
 
@@ -1008,22 +1030,14 @@ async function completeTask(taskId) {
     try {
         showNotification('🔄 Completing task...', 'info');
 
-        const response = await fetch(`/api/${currentServerId}/tasks/${taskId}/complete`, {
+        const result = await apiCall(`/api/${currentServerId}/tasks/${taskId}/complete`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 user_id: 'dashboard_user', // In real implementation, get from session
                 proof: proof.trim(),
                 channel_id: 'dashboard'
             })
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to complete task');
-        }
-
-        const result = await response.json();
 
         showNotification(`✅ Task completed! You earned $${result.reward}!`, 'success');
 
@@ -1129,18 +1143,10 @@ async function createTask(event) {
     }
 
     try {
-        const response = await fetch(`/api/${currentServerId}/tasks`, {
+        const result = await apiCall(`/api/${currentServerId}/tasks`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(taskData)
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to create task');
-        }
-
-        const result = await response.json();
 
         closeModal();
         showNotification('✅ Task created successfully!', 'success');
@@ -1242,18 +1248,10 @@ async function updateTask(event, taskId) {
     }
 
     try {
-        const response = await fetch(`/api/${currentServerId}/tasks/${taskId}`, {
+        const result = await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates)
         });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Failed to update task');
-        }
-
-        const result = await response.json();
 
         closeModal();
         showNotification('✅ Task updated successfully!', 'success');
@@ -2755,6 +2753,1371 @@ async function loadShopItems() {
     await loadShop();
 }
 
+// Update shop item
+async function updateShopItem(event, itemId) {
+    event.preventDefault();
+
+    const updates = {
+        name: document.getElementById('edit-item-name').value.trim(),
+        description: document.getElementById('edit-item-description').value.trim(),
+        price: parseFloat(document.getElementById('edit-item-price').value),
+        stock: parseInt(document.getElementById('edit-item-stock').value),
+        category: document.getElementById('edit-item-category').value,
+        emoji: document.getElementById('edit-item-emoji').value.trim(),
+        role_requirement: document.getElementById('edit-item-role-req').value.trim() || null,
+        is_active: document.getElementById('edit-item-active').checked
+    };
+
+    // Validation
+    if (updates.price < 0) {
+        showNotification('Price cannot be negative', 'error');
+        return;
+    }
+
+    if (updates.stock < -1) {
+        showNotification('Stock cannot be less than -1', 'error');
+        return;
+    }
+
+    try {
+        const response = await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to update item');
+        }
+
+        const result = await response.json();
+
+        closeModal();
+        showNotification('✅ Item updated successfully!', 'success');
+        await loadShop();
+
+    } catch (error) {
+        console.error('Error updating shop item:', error);
+        showNotification(`❌ Failed to update item: ${error.message}`, 'error');
+    }
+}
+
+// Delete shop item
+async function deleteShopItem(itemId) {
+    if (!confirm(`Are you sure you want to delete the shop item "${itemId}"? This action cannot be undone.`)) {
+        return;
+    }
+
+    // Ask about archiving
+    const archive = confirm('Would you like to archive this item instead of permanently deleting it? Archived items can be restored later.');
+
+    try {
+        const response = await apiCall(`/api/${currentServerId}/shop/${itemId}?archive=${archive}`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to delete item');
+        }
+
+        showNotification(`✅ Item ${archive ? 'archived' : 'deleted'} successfully!`, 'success');
+        await loadShop();
+
+    } catch (error) {
+        console.error('Error deleting shop item:', error);
+        showNotification(`❌ Failed to delete item: ${error.message}`, 'error');
+    }
+}
+
+// Add shop item
+async function addShopItem() {
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    const itemId = document.getElementById('shop-item-id').value.trim();
+    const name = document.getElementById('shop-item-name').value.trim();
+    const price = parseFloat(document.getElementById('shop-item-price').value) || 0;
+    const description = document.getElementById('shop-item-description').value.trim();
+
+    if (!itemId || !name || !description) {
+        alert('Please fill in all fields');
+        return;
+    }
+
+    try {
+        const response = await apiCall(`/api/${currentServerId}/shop`, {
+            method: 'POST',
+            body: JSON.stringify({ id: itemId, name, price, description })
+        });
+
+        if (response.ok) {
+            alert('Shop item added successfully!');
+            document.getElementById('shop-item-id').value = '';
+            document.getElementById('shop-item-name').value = '';
+            document.getElementById('shop-item-price').value = '';
+            document.getElementById('shop-item-description').value = '';
+            loadShopItems();
+        } else {
+            const error = await response.json();
+            alert('Failed to add shop item: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error adding shop item:', error);
+        alert('Error adding shop item');
+    }
+}
+
+// Delete shop item
+async function deleteShopItem(itemId) {
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    if (confirm(`Are you sure you want to delete the shop item "${itemId}"?`)) {
+        try {
+            const response = await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                alert('Shop item deleted successfully!');
+                loadShopItems();
+            } else {
+                alert('Failed to delete shop item');
+            }
+        } catch (error) {
+            console.error('Error deleting shop item:', error);
+            alert('Error deleting shop item');
+        }
+    }
+}
+
+// Edit shop item (placeholder for now)
+function editShopItem(itemId) {
+    alert(`Edit functionality for ${itemId} - Coming soon!`);
+}
+
+// View user details
+function viewUserDetails(userId) {
+    const user = allUsers.find(u => u.id === userId);
+    if (user) {
+        const inventory = Object.entries(user.inventory || {});
+        const inventoryText = inventory.length > 0 ?
+            inventory.map(([item, qty]) => `${item}: ${qty}`).join('\n') :
+            'No items';
+
+        alert(`${user.display_name} (${user.username}#${user.discriminator})\n\n` +
+              `Balance: $${user.balance || 0}\n` +
+              `Inventory:\n${inventoryText}\n\n` +
+              `Roles: ${user.roles?.join(', ') || 'None'}\n` +
+              `Joined: ${user.joined_at ? new Date(user.joined_at).toLocaleDateString() : 'Unknown'}`);
+    }
+}
+
+// Search users
+function setupUserSearch() {
+    const searchInput = document.getElementById('user-search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const filteredUsers = allUsers.filter(user =>
+                user.username.toLowerCase().includes(searchTerm) ||
+                user.display_name.toLowerCase().includes(searchTerm) ||
+                (user.roles && user.roles.some(role => role.toLowerCase().includes(searchTerm)))
+            );
+            displayUsers(filteredUsers);
+        });
+    }
+}
+
+// Create task
+async function createTask() {
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    const name = document.getElementById('task-name').value.trim();
+    const url = document.getElementById('task-url').value.trim();
+    const description = document.getElementById('task-description').value.trim();
+    const reward = parseFloat(document.getElementById('task-reward').value) || 0;
+    const durationType = document.getElementById('task-duration-type').value;
+    const durationValue = parseInt(document.getElementById('task-duration-value').value) || 24;
+
+    if (!name || !description) {
+        alert('Please fill in task name and description');
+        return;
+    }
+
+    // Calculate duration in hours
+    let duration_hours = null;
+    if (durationType === 'forever') {
+        duration_hours = -1; // Special value for forever
+    } else {
+        switch (durationType) {
+            case 'hours':
+                duration_hours = durationValue;
+                break;
+            case 'days':
+                duration_hours = durationValue * 24;
+                break;
+            case 'weeks':
+                duration_hours = durationValue * 24 * 7;
+                break;
+        }
+    }
+
+    try {
+        const result = await apiCall(`/api/${currentServerId}/tasks`, {
+            method: 'POST',
+            body: JSON.stringify({ name, url, description, reward, duration_hours })
+        });
+
+        if (result.ok) {
+            alert('Task created successfully');
+            document.getElementById('task-name').value = '';
+            document.getElementById('task-url').value = '';
+            document.getElementById('task-description').value = '';
+            document.getElementById('task-reward').value = '';
+            document.getElementById('task-duration-type').value = 'hours';
+            document.getElementById('task-duration-value').value = '24';
+            loadTasks();
+        } else {
+            const error = await result.json();
+            alert('Failed to create task: ' + error.error);
+        }
+    } catch (error) {
+        console.error('Error creating task:', error);
+        alert('Error creating task');
+    }
+}
+
+// Delete task
+async function deleteTask(taskId) {
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    if (confirm('Are you sure you want to delete this task?')) {
+        try {
+            // Updated URL to include server_id - cache refresh v2
+            const response = await apiCall(`/api/${currentServerId}/tasks/${taskId}`, { method: 'DELETE' });
+            if (response) {
+                alert('Task deleted successfully');
+                loadTasks();
+            } else {
+                alert('Failed to delete task');
+            }
+        } catch (error) {
+            console.error('Error deleting task:', error);
+            alert('Error deleting task: ' + error.message);
+        }
+    }
+}
+
+// Refresh logs
+function refreshLogs() {
+    loadLogs();
+}
+
+async function updateBotStatus() {
+    const statusType = document.getElementById('bot-status-type').value;
+    const statusMessage = document.getElementById('bot-status-message').value.trim();
+    const presence = document.getElementById('bot-presence').value;
+    const streamingUrl = document.getElementById('streaming-url').value.trim();
+
+    try {
+        const response = await apiCall(apiUrl('/api/bot/status'), {
+            method: 'PUT',
+            body: JSON.stringify({
+                status_type: statusType,
+                status_message: statusMessage
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert('✅ ' + result.message);
+            // Refresh the status display
+            loadOverviewData();
+        } else {
+            alert('❌ Error: ' + (result.error || 'Failed to update status'));
+        }
+    } catch (error) {
+        console.error('Error updating bot status:', error);
+        alert('❌ Failed to update bot status. Check console for details.');
+    }
+}
+
+// Load servers list
+async function loadServers() {
+    try {
+        const data = await apiCall('/api/servers');
+        servers = data.servers || [];
+
+        const serverSelect = document.getElementById('server-select');
+        serverSelect.innerHTML = '<option value="">Select a server...</option>';
+
+        servers.forEach(server => {
+            const option = document.createElement('option');
+            option.value = server.id;
+            option.textContent = `${server.name} (${server.member_count} members)`;
+            serverSelect.appendChild(option);
+        });
+
+        // Auto-select first server if available
+        if (servers.length > 0 && !currentServerId) {
+            currentServerId = servers[0].id;
+            serverSelect.value = currentServerId;
+            onServerChange();
+        }
+    } catch (error) {
+        console.error('Error loading servers:', error);
+        showNotification('Failed to load servers', 'error');
+    }
+}
+
+// Handle server selection change
+function onServerChange() {
+    const serverSelect = document.getElementById('server-select');
+    const selectedServerId = serverSelect.value;
+
+    if (selectedServerId && selectedServerId !== currentServerId) {
+        currentServerId = selectedServerId;
+        console.log(`Switched to server: ${currentServerId}`);
+
+        // Show restart button only for EVL server (1123738140050464878)
+        const restartBtn = document.getElementById('restart-btn');
+        if (restartBtn) {
+            if (selectedServerId === '1123738140050464878') {
+                restartBtn.style.display = 'block';
+            } else {
+                restartBtn.style.display = 'none';
+            }
+        }
+
+        // Reload current tab data with new server
+        if (currentTab !== 'overview' && currentTab !== 'logs' && currentTab !== 'commands') {
+            loadTabData(currentTab);
+        }
+    } else if (!selectedServerId) {
+        currentServerId = null;
+        console.log('No server selected');
+
+        // Hide restart button when no server is selected
+        const restartBtn = document.getElementById('restart-btn');
+        if (restartBtn) {
+            restartBtn.style.display = 'none';
+        }
+    }
+}
+
+// Global variables for SSE with enhanced reconnection
+let eventSource = null;
+let reconnectDelay = 1000;
+let reconnectAttempts = 0;
+let maxReconnectAttempts = 10;
+let isReconnecting = false;
+let lastHeartbeat = Date.now();
+let heartbeatInterval = null;
+let connectionStatus = 'disconnected'; // 'connected', 'connecting', 'disconnected', 'error'
+
+// SSE Connection Status Management
+function updateConnectionStatus(status, message = '') {
+    connectionStatus = status;
+    const statusElement = document.getElementById('sse-status');
+    if (statusElement) {
+        statusElement.className = `sse-status status-${status}`;
+        statusElement.textContent = message || getStatusText(status);
+    }
+
+    // Update connection indicator
+    const indicator = document.getElementById('connection-indicator');
+    if (indicator) {
+        indicator.className = `connection-indicator ${status}`;
+    }
+
+    console.log(`SSE Status: ${status}${message ? ' - ' + message : ''}`);
+}
+
+function getStatusText(status) {
+    switch(status) {
+        case 'connected': return '🟢 Connected';
+        case 'connecting': return '🟡 Connecting...';
+        case 'disconnected': return '🔴 Disconnected';
+        case 'error': return '❌ Connection Error';
+        default: return '⚪ Unknown';
+    }
+}
+
+// Initialize real-time updates with enhanced reconnection
+function initRealtimeUpdates() {
+    if (isReconnecting) {
+        console.log('Already attempting to reconnect, skipping...');
+        return;
+    }
+
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
+
+    updateConnectionStatus('connecting', `Attempting to connect... (${reconnectAttempts + 1}/${maxReconnectAttempts})`);
+
+    // Build SSE URL with authentication and filters
+    let sseUrl = apiUrl('/api/stream');
+    const params = new URLSearchParams();
+
+    // Add server filter if selected
+    if (currentServerId) {
+        params.append('guilds', currentServerId);
+    }
+
+    // Add event type filters based on current tab
+    const eventFilters = getEventFiltersForTab(currentTab);
+    if (eventFilters.length > 0) {
+        params.append('events', eventFilters.join(','));
+    }
+
+    if (params.toString()) {
+        sseUrl += '?' + params.toString();
+    }
+
+    try {
+        // Create EventSource with authentication headers
+        eventSource = new EventSource(sseUrl);
+
+        // Connection opened
+        eventSource.onopen = (event) => {
+            console.log('SSE connection opened');
+            updateConnectionStatus('connected');
+            reconnectAttempts = 0;
+            reconnectDelay = 1000;
+            isReconnecting = false;
+
+            // Start heartbeat monitoring
+            startHeartbeatMonitoring();
+        };
+
+        // Message received
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+
+                // Handle heartbeat
+                if (data.type === 'heartbeat') {
+                    lastHeartbeat = Date.now();
+                    return;
+                }
+
+                // Handle connection info
+                if (data.type === 'connected') {
+                    console.log('SSE connected with client ID:', data.client_id);
+                    return;
+                }
+
+                console.log('Received SSE update:', data);
+
+                // Handle different update types
+                handleSSEEvent(data);
+
+                // Reset reconnect delay on successful message
+                reconnectDelay = 1000;
+
+            } catch (error) {
+                console.error('Error parsing SSE event data:', error, 'Raw data:', event.data);
+                // Continue with other event handling even if this event failed
+            }
+        };
+
+        // Connection error
+        eventSource.onerror = (event) => {
+            console.error('SSE connection error:', event);
+            updateConnectionStatus('error', 'Connection failed');
+
+            // Stop heartbeat monitoring
+            stopHeartbeatMonitoring();
+
+            // Close current connection
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            // Attempt reconnection
+            attemptReconnection();
+        };
+
+    } catch (error) {
+        console.error('Failed to create EventSource:', error);
+        updateConnectionStatus('error', 'Failed to initialize connection');
+        attemptReconnection();
+    }
+}
+
+// Get event filters based on current tab
+function getEventFiltersForTab(tabName) {
+    const filters = [];
+
+    switch(tabName) {
+        case 'tasks':
+            filters.push('task_update', 'guild_update');
+            break;
+        case 'users':
+            filters.push('balance_update', 'inventory_update', 'guild_update');
+            break;
+        case 'shop':
+            filters.push('shop_update', 'inventory_update', 'guild_update');
+            break;
+        case 'transactions':
+            filters.push('balance_update', 'inventory_update', 'guild_update');
+            break;
+        default:
+            filters.push('guild_update');
+    }
+
+    return filters;
+}
+
+// Handle SSE events
+function handleSSEEvent(data) {
+    console.log('SSE Event:', data);
+
+    switch (data.type) {
+        case 'task_created':
+            handleTaskCreated(data);
+            break;
+        case 'task_updated':
+            handleTaskUpdated(data);
+            break;
+        case 'task_deleted':
+            handleTaskDeleted(data);
+            break;
+        case 'shop_item_created':
+            handleShopItemCreated(data);
+            break;
+        case 'shop_item_deleted':
+            handleShopItemDeleted(data);
+            break;
+        case 'user_updated':
+            handleUserUpdated(data);
+            break;
+        case 'embed_created':
+            handleEmbedCreated(data);
+            break;
+        case 'announcement_posted':
+            handleAnnouncementPosted(data);
+            break;
+        case 'guild_update':
+            if (currentServerId && data.guild_id === currentServerId) {
+                // Refresh appropriate tab based on data_type
+                if (data.data_type === 'currency' && currentTab === 'users') {
+                    loadUsers();
+                } else if (data.data_type === 'currency' && currentTab === 'shop') {
+                    loadShop();
+                } else if (data.data_type === 'tasks' && currentTab === 'tasks') {
+                    loadTasks();
+                } else if (data.data_type === 'transactions' && currentTab === 'transactions') {
+                    loadTransactions();
+                }
+            }
+            break;
+        case 'task_update':
+            // Handle task-specific updates
+            if (currentServerId && data.guild_id === currentServerId) {
+                handleTaskUpdate(data);
+            }
+            break;
+        case 'balance_update':
+            // Handle balance updates
+            if (currentServerId && data.guild_id === currentServerId) {
+                if (currentTab === 'users') {
+                    loadUsers();
+                }
+                if (currentTab === 'transactions') {
+                    loadTransactions();
+                }
+            }
+            break;
+        case 'shop_update':
+            if (currentServerId && data.guild_id === currentServerId && currentTab === 'shop') {
+                // Handle specific shop updates
+                if (data.action === 'item_added' || data.action === 'item_updated' || data.action === 'item_deleted') {
+                    console.log('Shop item changed, refreshing shop...');
+                    loadShop();
+                }
+            }
+            break;
+        case 'inventory_update':
+            if (currentServerId && data.guild_id === currentServerId) {
+                // Handle inventory updates
+                if (currentTab === 'users') {
+                    loadUsers(); // Refresh user balances
+                }
+                if (currentTab === 'transactions') {
+                    loadTransactions(); // Refresh transaction history
+                }
+            }
+            break;
+        case 'batch':
+            // Handle batched events
+            console.log(`Processing batch of ${data.events.length} events for ${data.event_type}`);
+            data.events.forEach(event => handleSSEEvent(event));
+            break;
+        default:
+            console.log('Unhandled SSE event:', data.type);
+    }
+}
+
+function handleTaskCreated(data) {
+    if (data.guild_id !== getCurrentServerId()) return;
+    // Add task to UI without full refresh
+    addTaskToList(data.task);
+}
+
+function handleTaskUpdated(data) {
+    if (data.guild_id !== getCurrentServerId()) return;
+    // Update task in UI without full refresh
+    updateTaskInList(data.task_id, data.task);
+}
+
+function handleTaskDeleted(data) {
+    if (data.guild_id !== getCurrentServerId()) return;
+    // Remove task from UI
+    removeTaskFromList(data.task_id);
+}
+
+function handleShopItemCreated(data) {
+    if (data.guild_id !== getCurrentServerId()) return;
+    // Add shop item to UI without full refresh
+    addShopItemToList(data.item);
+}
+
+function handleShopItemDeleted(data) {
+    if (data.guild_id !== getCurrentServerId()) return;
+    // Remove shop item from UI
+    removeShopItemFromList(data.item_id);
+}
+
+function handleUserUpdated(data) {
+    if (data.guild_id !== getCurrentServerId()) return;
+    // Update user in UI without full refresh
+    updateUserInList(data.user_id, data.user);
+}
+
+function handleEmbedCreated(data) {
+    if (data.guild_id !== getCurrentServerId()) return;
+    // Add embed to UI without full refresh
+    addEmbedToList(data.embed);
+}
+
+function handleAnnouncementPosted(data) {
+    if (data.guild_id !== getCurrentServerId()) return;
+    // Add announcement to UI without full refresh
+    addAnnouncementToList(data.announcement);
+}
+
+function getCurrentServerId() {
+    return currentServerId;
+}
+
+// Helper functions for UI updates (placeholders for now)
+function addTaskToList(task) {
+    console.log('Adding task to list:', task);
+    // TODO: Implement actual UI update
+}
+
+function updateTaskInList(taskId, task) {
+    console.log('Updating task in list:', taskId, task);
+    // TODO: Implement actual UI update
+}
+
+function removeTaskFromList(taskId) {
+    console.log('Removing task from list:', taskId);
+    // TODO: Implement actual UI update
+}
+
+function addShopItemToList(item) {
+    console.log('Adding shop item to list:', item);
+    // TODO: Implement actual UI update
+}
+
+function removeShopItemFromList(itemId) {
+    console.log('Removing shop item from list:', itemId);
+    // TODO: Implement actual UI update
+}
+
+function updateUserInList(userId, user) {
+    console.log('Updating user in list:', userId, user);
+    // TODO: Implement actual UI update
+}
+
+function addEmbedToList(embed) {
+    console.log('Adding embed to list:', embed);
+    // TODO: Implement actual UI update
+}
+
+function addAnnouncementToList(announcement) {
+    console.log('Adding announcement to list:', announcement);
+    // TODO: Implement actual UI update
+}
+
+// Attempt reconnection with exponential backoff
+function attemptReconnection() {
+    if (isReconnecting) return;
+
+    isReconnecting = true;
+    reconnectAttempts++;
+
+    if (reconnectAttempts >= maxReconnectAttempts) {
+        updateConnectionStatus('error', `Max reconnection attempts (${maxReconnectAttempts}) reached`);
+        showNotification('⚠️ Real-time updates unavailable. Please refresh the page.', 'warning');
+        isReconnecting = false;
+        return;
+    }
+
+    // Exponential backoff with jitter
+    const jitter = Math.random() * 1000;
+    const delay = Math.min(reconnectDelay + jitter, 30000);
+
+    console.log(`Attempting SSE reconnection in ${Math.round(delay/1000)}s (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+
+    setTimeout(() => {
+        isReconnecting = false;
+        initRealtimeUpdates();
+    }, delay);
+
+    // Increase delay for next attempt
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+}
+
+// Start heartbeat monitoring
+function startHeartbeatMonitoring() {
+    stopHeartbeatMonitoring(); // Clear any existing interval
+
+    heartbeatInterval = setInterval(() => {
+        const timeSinceLastHeartbeat = Date.now() - lastHeartbeat;
+
+        // If no heartbeat for 60 seconds, consider connection stale
+        if (timeSinceLastHeartbeat > 60000) {
+            console.warn('SSE heartbeat timeout, reconnecting...');
+            updateConnectionStatus('error', 'Heartbeat timeout');
+            if (eventSource) {
+                eventSource.close();
+            }
+        }
+    }, 30000); // Check every 30 seconds
+}
+
+// Stop heartbeat monitoring
+function stopHeartbeatMonitoring() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+// Manual reconnection
+function reconnectSSE() {
+    console.log('Manual SSE reconnection requested');
+    reconnectAttempts = 0; // Reset attempt counter
+    reconnectDelay = 1000; // Reset delay
+    initRealtimeUpdates();
+}
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    if (eventSource) {
+        eventSource.close();
+    }
+    stopHeartbeatMonitoring();
+});
+
+// Initialize the dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize authentication first
+    initAuth();
+
+    // Set up login form
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', login);
+    }
+
+    // Set up duration selector
+    setupDurationSelector();
+
+    // Set up user search
+    setupUserSearch();
+});
+
+// Initialize dashboard after authentication
+function initializeDashboard() {
+    loadServers();
+    loadOverviewData();
+
+    // Set up server selector
+    const serverSelect = document.getElementById('server-select');
+    if (serverSelect) {
+        serverSelect.addEventListener('change', onServerChange);
+    }
+
+    // Initialize real-time updates
+    initRealtimeUpdates();
+
+    // Auto-refresh overview every 30 seconds
+    setInterval(() => {
+        if (currentTab === 'overview') {
+            loadOverviewData();
+        }
+    }, 30000);
+}
+
+// Command templates
+function loadTemplate(templateName) {
+    const templates = {
+        'give_money': {
+            name: 'givemoney',
+            response: '💰 **ADMIN COMMAND**: /give_money @user amount\n\nGives currency to a user. Requires admin permissions.'
+        },
+        'take_money': {
+            name: 'takemoney',
+            response: '💰 **ADMIN COMMAND**: /take_money @user amount\n\nTakes currency from a user. Requires admin permissions.'
+        },
+        'balance': {
+            name: 'bal',
+            response: '💰 **BALANCE CHECK**: /balance [@user]\n\nShows your current balance or another user\'s balance.'
+        },
+        'shop': {
+            name: 'store',
+            response: '🛒 **ITEM SHOP**: /shop\n\nBrowse and purchase items from the shop using your currency!'
+        },
+        'inventory': {
+            name: 'inv',
+            response: '📦 **INVENTORY**: /inventory [@user]\n\nView your purchased items or check another user\'s inventory.'
+        },
+        'embed': {
+            name: 'createembed',
+            response: '📄 **ADMIN COMMAND**: /embed title:"Title" description:"Description"\n\nCreates a rich embed message. Requires admin permissions.'
+        },
+        'announce': {
+            name: 'announcement',
+            response: '📢 **ADMIN COMMAND**: /announce #channel message\n\nSends an announcement to a specific channel. Requires admin permissions.'
+        },
+        'close_task': {
+            name: 'closetask',
+            response: '✅ **ADMIN COMMAND**: /close_task task_name\n\nManually closes a task and distributes rewards. Requires admin permissions.'
+        },
+        'welcome': {
+            name: 'welcome',
+            response: '👋 **Welcome to our server!**\n\nPlease read the rules in #rules and introduce yourself in #introductions.\n\nEnjoy your stay! 🎉'
+        },
+        'rules': {
+            name: 'rules',
+            response: '📋 **SERVER RULES**\n\n1. Be respectful to all members\n2. No spam or excessive caps\n3. Keep content appropriate\n4. Use appropriate channels\n5. No self-promotion without permission\n\nBreaking rules may result in warnings, mutes, or bans.'
+        }
+    };
+
+    const template = templates[templateName];
+    if (template) {
+        document.getElementById('cmd-name').value = template.name;
+        document.getElementById('cmd-response').value = template.response;
+    }
+}
+
+// Set up duration selector functionality
+function setupDurationSelector() {
+    const durationTypeSelect = document.getElementById('task-duration-type');
+    const durationValueInput = document.getElementById('task-duration-value');
+
+    if (durationTypeSelect && durationValueInput) {
+        durationTypeSelect.addEventListener('change', function() {
+            if (this.value === 'forever') {
+                durationValueInput.disabled = true;
+                durationValueInput.value = '';
+            } else {
+                durationValueInput.disabled = false;
+                if (!durationValueInput.value) {
+                    durationValueInput.value = '24';
+                }
+            }
+        });
+    }
+}
+
+// User management functions
+
+// Bulk actions
+async function resetAllBalances() {
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to reset ALL user balances to $0? This cannot be undone!')) {
+        return;
+    }
+
+    try {
+        // This would need a new backend endpoint for bulk operations
+        alert('Bulk balance reset - This feature requires backend implementation');
+    } catch (error) {
+        console.error('Error resetting balances:', error);
+        alert('Error resetting balances');
+    }
+}
+
+async function giveAllUsers(amount) {
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to give $${amount} to ALL users?`)) {
+        return;
+    }
+
+    try {
+        // This would need a new backend endpoint for bulk operations
+        alert('Bulk currency distribution - This feature requires backend implementation');
+    } catch (error) {
+        console.error('Error giving currency:', error);
+        alert('Error giving currency');
+    }
+}
+
+async function clearAllInventories() {
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to clear ALL user inventories? This cannot be undone!')) {
+        return;
+    }
+
+    try {
+        // This would need a new backend endpoint for bulk operations
+        alert('Bulk inventory clear - This feature requires backend implementation');
+    } catch (error) {
+        console.error('Error clearing inventories:', error);
+        alert('Error clearing inventories');
+    }
+}
+
+// Individual user actions
+async function modifyUserBalance(operation, amount) {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    const finalAmount = operation === 'add' ? amount : -amount;
+    const actionText = operation === 'add' ? 'add' : 'subtract';
+
+    if (!confirm(`Are you sure you want to ${actionText} $${amount} from this user's balance?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users/${selectedUserId}/balance`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ amount: finalAmount })
+        });
+
+        if (response.ok) {
+            alert('Balance updated successfully!');
+            loadUsers(); // Refresh the user list
+        } else {
+            alert('Failed to update balance');
+        }
+    } catch (error) {
+        console.error('Error updating balance:', error);
+        alert('Error updating balance');
+    }
+}
+
+async function setUserBalance(amount) {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    // NEW: Prompt for reason
+    const reason = prompt('Enter reason for balance modification:');
+    if (!reason || reason.trim() === '') {
+        alert('Reason is required');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to set this user's balance to $${amount}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users/${selectedUserId}/balance`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                amount: amount,
+                set: true,
+                reason: reason.trim()
+            })
+        });
+
+        if (response.ok) {
+            alert('Balance set successfully!');
+            loadUsers(); // Refresh the user list
+        } else {
+            alert('Failed to set balance');
+        }
+    } catch (error) {
+        console.error('Error setting balance:', error);
+        alert('Error setting balance');
+    }
+}
+
+async function setCustomBalance() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    const amount = parseFloat(document.getElementById('custom-balance').value);
+
+    if (isNaN(amount)) {
+        alert('Please enter a valid amount');
+        return;
+    }
+
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    // NEW: Prompt for reason
+    const reason = prompt('Enter reason for balance modification:');
+    if (!reason || reason.trim() === '') {
+        alert('Reason is required');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to set this user's balance to $${amount}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/${currentServerId}/users/${selectedUserId}/balance`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                amount: amount,
+                set: true,
+                reason: reason.trim()
+            })
+        });
+
+        if (response.ok) {
+            alert('Balance set successfully!');
+            document.getElementById('custom-balance').value = '';
+            loadUsers(); // Refresh the user list
+        } else {
+            alert('Failed to set balance');
+        }
+    } catch (error) {
+        console.error('Error setting balance:', error);
+        alert('Error setting balance');
+    }
+}
+
+async function clearUserInventory() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to clear this user\'s inventory? This cannot be undone!')) {
+        return;
+    }
+
+    try {
+        // This would need a new backend endpoint for inventory management
+        alert('Clear inventory - This feature requires backend implementation');
+    } catch (error) {
+        console.error('Error clearing inventory:', error);
+        alert('Error clearing inventory');
+    }
+}
+
+async function giveUserItem() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    const itemName = document.getElementById('item-name').value.trim();
+    const quantity = parseInt(document.getElementById('item-quantity').value) || 1;
+
+    if (!itemName) {
+        alert('Please enter an item name');
+        return;
+    }
+
+    if (!currentServerId) {
+        alert('Please select a server first');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to give ${quantity}x "${itemName}" to this user?`)) {
+        return;
+    }
+
+    try {
+        // This would need a new backend endpoint for inventory management
+        alert('Give item - This feature requires backend implementation');
+        document.getElementById('item-name').value = '';
+        document.getElementById('item-quantity').value = '1';
+    } catch (error) {
+        console.error('Error giving item:', error);
+        alert('Error giving item');
+    }
+}
+
+// Moderation functions (placeholders for now)
+function kickUser() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    alert('Kick user - This feature requires Discord API integration and admin permissions');
+}
+
+function banUser() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    alert('Ban user - This feature requires Discord API integration and admin permissions');
+}
+
+function muteUser() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    alert('Mute user - This feature requires Discord API integration and admin permissions');
+}
+
+function unmuteUser() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    alert('Unmute user - This feature requires Discord API integration and admin permissions');
+}
+
+// Info functions
+function viewUserDetails() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    const user = allUsers.find(u => u.id === selectedUserId);
+    if (user) {
+        const inventory = Object.entries(user.inventory || {});
+        const inventoryText = inventory.length > 0 ?
+            inventory.map(([item, qty]) => `${item}: ${qty}`).join('\n') :
+            'No items';
+
+        alert(`${user.display_name} (${user.username}#${user.discriminator})\n\n` +
+              `Balance: $${user.balance || 0}\n` +
+              `Total Earned: $${user.total_earned || 0}\n` +
+              `Total Spent: $${user.total_spent || 0}\n\n` +
+              `Inventory:\n${inventoryText}\n\n` +
+              `Roles: ${user.roles?.join(', ') || 'None'}\n` +
+              `Joined: ${user.joined_at ? new Date(user.joined_at).toLocaleDateString() : 'Unknown'}`);
+    }
+}
+
+function viewUserTransactions() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    alert('View transactions - This feature requires transaction logging implementation');
+}
+
+function exportUserData() {
+    if (!selectedUserId) {
+        alert('Please select a user first');
+        return;
+    }
+
+    const user = allUsers.find(u => u.id === selectedUserId);
+    if (user) {
+        const userData = {
+            id: user.id,
+            username: user.username,
+            discriminator: user.discriminator,
+            display_name: user.display_name,
+            balance: user.balance || 0,
+            total_earned: user.total_earned || 0,
+            total_spent: user.total_spent || 0,
+            inventory: user.inventory || {},
+            roles: user.roles || [],
+            joined_at: user.joined_at,
+            exported_at: new Date().toISOString()
+        };
+
+        const blob = new Blob([JSON.stringify(userData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `user-${user.username}-data.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+}
+
+// Load transactions
+async function loadTransactions() {
+    if (!currentServerId) {
+        document.getElementById('transactions-list').innerHTML = '<p>Please select a server first.</p>';
+        return;
+    }
+
+    try {
+        // Load both transactions and statistics
+        const [txnResponse, statsResponse] = await Promise.all([
+            fetch(`/api/${currentServerId}/transactions`),
+            fetch(`/api/${currentServerId}/transactions/statistics`)
+        ]);
+
+        const txnData = await txnResponse.json();
+        const statsData = await statsResponse.json();
+
+        const container = document.getElementById('transactions-list');
+        if (!container) return;
+
+        // Show statistics
+        updateTransactionStats(statsData);
+
+        if (!txnData.transactions || txnData.transactions.length === 0) {
+            container.innerHTML = '<div class="empty-state">No transactions yet</div>';
+            return;
+        }
+
+        // Sort by timestamp (newest first)
+        const sorted = txnData.transactions.sort((a, b) =>
+            new Date(b.timestamp) - new Date(a.timestamp)
+        );
+
+        let html = `
+            <div class="table-controls">
+                <input type="text" id="txn-search" placeholder="Search by user ID or description..." class="search-input">
+                <select id="txn-filter" class="filter-select">
+                    <option value="all">All Transactions</option>
+                    <option value="positive">Gains Only</option>
+                    <option value="negative">Losses Only</option>
+                    <option value="daily">Daily Rewards</option>
+                    <option value="shop">Shop Purchases</option>
+                    <option value="admin">Admin Actions</option>
+                    <option value="transfer_send">Transfers Sent</option>
+                    <option value="transfer_receive">Transfers Received</option>
+                    <option value="task">Task Rewards</option>
+                </select>
+                <span class="total-transactions">Total: ${sorted.length} transactions</span>
+            </div>
+            <div class="transactions-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>User</th>
+                            <th>Amount</th>
+                            <th>Before</th>
+                            <th>After</th>
+                            <th>Description</th>
+                            <th>Source</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="txn-table-body">
+        `;
+
+        sorted.forEach(txn => {
+            const amount = txn.amount || 0;
+            const amountClass = amount >= 0 ? 'positive' : 'negative';
+            const amountSign = amount >= 0 ? '+' : '';
+            const timestamp = new Date(txn.timestamp).toLocaleString();
+            const source = txn.source || 'discord';
+            const userDisplay = txn.display_name || txn.username || txn.user_id;
+
+            html += `
+                <tr data-user-id="${txn.user_id}" data-type="${getTxnType(txn)}" onclick="showTransactionDetail('${txn.id}')">
+                    <td>${timestamp}</td>
+                    <td>
+                        <div class="user-cell">
+                            ${txn.avatar_url ? `<img src="${txn.avatar_url}" class="user-avatar-small" alt="Avatar">` : ''}
+                            <span>${userDisplay}</span>
+                        </div>
+                    </td>
+                    <td class="${amountClass}">${amountSign}$${Math.abs(amount)}</td>
+                    <td>$${txn.balance_before || 0}</td>
+                    <td>$${txn.balance_after || 0}</td>
+                    <td>${txn.description || 'N/A'}</td>
+                    <td><span class="source-badge source-${source}">${source}</span></td>
+                    <td><button onclick="event.stopPropagation(); showTransactionDetail('${txn.id}')" class="btn-small">👁️</button></td>
+                </tr>
+            `;
+        });
+
+        html += `
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        container.innerHTML = html;
+
+        // Add search and filter
+
 // Add shop item
 async function addShopItem() {
     if (!currentServerId) {
@@ -2937,13 +4300,12 @@ async function deleteTask(taskId) {
     if (confirm('Are you sure you want to delete this task?')) {
         try {
             // Updated URL to include server_id - cache refresh v2
-            const response = await fetch(`/api/${currentServerId}/tasks/${taskId}`, { method: 'DELETE' });
-            if (response.ok) {
+            const response = await apiCall(`/api/${currentServerId}/tasks/${taskId}`, { method: 'DELETE' });
+            if (response) {
                 alert('Task deleted successfully');
                 loadTasks();
             } else {
-                const errorData = await response.json();
-                alert('Failed to delete task: ' + (errorData.error || 'Unknown error'));
+                alert('Failed to delete task');
             }
         } catch (error) {
             console.error('Error deleting task:', error);
@@ -2993,8 +4355,7 @@ async function updateBotStatus() {
 // Load servers list
 async function loadServers() {
     try {
-        const response = await fetch(apiUrl('/api/servers'));
-        const data = await response.json();
+        const data = await apiCall('/api/servers');
         servers = data.servers || [];
 
         const serverSelect = document.getElementById('server-select');
@@ -3015,6 +4376,7 @@ async function loadServers() {
         }
     } catch (error) {
         console.error('Error loading servers:', error);
+        showNotification('Failed to load servers', 'error');
     }
 }
 
@@ -5231,6 +6593,11 @@ async function saveCommandPermission(commandName) {
         }
     } catch (error) {
         showToast(`Failed to update permissions for /${commandName}`, 'error');
+    }
+}
+
+    } catch (error) {
+        console.error('Error in showToast:', error);
     }
 }
 
