@@ -128,17 +128,7 @@ def setup_logging():
 logger = setup_logging()
 
 # ============= CRITICAL: CORS CONFIGURATION =============
-from flask_cors import CORS
-
-ALLOWED_ORIGINS = [
-    'https://evolvedlotus.github.io',
-    'http://localhost:5500',
-    'http://127.0.0.1:5500',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000'
-]
-
-print(f"🌐 CORS ALLOWED_ORIGINS: {ALLOWED_ORIGINS}")
+from cors_config import setup_cors
 
 # ============================================
 # FLASK APP INITIALIZATION - MUST BE EARLY
@@ -153,26 +143,8 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 # Initialize JWTManager
 jwt = JWTManager(app)
 
-# Enable CORS for ALL routes with credentials
-CORS(app,
-     resources={r"/*": {"origins": ALLOWED_ORIGINS}},
-     supports_credentials=True,
-     allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-     max_age=3600)
-
-@app.before_first_request
-def log_startup_verification():
-    """Log CORS configuration verification on first request"""
-    print("=" * 50)
-    print("🌐 CORS CONFIGURATION VERIFICATION")
-    print("=" * 50)
-    print(f"Flask version: {__import__('flask').__version__}")
-    print(f"Flask-CORS version: {__import__('flask_cors').__version__}")
-    print(f"Allowed origins: {ALLOWED_ORIGINS}")
-    print(f"Railway environment: {bool(os.getenv('RAILWAY_PROJECT_ID'))}")
-    print(f"Port: {os.getenv('PORT', 'Not set')}")
-    print("=" * 50)
+# Setup CORS using the centralized configuration
+app = setup_cors(app)
 
 # Performance monitoring decorator
 def performance_monitor(func):
@@ -860,9 +832,10 @@ def health_check():
             overall_status = "unhealthy"
 
         # CORS verification logging
+        from cors_config import ALLOWED_ORIGINS
         cors_info = {
             "allowed_origins": ALLOWED_ORIGINS,
-            "railway_detected": IS_RAILWAY,
+            "railway_detected": bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_ENVIRONMENT_ID')),
             "port": os.environ.get('PORT', 'Not set'),
             "flask_env": os.environ.get('FLASK_ENV', 'production')
         }
@@ -922,13 +895,14 @@ def test_cors():
 @app.route('/api/debug/cors', methods=['GET', 'OPTIONS'], endpoint='debug_cors')
 def debug_cors():
     """Diagnostic endpoint for CORS debugging"""
+    from cors_config import ALLOWED_ORIGINS
     return jsonify({
         'method': request.method,
         'origin': request.headers.get('Origin'),
         'allowed_origins': ALLOWED_ORIGINS,
         'origin_allowed': request.headers.get('Origin') in ALLOWED_ORIGINS,
         'headers': dict(request.headers),
-        'railway_env': IS_RAILWAY,
+        'railway_env': bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_ENVIRONMENT_ID')),
         'port': os.environ.get('PORT', 'Not set')
     })
 
