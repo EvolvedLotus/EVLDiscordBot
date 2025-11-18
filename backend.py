@@ -55,12 +55,22 @@ if missing:
 try:
     from core import data_manager as data_manager_module
     from core.transaction_manager import TransactionManager
+    from core.auth_manager import AuthManager
+    from core.audit_manager import AuditManager
+    from core.sync_manager import SyncManager, SyncEntity
 except ImportError:
     data_manager_module = None
     TransactionManager = None
+    AuthManager = None
+    AuditManager = None
+    SyncManager = None
+    SyncEntity = None
 
-# Global data manager instance (set by set_data_manager)
+# Global instances (set by set_data_manager)
 data_manager_instance = None
+auth_manager_instance = None
+audit_manager_instance = None
+sync_manager_instance = None
 
 # === LOGGING CONFIGURATION ===
 
@@ -3808,8 +3818,8 @@ def set_bot_instance(bot_instance):
     logger.info("Bot instance set in backend")
 
 def set_data_manager(dm_instance):
-    """Set the data manager instance"""
-    global data_manager_instance
+    """Set the data manager instance and initialize enhanced managers"""
+    global data_manager_instance, auth_manager_instance, audit_manager_instance, sync_manager_instance
     data_manager_instance = dm_instance
     print(f"DEBUG: set_data_manager called with {dm_instance}")
 
@@ -3827,10 +3837,53 @@ def set_data_manager(dm_instance):
         logger.error(f"❌ Database connection test failed: {e}")
         sys.exit(1)
 
+    # Initialize enhanced managers
+    try:
+        # Initialize Auth Manager
+        jwt_secret = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
+        auth_manager_instance = AuthManager(data_manager_instance, jwt_secret)
+        logger.info("✅ Auth Manager initialized")
+
+        # Initialize Audit Manager
+        audit_manager_instance = AuditManager(data_manager_instance)
+        logger.info("✅ Audit Manager initialized")
+
+        # Initialize Sync Manager
+        sync_manager_instance = SyncManager(data_manager_instance, audit_manager_instance, sse_manager)
+        logger.info("✅ Sync Manager initialized")
+
+        # Register sync manager event handlers
+        sync_manager_instance.register_event_handler('sync_completed', handle_sync_event)
+
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize enhanced managers: {e}")
+        sys.exit(1)
+
     # Register SSE broadcaster
     if hasattr(data_manager_instance, 'register_listener'):
         data_manager_instance.register_listener(broadcast_update)
         logger.info("SSE broadcaster registered with data manager")
+
+def handle_sync_event(event_data):
+    """Handle sync completion events"""
+    try:
+        # Log sync completion
+        audit_manager_instance.log_system_event(
+            'sync_event',
+            event_data.get('guild_id'),
+            {
+                'entity_type': event_data.get('entity_type'),
+                'entity_id': event_data.get('entity_id'),
+                'source': event_data.get('source'),
+                'action': 'sync_completed'
+            }
+        )
+
+        # Broadcast to SSE clients
+        sse_manager.broadcast_event('sync_completed', event_data)
+
+    except Exception as e:
+        logger.error(f"Error handling sync event: {e}")
 
 def run_backend():
     """Run the Flask backend server"""
