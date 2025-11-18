@@ -3,14 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Redirecting to Discord Bot CMS...</title>
-    <script>
-        // Redirect to the main dashboard
-        window.location.href = '/index.html';
-    </script>
+    <title>Discord Economy Bot - Admin Login</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./config.js"></script>
 </head>
 <body>
-    <p>Redirecting to the Discord Bot CMS dashboard...</p>
-    <p>If you are not redirected automatically, <a href="/index.html">click here</a>.</p>
+    <!-- Login Screen -->
+    <div id="login-screen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>🤖 Discord Economy Bot</h1>
+                <p>Admin Dashboard Login</p>
+            </div>
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required placeholder="Enter username">
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="Enter password">
+                </div>
+                <button type="submit" class="btn-primary btn-large">Login</button>
+            </form>
+            <div id="login-error" class="login-error" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Error and Success Notifications -->
+    <div id="error-notification" class="notification error"></div>
+    <div id="success-notification" class="notification success"></div>
+
+    <script>
+        // API Configuration - Uses environment variable from Netlify
+        const API_BASE_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:3000'  // Local development
+            : (window.API_BASE_URL || process.env.API_BASE_URL || 'https://your-railway-app.railway.app'); // Production
+
+        // Helper function to build API URLs
+        function apiUrl(endpoint) {
+            return `${API_BASE_URL}${endpoint}`;
+        }
+
+        // Error handling functions
+        function showError(message, details = null) {
+            const errorDiv = document.getElementById('error-notification');
+            if (errorDiv) {
+                errorDiv.textContent = message;
+                errorDiv.style.display = 'block';
+                setTimeout(() => {
+                    errorDiv.style.display = 'none';
+                }, 5000);
+            }
+
+            console.error('Error:', message, details);
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('success-notification');
+            if (successDiv) {
+                successDiv.textContent = message;
+                successDiv.style.display = 'block';
+                setTimeout(() => {
+                    successDiv.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        // Cookie utility functions
+        function setCookie(name, value, hours) {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + hours * 60 * 60 * 1000);
+            document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/;SameSite=Strict;Secure`;
+        }
+
+        // Login functionality
+        document.getElementById('login-form').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+
+            if (!username || !password) {
+                showLoginError('Please enter both username and password');
+                return;
+            }
+
+            try {
+                showLoginError(''); // Clear any previous errors
+
+                const response = await fetch(apiUrl('/api/auth/login'), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.user) {
+                    // Set a simple session cookie to indicate authentication
+                    setCookie('session_id', 'authenticated', 1); // 1 hour
+
+                    showSuccess('Login successful! Redirecting to dashboard...');
+
+                    // Redirect to main dashboard after a short delay
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 1000);
+                } else {
+                    showLoginError(data.error || 'Login failed');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showLoginError('Network error. Please try again.');
+            }
+        });
+
+        function showLoginError(message) {
+            const errorElement = document.getElementById('login-error');
+            if (message) {
+                errorElement.textContent = message;
+                errorElement.style.display = 'block';
+            } else {
+                errorElement.style.display = 'none';
+            }
+        }
+    </script>
 </body>
 </html>
