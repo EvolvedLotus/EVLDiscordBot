@@ -186,6 +186,10 @@ if allowed_frontend_domains:
                 domain = f"https://{domain}"
             allowed_origins.append(domain)
 
+# TEMPORARY: Hardcode GitHub Pages domain for testing
+if 'https://evolvedlotus.github.io' not in allowed_origins:
+    allowed_origins.append('https://evolvedlotus.github.io')
+
 # For local development, allow localhost if no production domains configured
 is_production = os.getenv('RAILWAY_ENVIRONMENT_ID') or os.getenv('RAILWAY_PROJECT_ID') or os.getenv('PRODUCTION')
 if not is_production and not allowed_origins:
