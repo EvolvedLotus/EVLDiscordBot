@@ -3,7 +3,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 import json
 import os
-import time as time_module
+import time
 import queue
 import asyncio
 import threading
@@ -17,9 +17,6 @@ import secrets
 import traceback
 import sys
 import functools
-
-# System monitoring
-import psutil
 
 # Discord imports for message creation
 import discord
@@ -144,18 +141,6 @@ if railway_domain:
     railway_url = f"https://{railway_domain}"
     allowed_origins.append(railway_url)
 
-# Add Railway static URL if available (for Railway-hosted frontend)
-railway_static_url = os.getenv('RAILWAY_STATIC_URL')
-if railway_static_url:
-    try:
-        from urllib.parse import urlparse
-        parsed = urlparse(railway_static_url)
-        railway_static_domain = f"{parsed.scheme}://{parsed.netloc}"
-        if railway_static_domain not in allowed_origins:
-            allowed_origins.append(railway_static_domain)
-    except:
-        pass
-
 # Add Netlify domain if API_BASE_URL is set (extract domain)
 api_base_url = os.getenv('API_BASE_URL')
 if api_base_url:
@@ -191,36 +176,17 @@ if allowed_frontend_domains:
                 domain = f"https://{domain}"
             allowed_origins.append(domain)
 
-# For Railway deployments, if no specific origins configured, allow Railway domains
-is_railway = os.getenv('RAILWAY_ENVIRONMENT_ID') or os.getenv('RAILWAY_PROJECT_ID')
-if is_railway and not allowed_origins:
-    # Allow Railway domains by default for Railway deployments
-    railway_project_id = os.getenv('RAILWAY_PROJECT_ID')
-    if railway_project_id:
-        # Allow common Railway domain patterns
-        allowed_origins.extend([
-            f"https://{railway_project_id}.up.railway.app",
-            f"https://railway.app",
-            "https://railway.app"
-        ])
-    # Also allow localhost for development on Railway
-    allowed_origins.extend(['http://localhost:3000', 'http://localhost:5000'])
-
 # For local development, allow localhost if no production domains configured
-is_production = is_railway or os.getenv('PRODUCTION')
+is_production = os.getenv('RAILWAY_ENVIRONMENT_ID') or os.getenv('RAILWAY_PROJECT_ID') or os.getenv('PRODUCTION')
 if not is_production and not allowed_origins:
     # Only allow localhost for development
     allowed_origins = ['http://localhost:3000', 'http://localhost:5000', 'http://127.0.0.1:3000', 'http://127.0.0.1:5000']
 
-# If still no origins configured, log warning but allow Railway domains for Railway deployments
+# If still no origins configured, log warning but don't allow wildcard
 if not allowed_origins:
-    if is_railway:
-        logger.info("🚂 Railway deployment detected - allowing Railway domains for CORS")
-        allowed_origins = ["https://railway.app", "https://*.up.railway.app"]
-    else:
-        logger.warning("⚠️  No CORS origins configured! Set ALLOWED_FRONTEND_DOMAINS environment variable")
-        # Don't allow wildcard - require explicit configuration
-        allowed_origins = []
+    logger.warning("⚠️  No CORS origins configured! Set ALLOWED_FRONTEND_DOMAINS environment variable")
+    # Don't allow wildcard - require explicit configuration
+    allowed_origins = []
 
 CORS(app, resources={
     r"/api/*": {
@@ -244,10 +210,10 @@ def performance_monitor(func):
     """Decorator to monitor function performance"""
     @functools.wraps(func)
     def performance_wrapper(*args, **kwargs):
-        start_time = time_module.time()
+        start_time = time.time()
         try:
             result = func(*args, **kwargs)
-            duration = (time_module.time() - start_time) * 1000  # Convert to milliseconds
+            duration = (time.time() - start_time) * 1000  # Convert to milliseconds
             logger.info(
                 f"Function {func.__name__} completed successfully",
                 extra={
@@ -258,7 +224,7 @@ def performance_monitor(func):
             )
             return result
         except Exception as e:
-            duration = (time_module.time() - start_time) * 1000
+            duration = (time.time() - start_time) * 1000
             logger.error(
                 f"Function {func.__name__} failed: {str(e)}",
                 extra={
@@ -275,8 +241,8 @@ def performance_monitor(func):
 @app.before_request
 def log_request_info():
     """Log incoming requests"""
-    g.start_time = time_module.time()
-    g.request_id = f"req_{int(time_module.time() * 1000)}_{hash(request.remote_addr) % 10000}"
+    g.start_time = time.time()
+    g.request_id = f"req_{int(time.time() * 1000)}_{hash(request.remote_addr) % 10000}"
 
     # Skip logging for health checks and SSE
     if request.path in ['/api/health', '/api/stream']:
@@ -296,7 +262,7 @@ def log_request_info():
 @app.after_request
 def log_response_info(response):
     """Log response information"""
-    duration = (time_module.time() - getattr(g, 'start_time', time_module.time())) * 1000
+    duration = (time.time() - getattr(g, 'start_time', time.time())) * 1000
 
     # Skip logging for health checks and SSE
     if request.path in ['/api/health', '/api/stream']:
@@ -315,542 +281,6 @@ def log_response_info(response):
     )
 
     return response
-
-# Import bot instance for user data access (lazy import to avoid startup issues)
-bot = None
-bot_thread = None
-bot_ready = False
-
-# ============= ROLE MANAGEMENT =============
-
-@app.route('/api/<server_id>/roles', methods=['GET'])
-@session_required
-def get_guild_roles(server_id):
-    """Get all roles for a guild with sync from Discord"""
-    try:
-        bot = get_bot()
-        if not bot:
-            return jsonify({'error': 'Bot not ready'}), 503
-
-        guild = bot.get_guild(int(server_id))
-        if not guild:
-            return jsonify({'error': 'Guild not found'}), 404
-
-        # Sync roles from Discord to database
-        roles_data = []
-        for role in guild.roles:
-            role_data = {
-                'role_id': str(role.id),
-                'role_name': role.name,
-                'role_color': str(role.color),
-                'role_position': role.position,
-                'is_managed': role.managed,
-                'permissions': role.permissions.value
-            }
-            roles_data.append(role_data)
-
-            # Upsert to database
-            data_manager.supabase.table('guild_roles').upsert({
-                'guild_id': server_id,
-                **role_data,
-                'last_synced': datetime.now(timezone.utc).isoformat()
-            }, on_conflict='guild_id,role_id').execute()
-
-        return jsonify({
-            'success': True,
-            'roles': roles_data
-        })
-    except Exception as e:
-        logger.error(f"Error fetching roles: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/<server_id>/users/<user_id>/roles', methods=['GET', 'PUT'])
-@session_required
-def manage_user_roles(server_id, user_id):
-    """Get or update user roles"""
-    try:
-        bot = get_bot()
-        if not bot:
-            return jsonify({'error': 'Bot not ready'}), 503
-
-        guild = bot.get_guild(int(server_id))
-        if not guild:
-            return jsonify({'error': 'Guild not found'}), 404
-
-        member = guild.get_member(int(user_id))
-        if not member:
-            return jsonify({'error': 'Member not found'}), 404
-
-        if request.method == 'GET':
-            # Return current roles
-            roles = [{'id': str(r.id), 'name': r.name, 'color': str(r.color)}
-                     for r in member.roles if r.name != "@everyone"]
-            return jsonify({'success': True, 'roles': roles})
-
-        elif request.method == 'PUT':
-            # Update roles
-            data = request.get_json()
-            role_ids_to_add = data.get('add_roles', [])
-            role_ids_to_remove = data.get('remove_roles', [])
-            moderator_id = session.get('user', {}).get('user_id')
-
-            # Add roles
-            for role_id in role_ids_to_add:
-                role = guild.get_role(int(role_id))
-                if role and role not in member.roles:
-                    asyncio.run_coroutine_threadsafe(
-                        member.add_roles(role, reason=f"Modified by CMS admin"),
-                        bot.loop
-                    ).result(timeout=10)
-
-                    # Log to database
-                    data_manager.supabase.table('user_roles').upsert({
-                        'guild_id': server_id,
-                        'user_id': user_id,
-                        'role_id': role_id,
-                        'assigned_by': moderator_id
-                    }, on_conflict='guild_id,user_id,role_id').execute()
-
-            # Remove roles
-            for role_id in role_ids_to_remove:
-                role = guild.get_role(int(role_id))
-                if role and role in member.roles:
-                    asyncio.run_coroutine_threadsafe(
-                        member.remove_roles(role, reason=f"Modified by CMS admin"),
-                        bot.loop
-                    ).result(timeout=10)
-
-                    # Remove from database
-                    data_manager.supabase.table('user_roles').delete().match({
-                        'guild_id': server_id,
-                        'user_id': user_id,
-                        'role_id': role_id
-                    }).execute()
-
-            # Broadcast update
-            broadcast_update('user.roles.updated', {
-                'guild_id': server_id,
-                'user_id': user_id,
-                'added': role_ids_to_add,
-                'removed': role_ids_to_remove
-            })
-
-            return jsonify({'success': True, 'message': 'Roles updated'})
-
-    except Exception as e:
-        logger.error(f"Error managing user roles: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# ============= COMMAND PERMISSIONS =============
-
-@app.route('/api/<server_id>/permissions/commands', methods=['GET'])
-@session_required
-def get_command_permissions(server_id):
-    """Get all command permissions for guild"""
-    try:
-        result = data_manager.supabase.table('command_permissions').select('*').eq('guild_id', server_id).execute()
-        return jsonify({'success': True, 'permissions': result.data})
-    except Exception as e:
-        logger.error(f"Error fetching command permissions: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/<server_id>/permissions/commands/<command_name>', methods=['PUT'])
-@session_required
-def update_command_permissions(server_id, command_name):
-    """Update permissions for specific command"""
-    try:
-        data = request.get_json()
-
-        permission_data = {
-            'guild_id': server_id,
-            'command_name': command_name,
-            'allowed_roles': data.get('allowed_roles', []),
-            'denied_roles': data.get('denied_roles', []),
-            'allowed_users': data.get('allowed_users', []),
-            'denied_users': data.get('denied_users', []),
-            'is_enabled': data.get('is_enabled', True),
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }
-
-        data_manager.supabase.table('command_permissions').upsert(
-            permission_data,
-            on_conflict='guild_id,command_name'
-        ).execute()
-
-        # Invalidate cache
-        data_manager.invalidate_cache(server_id, 'command_permissions')
-
-        broadcast_update('command.permissions.updated', {
-            'guild_id': server_id,
-            'command_name': command_name
-        })
-
-        return jsonify({'success': True, 'message': 'Permissions updated'})
-    except Exception as e:
-        logger.error(f"Error updating command permissions: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# ============= MODERATION ACTIONS =============
-
-@app.route('/api/<server_id>/moderation/kick', methods=['POST'])
-@session_required
-def kick_user(server_id):
-    """Kick user from guild"""
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        reason = data.get('reason', 'No reason provided')
-        moderator_id = session.get('user', {}).get('user_id')
-
-        bot = get_bot()
-        if not bot:
-            return jsonify({'error': 'Bot not ready'}), 503
-
-        guild = bot.get_guild(int(server_id))
-        if not guild:
-            return jsonify({'error': 'Guild not found'}), 404
-
-        member = guild.get_member(int(user_id))
-        if not member:
-            return jsonify({'error': 'Member not found'}), 404
-
-        # Execute kick
-        asyncio.run_coroutine_threadsafe(
-            member.kick(reason=f"[CMS] {reason}"),
-            bot.loop
-        ).result(timeout=10)
-
-        # Log action
-        action_id = f"kick_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
-        data_manager.supabase.table('moderation_actions').insert({
-            'action_id': action_id,
-            'guild_id': server_id,
-            'user_id': user_id,
-            'action_type': 'kick',
-            'reason': reason,
-            'moderator_id': moderator_id
-        }).execute()
-
-        broadcast_update('moderation.kick', {
-            'guild_id': server_id,
-            'user_id': user_id,
-            'moderator_id': moderator_id,
-            'reason': reason
-        })
-
-        return jsonify({'success': True, 'message': 'User kicked'})
-    except Exception as e:
-        logger.error(f"Error kicking user: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/<server_id>/moderation/ban', methods=['POST'])
-@session_required
-def ban_user(server_id):
-    """Ban user from guild"""
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        reason = data.get('reason', 'No reason provided')
-        delete_message_days = data.get('delete_message_days', 0)
-        moderator_id = session.get('user', {}).get('user_id')
-
-        bot = get_bot()
-        if not bot:
-            return jsonify({'error': 'Bot not ready'}), 503
-
-        guild = bot.get_guild(int(server_id))
-        if not guild:
-            return jsonify({'error': 'Guild not found'}), 404
-
-        # Execute ban
-        async def _ban_user():
-            user = await bot.fetch_user(int(user_id))
-            await guild.ban(user, reason=f"[CMS] {reason}", delete_message_days=delete_message_days)
-
-        asyncio.run_coroutine_threadsafe(_ban_user(), bot.loop).result(timeout=10)
-
-        # Log action
-        action_id = f"ban_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
-        data_manager.supabase.table('moderation_actions').insert({
-            'action_id': action_id,
-            'guild_id': server_id,
-            'user_id': user_id,
-            'action_type': 'ban',
-            'reason': reason,
-            'moderator_id': moderator_id
-        }).execute()
-
-        broadcast_update('moderation.ban', {
-            'guild_id': server_id,
-            'user_id': user_id,
-            'moderator_id': moderator_id,
-            'reason': reason
-        })
-
-        return jsonify({'success': True, 'message': 'User banned'})
-    except Exception as e:
-        logger.error(f"Error banning user: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/<server_id>/moderation/timeout', methods=['POST'])
-@session_required
-def timeout_user(server_id):
-    """Timeout user (mute) for specified duration"""
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        duration_minutes = data.get('duration_minutes', 60)
-        reason = data.get('reason', 'No reason provided')
-        moderator_id = session.get('user', {}).get('user_id')
-
-        bot = get_bot()
-        if not bot:
-            return jsonify({'error': 'Bot not ready'}), 503
-
-        guild = bot.get_guild(int(server_id))
-        if not guild:
-            return jsonify({'error': 'Guild not found'}), 404
-
-        member = guild.get_member(int(user_id))
-        if not member:
-            return jsonify({'error': 'Member not found'}), 404
-
-        # Calculate timeout duration
-        until = datetime.now(timezone.utc) + timedelta(minutes=duration_minutes)
-
-        # Execute timeout
-        asyncio.run_coroutine_threadsafe(
-            member.timeout(until, reason=f"[CMS] {reason}"),
-            bot.loop
-        ).result(timeout=10)
-
-        # Log action
-        action_id = f"timeout_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
-        data_manager.supabase.table('moderation_actions').insert({
-            'action_id': action_id,
-            'guild_id': server_id,
-            'user_id': user_id,
-            'action_type': 'timeout',
-            'reason': reason,
-            'duration_seconds': duration_minutes * 60,
-            'moderator_id': moderator_id,
-            'expires_at': until.isoformat()
-        }).execute()
-
-        broadcast_update('moderation.timeout', {
-            'guild_id': server_id,
-            'user_id': user_id,
-            'moderator_id': moderator_id,
-            'duration_minutes': duration_minutes,
-            'reason': reason
-        })
-
-        return jsonify({'success': True, 'message': f'User timed out for {duration_minutes} minutes'})
-    except Exception as e:
-        logger.error(f"Error timing out user: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# ============= CHANNEL CONFIGURATION =============
-
-@app.route('/api/<server_id>/channels', methods=['GET'])
-@session_required
-def get_guild_channels(server_id):
-    """Get all text channels in guild - ALREADY EXISTS but ensure it works"""
-    try:
-        bot = get_bot()
-        if not bot:
-            return jsonify({'error': 'Bot not ready'}), 503
-
-        guild = bot.get_guild(int(server_id))
-        if not guild:
-            return jsonify({'error': 'Guild not found'}), 404
-
-        channels = [
-            {
-                'id': str(channel.id),
-                'name': channel.name,
-                'position': channel.position,
-                'category': channel.category.name if channel.category else None
-            }
-            for channel in guild.text_channels
-        ]
-
-        return jsonify({'success': True, 'channels': channels})
-    except Exception as e:
-        logger.error(f"Error fetching channels: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/<server_id>/config/channels', methods=['PUT'])
-@session_required
-def update_channel_config(server_id):
-    """Update channel assignments (task, shop, welcome, logs)"""
-    try:
-        data = request.get_json()
-
-        update_data = {}
-        if 'task_channel_id' in data:
-            update_data['task_channel_id'] = data['task_channel_id']
-        if 'shop_channel_id' in data:
-            update_data['shop_channel_id'] = data['shop_channel_id']
-        if 'welcome_channel' in data:
-            update_data['welcome_channel'] = data['welcome_channel']
-        if 'logs_channel' in data:
-            update_data['logs_channel'] = data['logs_channel']
-        if 'log_channel' in data:  # Legacy support
-            update_data['log_channel'] = data['log_channel']
-
-        if not update_data:
-            return jsonify({'error': 'No channels provided'}), 400
-
-        update_data['last_channel_sync'] = datetime.now(timezone.utc).isoformat()
-        update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
-
-        data_manager.supabase.table('guilds').update(update_data).eq('guild_id', server_id).execute()
-
-        # Invalidate cache
-        data_manager.invalidate_cache(server_id, 'config')
-
-        broadcast_update('guild.channels.updated', {
-            'guild_id': server_id,
-            'channels': update_data
-        })
-
-        return jsonify({'success': True, 'message': 'Channel configuration updated', 'data': update_data})
-    except Exception as e:
-        logger.error(f"Error updating channel config: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-# ============= MONEY MANAGEMENT =============
-
-@app.route('/api/<server_id>/users/<user_id>/balance/add', methods=['POST'])
-@session_required
-def add_user_balance(server_id, user_id):
-    """Add money to user balance"""
-    try:
-        data = request.get_json()
-        amount = data.get('amount')
-        reason = data.get('reason', 'Added by admin')
-
-        if not amount or amount <= 0:
-            return jsonify({'error': 'Invalid amount'}), 400
-
-        # Get current balance
-        user_result = data_manager.supabase.table('users').select('balance').match({
-            'guild_id': server_id,
-            'user_id': user_id
-        }).execute()
-
-        if not user_result.data:
-            return jsonify({'error': 'User not found'}), 404
-
-        current_balance = user_result.data[0]['balance']
-        new_balance = current_balance + amount
-
-        # Update balance
-        data_manager.supabase.table('users').update({
-            'balance': new_balance,
-            'total_earned': data_manager.supabase.rpc('increment', {'row_id': user_result.data[0]['id'], 'x': amount}),
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }).match({
-            'guild_id': server_id,
-            'user_id': user_id
-        }).execute()
-
-        # Log transaction
-        transaction_id = f"admin_add_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
-        data_manager.supabase.table('transactions').insert({
-            'transaction_id': transaction_id,
-            'user_id': user_id,
-            'guild_id': server_id,
-            'amount': amount,
-            'balance_before': current_balance,
-            'balance_after': new_balance,
-            'transaction_type': 'admin_add',
-            'description': reason
-        }).execute()
-
-        broadcast_update('user.balance.updated', {
-            'guild_id': server_id,
-            'user_id': user_id,
-            'balance': new_balance
-        })
-
-        return jsonify({'success': True, 'new_balance': new_balance})
-    except Exception as e:
-        logger.error(f"Error adding balance: {e}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/api/<server_id>/users/<user_id>/balance/remove', methods=['POST'])
-@session_required
-def remove_user_balance(server_id, user_id):
-    """Remove money from user balance"""
-    try:
-        data = request.get_json()
-        amount = data.get('amount')
-        reason = data.get('reason', 'Removed by admin')
-
-        if not amount or amount <= 0:
-            return jsonify({'error': 'Invalid amount'}), 400
-
-        # Get current balance
-        user_result = data_manager.supabase.table('users').select('balance').match({
-            'guild_id': server_id,
-            'user_id': user_id
-        }).execute()
-
-        if not user_result.data:
-            return jsonify({'error': 'User not found'}), 404
-
-        current_balance = user_result.data[0]['balance']
-
-        if current_balance < amount:
-            return jsonify({'error': 'Insufficient balance'}), 400
-
-        new_balance = current_balance - amount
-
-        # Update balance
-        data_manager.supabase.table('users').update({
-            'balance': new_balance,
-            'total_spent': data_manager.supabase.rpc('increment', {'row_id': user_result.data[0]['id'], 'x': amount}),
-            'updated_at': datetime.now(timezone.utc).isoformat()
-        }).match({
-            'guild_id': server_id,
-            'user_id': user_id
-        }).execute()
-
-        # Log transaction
-        transaction_id = f"admin_remove_{server_id}_{user_id}_{int(datetime.now().timestamp())}"
-        data_manager.supabase.table('transactions').insert({
-            'transaction_id': transaction_id,
-            'user_id': user_id,
-            'guild_id': server_id,
-            'amount': -amount,
-            'balance_before': current_balance,
-            'balance_after': new_balance,
-            'transaction_type': 'admin_remove',
-            'description': reason
-        }).execute()
-
-        broadcast_update('user.balance.updated', {
-            'guild_id': server_id,
-            'user_id': user_id,
-            'balance': new_balance
-        })
-
-        return jsonify({'success': True, 'new_balance': new_balance})
-    except Exception as e:
-        logger.error(f"Error removing balance: {e}")
-        return jsonify({'error': str(e)}), 500
 
 # Import bot instance for user data access (lazy import to avoid startup issues)
 bot = None
@@ -889,7 +319,7 @@ def start_bot_thread():
     timeout = 30  # 30 second timeout
     elapsed = 0
     while not bot_ready and elapsed < timeout:
-        time_module.sleep(0.5)
+        time.sleep(0.5)
         elapsed += 0.5
         if get_bot() and hasattr(get_bot(), 'is_ready') and get_bot().is_ready():
             bot_ready = True
@@ -917,33 +347,13 @@ TASKS_FILE = os.path.join(DATA_DIR, 'tasks.json')
 SESSIONS = {}  # session_id -> user_data
 SESSION_TIMEOUT = 3600  # 1 hour in seconds
 
-# Session-based authentication middleware decorator
-def session_required(f):
-    """Decorator to require session-based authentication"""
-    @functools.wraps(f)
-    def session_wrapper(*args, **kwargs):
-        session_id = request.cookies.get('session_id')
-        if not session_id:
-            return jsonify({'error': 'Authentication required'}), 401
-
-        session_data = get_session(session_id)
-        if not session_data:
-            return jsonify({'error': 'Session expired or invalid'}), 401
-
-        # Add user to request context
-        request.user = session_data['user']
-        # Also make session available in function scope for backward compatibility
-        kwargs['session'] = session_data
-        return f(*args, **kwargs)
-    return session_wrapper
-
 def create_session(user_data: dict):
     """Create a new session and return session ID"""
     session_id = secrets.token_hex(32)
     SESSIONS[session_id] = {
         'user': user_data,
-        'created_at': time_module.time(),
-        'expires_at': time_module.time() + SESSION_TIMEOUT
+        'created_at': time.time(),
+        'expires_at': time.time() + SESSION_TIMEOUT
     }
     return session_id
 
@@ -953,7 +363,7 @@ def get_session(session_id: str):
         return None
 
     session = SESSIONS[session_id]
-    if time_module.time() > session['expires_at']:
+    if time.time() > session['expires_at']:
         # Session expired, remove it
         del SESSIONS[session_id]
         return None
@@ -978,6 +388,24 @@ def authenticate_user(username: str, password: str):
     if username == admin_username and hashed_password == stored_hash:
         return {"username": username, "role": "admin"}
     return None
+
+# Session-based authentication middleware decorator
+def session_required(f):
+    """Decorator to require session-based authentication"""
+    @functools.wraps(f)
+    def session_wrapper(*args, **kwargs):
+        session_id = request.cookies.get('session_id')
+        if not session_id:
+            return jsonify({'error': 'Authentication required'}), 401
+
+        session = get_session(session_id)
+        if not session:
+            return jsonify({'error': 'Session expired or invalid'}), 401
+
+        # Add user to request context
+        request.user = session['user']
+        return f(*args, **kwargs)
+    return session_wrapper
 
 # Ensure data directory exists
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -1373,6 +801,9 @@ def validate_session():
 def health_check():
     """Comprehensive health check endpoint for Railway deployment monitoring"""
     try:
+        import psutil
+        import time
+
         # For Railway deployment, return healthy immediately during startup
         # Railway sets RAILWAY_PROJECT_ID, RAILWAY_ENVIRONMENT_ID, etc.
         railway_env = bool(os.getenv('RAILWAY_PROJECT_ID') or os.getenv('RAILWAY_ENVIRONMENT_ID'))
@@ -1380,7 +811,7 @@ def health_check():
             # Simple health check for Railway - just confirm Flask is running
             return jsonify({
                 "status": "healthy",
-                "timestamp": time_module.time(),
+                "timestamp": time.time(),
                 "version": "2.0",
                 "environment": {
                     "railway_env": True,
@@ -1422,7 +853,7 @@ def health_check():
             "memory_used_mb": psutil.virtual_memory().used / 1024 / 1024,
             "memory_total_mb": psutil.virtual_memory().total / 1024 / 1024,
             "disk_percent": psutil.disk_usage('/').percent,
-            "uptime_seconds": time_module.time() - psutil.boot_time()
+            "uptime_seconds": time.time() - psutil.boot_time()
         }
 
         # Check application performance
@@ -1461,7 +892,7 @@ def health_check():
 
         health_data = {
             "status": overall_status,
-            "timestamp": time_module.time(),
+            "timestamp": time.time(),
             "version": "2.0",
             "services": {
                 "bot": "healthy" if services_healthy["bot"] else "unhealthy",
@@ -1489,7 +920,7 @@ def health_check():
         return jsonify({
             "status": "error",
             "error": str(e),
-            "timestamp": time_module.time(),
+            "timestamp": time.time(),
             "emergency_contact": "Check application logs for details"
         }), 500
 
@@ -1757,7 +1188,7 @@ def create_shop_item(server_id):
             return jsonify({'error': f'Failed to validate server/channel: {str(e)}'}), 500
 
         # Generate unique item ID
-        item_id = f"item_{int(time_module.time() * 1000)}"
+        item_id = f"item_{int(time.time() * 1000)}"
 
         # Prepare item data
         item_data = {
@@ -2296,12 +1727,12 @@ def get_users(server_id):
         })
 
 # Rate limiting for balance modifications
-balance_modification_limits = defaultdict(lambda: {'count': 0, 'reset_time': time_module.time() + 60})
+balance_modification_limits = defaultdict(lambda: {'count': 0, 'reset_time': time.time() + 60})
 
 def check_balance_modification_rate_limit(server_id, user_id):
     """Check rate limit for balance modifications (max 5 per minute per server)"""
     key = f"{server_id}_{user_id}"
-    current_time = time_module.time()
+    current_time = time.time()
 
     # Reset counter if time window passed
     if current_time > balance_modification_limits[key]['reset_time']:
@@ -2422,7 +1853,7 @@ def modify_user_balance(server_id, user_id):
 
         # Validate transaction data
         transaction_data = {
-            'id': f"txn_{int(time_module.time() * 1000)}",
+            'id': f"txn_{int(time.time() * 1000)}",
             'user_id': user_id_str,
             'amount': actual_change,
             'balance_before': balance_before,
@@ -3776,127 +3207,6 @@ def reactivate_user(server_id, user_id):
         logger.error(f"Error reactivating user: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/<server_id>/users/inactive', methods=['GET'], endpoint='get_inactive_users_list')
-@session_required
-def get_inactive_users_list(server_id):
-    """Get list of inactive users with optional days filter"""
-    try:
-        bot_instance = get_bot()
-        if not bot_instance:
-            return jsonify({'error': 'Bot not ready'}), 503
-
-        guild = bot_instance.get_guild(int(server_id))
-        if not guild:
-            return jsonify({'error': 'Server not found'}), 404
-
-        # Get inactivity threshold from guild config
-        config_result = data_manager_instance.supabase.table('guilds').select('inactivity_days').eq('guild_id', server_id).execute()
-        inactivity_days = config_result.data[0].get('inactivity_days', 30) if config_result.data else 30
-
-        # Get inactive users from database
-        result = data_manager_instance.supabase.table('users').select(
-            'user_id, balance, total_earned, total_spent, updated_at'
-        ).eq('guild_id', server_id).eq('is_active', False).execute()
-
-        inactive_users = []
-        for user_data in result.data:
-            try:
-                member = guild.get_member(int(user_data['user_id']))
-                inactive_users.append({
-                    'user_id': user_data['user_id'],
-                    'username': member.name if member else f"User {user_data['user_id']}",
-                    'balance': user_data['balance'],
-                    'total_earned': user_data['total_earned'],
-                    'total_spent': user_data['total_spent'],
-                    'last_activity': user_data['updated_at']
-                })
-            except Exception as e:
-                logger.error(f"Error fetching member {user_data['user_id']}: {e}")
-                continue
-
-        return jsonify({
-            'inactive_users': inactive_users,
-            'threshold_days': inactivity_days,
-            'count': len(inactive_users)
-        })
-
-    except Exception as e:
-        logger.error(f"Error fetching inactive users: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/<server_id>/users/reactivate/<user_id>', methods=['POST'], endpoint='reactivate_user_db')
-@session_required
-def reactivate_user_db(server_id, user_id):
-    """Reactivate an inactive user"""
-    try:
-        # Update user to active status
-        result = data_manager_instance.supabase.table('users').update({
-            'is_active': True,
-            'updated_at': datetime.utcnow().isoformat()
-        }).eq('guild_id', server_id).eq('user_id', user_id).execute()
-
-        if not result.data:
-            return jsonify({'error': 'User not found'}), 404
-
-        # Broadcast SSE update
-        sse_manager.broadcast_event('user.reactivated', {
-            'guild_id': server_id,
-            'user_id': user_id
-        })
-
-        return jsonify({'success': True, 'message': 'User reactivated'})
-
-    except Exception as e:
-        logger.error(f"Error reactivating user: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/<server_id>/config', methods=['PUT'], endpoint='update_server_config_db')
-@session_required
-def update_server_config_db(server_id):
-    """Update server configuration including inactivity_days"""
-    try:
-        data = request.get_json()
-
-        # Build update dict with only provided fields
-        updates = {}
-        if 'inactivity_days' in data:
-            inactivity_days = int(data['inactivity_days'])
-            if inactivity_days < 1:
-                return jsonify({'error': 'inactivity_days must be positive'}), 400
-            updates['inactivity_days'] = inactivity_days
-
-        # Add other config fields as needed
-        if 'currency_name' in data:
-            updates['currency_name'] = data['currency_name']
-        if 'currency_symbol' in data:
-            updates['currency_symbol'] = data['currency_symbol']
-
-        if not updates:
-            return jsonify({'error': 'No valid fields to update'}), 400
-
-        updates['updated_at'] = datetime.utcnow().isoformat()
-
-        # Update database
-        result = data_manager_instance.supabase.table('guilds').update(updates).eq('guild_id', server_id).execute()
-
-        if not result.data:
-            return jsonify({'error': 'Server not found'}), 404
-
-        # Invalidate cache
-        data_manager_instance.cache_manager.invalidate_cache(server_id, 'config')
-
-        # Broadcast update
-        sse_manager.broadcast_event('config.updated', {
-            'guild_id': server_id,
-            'updates': updates
-        })
-
-        return jsonify({'success': True, 'config': result.data[0]})
-
-    except Exception as e:
-        logger.error(f"Error updating config: {e}")
-        return jsonify({'error': str(e)}), 500
-
 # Announcement API endpoints
 @app.route('/api/<server_id>/announcements', methods=['GET'], endpoint='get_announcements')
 def get_announcements(server_id):
@@ -4262,7 +3572,7 @@ class SSEManager:
         """Start timer for batch processing"""
         def process_batches():
             while True:
-                time_module.sleep(self.BATCH_INTERVAL)
+                time.sleep(self.BATCH_INTERVAL)
                 self._process_event_batches()
 
         self.batch_timer = threading.Thread(target=process_batches, daemon=True)
@@ -4272,7 +3582,7 @@ class SSEManager:
         """Start timer for sending keepalive messages to SSE clients"""
         def send_keepalive():
             while True:
-                time_module.sleep(self.KEEPALIVE_INTERVAL)
+                time.sleep(self.KEEPALIVE_INTERVAL)
                 self._send_keepalive_messages()
 
         self.keepalive_timer = threading.Thread(target=send_keepalive, daemon=True)
@@ -4287,7 +3597,7 @@ class SSEManager:
                 # Send keepalive ping
                 keepalive_event = {
                     'type': 'keepalive',
-                    'timestamp': time_module.time(),
+                    'timestamp': time.time(),
                     'message': 'Connection active'
                 }
                 self.clients[client_id].put(keepalive_event, timeout=1)  # Non-blocking with timeout
@@ -4340,7 +3650,7 @@ class SSEManager:
                                         'event_type': event_type,
                                         'guild_id': guild_id,
                                         'events': guild_event_list,
-                                        'timestamp': time_module.time()
+                                        'timestamp': time.time()
                                     }
                                     self.clients[client_id].put(batch_event)
                             except:
@@ -4355,7 +3665,7 @@ class SSEManager:
         with self.buffer_lock:
             self.event_buffer[event_type].append({
                 **event_data,
-                'timestamp': time_module.time()
+                'timestamp': time.time()
             })
 
             # If buffer gets too large, process immediately
@@ -4367,7 +3677,7 @@ class SSEManager:
         self.subscriptions[client_id] = {
             'guilds': set(guilds or []),
             'event_types': set(event_types or []),
-            'connected_at': time_module.time()
+            'connected_at': time.time()
         }
         self.clients[client_id] = queue.Queue()
 
@@ -4400,7 +3710,7 @@ def stream():
     subscribed_events = request.args.get('events', '').split(',') if request.args.get('events') else None
 
     # Generate client ID for tracking
-    client_id = f"client_{int(time_module.time() * 1000)}_{hash(request.remote_addr) % 10000}"
+    client_id = f"client_{int(time.time() * 1000)}_{hash(request.remote_addr) % 10000}"
 
     # Subscribe client
     sse_manager.subscribe_client(client_id, subscribed_guilds, subscribed_events)
@@ -4424,7 +3734,7 @@ def stream():
 
                 except queue.Empty:
                     # Send heartbeat with connection info
-                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': time_module.time()})}\n\n"
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': time.time()})}\n\n"
 
         except GeneratorExit:
             # Client disconnected
@@ -4460,7 +3770,7 @@ def broadcast_update(event_type, data):
                 'guild_id': str(data.get('guild_id', '')),
                 'type': data.get('data_type', 'unknown'),
                 'action': 'update',
-                'timestamp': time_module.time()
+                'timestamp': time.time()
             })
         elif event_type in ['shop_update', 'inventory_update']:
             # Handle shop-specific events
@@ -4469,7 +3779,7 @@ def broadcast_update(event_type, data):
                 'action': data.get('action', 'update'),
                 'item_id': data.get('item_id'),
                 'user_id': data.get('user_id'),
-                'timestamp': time_module.time()
+                'timestamp': time.time()
             })
         else:
             # Handle other event types generically
@@ -4477,7 +3787,7 @@ def broadcast_update(event_type, data):
                 'guild_id': str(data.get('guild_id', '')),
                 'action': 'update',
                 'data': data,
-                'timestamp': time_module.time()
+                'timestamp': time.time()
             })
     except Exception as e:
         logger.error(f"Error broadcasting update: {e}")
@@ -4759,145 +4069,6 @@ def run_discord_task(coro):
 def await_coroutine(coro):
     """Helper to run coroutine from sync context."""
     return run_discord_task(coro)
-
-@app.route('/api/<server_id>/moderation/logs/export', methods=['GET'], endpoint='export_moderation_logs')
-def export_moderation_logs(server_id):
-    """Export moderation logs as CSV/JSON"""
-    if not data_manager_instance:
-        return jsonify({'error': 'Data manager not available'}), 500
-
-    try:
-        guild_id = int(server_id)
-
-        # Parse query parameters for filtering
-        format_type = request.args.get('format', 'json')
-        start_date_str = request.args.get('start_date')
-        end_date_str = request.args.get('end_date')
-        action_type = request.args.get('action')
-        moderator_id = request.args.get('moderator_id')
-        target_user_id = request.args.get('target_user_id')
-        limit = min(int(request.args.get('limit', 1000)), 10000)  # Max 10k for export
-
-        # Parse dates
-        start_date = None
-        end_date = None
-        if start_date_str:
-            try:
-                start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-            except ValueError:
-                return jsonify({'error': 'Invalid start_date format'}), 400
-        if end_date_str:
-            try:
-                end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-            except ValueError:
-                return jsonify({'error': 'Invalid end_date format'}), 400
-
-        # Load moderation data
-        moderation_data = data_manager_instance.load_guild_data(guild_id, 'moderation')
-        if not moderation_data:
-            return jsonify({'error': 'No moderation data found'}), 404
-
-        logs = moderation_data.get('logs', [])
-
-        # Apply filters
-        filtered_logs = []
-        for log_entry in logs:
-            # Date filtering
-            if start_date or end_date:
-                try:
-                    log_date = datetime.fromisoformat(log_entry.get('timestamp', ''))
-                    if start_date and log_date < start_date:
-                        continue
-                    if end_date and log_date > end_date:
-                        continue
-                except (ValueError, TypeError):
-                    continue  # Skip invalid dates
-
-            # Action type filtering
-            if action_type and log_entry.get('action') != action_type:
-                continue
-
-            # Moderator filtering
-            if moderator_id and str(log_entry.get('moderator_id', '')) != str(moderator_id):
-                continue
-
-            # Target user filtering
-            if target_user_id and str(log_entry.get('target_user_id', '')) != str(target_user_id):
-                continue
-
-            filtered_logs.append(log_entry)
-
-        # Sort by timestamp descending
-        filtered_logs.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-
-        # Apply limit
-        filtered_logs = filtered_logs[:limit]
-
-        if format_type == 'csv':
-            # Create CSV response
-            import io
-            import csv
-
-            output = io.StringIO()
-            fieldnames = [
-                'timestamp', 'action', 'moderator_id', 'moderator_name',
-                'target_user_id', 'target_username', 'reason', 'duration',
-                'channel_id', 'message_id', 'details'
-            ]
-
-            writer = csv.DictWriter(output, fieldnames=fieldnames)
-            writer.writeheader()
-
-            for log_entry in filtered_logs:
-                writer.writerow({
-                    'timestamp': log_entry.get('timestamp', ''),
-                    'action': log_entry.get('action', ''),
-                    'moderator_id': log_entry.get('moderator_id', ''),
-                    'moderator_name': log_entry.get('moderator_name', ''),
-                    'target_user_id': log_entry.get('target_user_id', ''),
-                    'target_username': log_entry.get('target_username', ''),
-                    'reason': log_entry.get('reason', ''),
-                    'duration': log_entry.get('duration', ''),
-                    'channel_id': log_entry.get('channel_id', ''),
-                    'message_id': log_entry.get('message_id', ''),
-                    'details': json.dumps(log_entry.get('details', {}))
-                })
-
-            output.seek(0)
-
-            return Response(
-                output.getvalue(),
-                mimetype='text/csv',
-                headers={
-                    'Content-Disposition': f'attachment; filename=moderation_logs_{server_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-                }
-            )
-
-        else:  # JSON format
-            return Response(
-                json.dumps({
-                    'server_id': server_id,
-                    'exported_at': datetime.now().isoformat(),
-                    'total_logs': len(filtered_logs),
-                    'filters': {
-                        'start_date': start_date_str,
-                        'end_date': end_date_str,
-                        'action_type': action_type,
-                        'moderator_id': moderator_id,
-                        'target_user_id': target_user_id,
-                        'limit': limit
-                    },
-                    'logs': filtered_logs
-                }, indent=2),
-                mimetype='application/json',
-                headers={
-                    'Content-Disposition': f'attachment; filename=moderation_logs_{server_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
-                }
-            )
-
-    except Exception as e:
-        logger.error(f"Error exporting moderation logs: {e}")
-        return jsonify({'error': str(e)}), 500
 
 # === GLOBAL ERROR HANDLERS ===
 
