@@ -191,7 +191,7 @@ class Currency(commands.Cog):
 
         try:
             # VALIDATION: Ensure user exists before balance queries
-            self.data_manager.ensure_user_exists(str(guild_id), str(target.id))
+            await self.data_manager.ensure_user_exists(guild_id, target.id)
 
             # Force fresh load from database (bypass cache for immediate updates)
             user_data = self.data_manager.load_user_data(guild_id, target.id)
@@ -269,7 +269,7 @@ class Currency(commands.Cog):
 
             if not user_data_result.data or len(user_data_result.data) == 0:
                 # Ensure user exists if not found
-                self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
+                await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
                 user_data = {'balance': 0, 'last_daily': None}
             else:
                 user_data = user_data_result.data[0]
@@ -473,7 +473,7 @@ class Currency(commands.Cog):
                 receiver_new_balance = receiver_balance + amount
 
                 # Log both transactions
-                await self.transaction_manager.log_transaction(
+                self.transaction_manager.log_transaction(
                     user_id=int(sender_id),
                     guild_id=int(guild_id),
                     amount=-amount,
@@ -484,7 +484,7 @@ class Currency(commands.Cog):
                     metadata={"recipient_id": receiver_id}
                 )
 
-                await self.transaction_manager.log_transaction(
+                self.transaction_manager.log_transaction(
                     user_id=int(receiver_id),
                     guild_id=int(guild_id),
                     amount=amount,
