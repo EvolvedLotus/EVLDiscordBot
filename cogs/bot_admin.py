@@ -345,13 +345,28 @@ class BotAdmin(commands.Cog):
         target_user_id = str(user.id) if user else None
 
         try:
+            # Debug logging
+            print(f"Debug: Loading tasks for guild {guild_id}")
             tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
+            print(f"Debug: Loaded tasks_data: {tasks_data}")
+
             if not tasks_data:
-                await interaction.followup.send("📋 No tasks found.", ephemeral=True)
+                print("Debug: No tasks_data returned")
+                await interaction.followup.send("📋 No tasks found. (Data Manager returned None)", ephemeral=True)
                 return
 
             tasks = tasks_data.get('tasks', {})
             user_tasks = tasks_data.get('user_tasks', {})
+            print(f"Debug: Found {len(tasks)} tasks and {len(user_tasks)} user task records")
+
+            # Show some task details for debugging
+            for task_id, task in list(tasks.items())[:3]:  # Show first 3 tasks
+                print(f"Debug: Task {task_id}: {task.get('name')} - status: {task.get('status')}")
+
+            if not tasks:
+                print("Debug: Tasks dict is empty")
+                await interaction.followup.send("📋 No tasks found. (Empty tasks data)", ephemeral=True)
+                return
 
             # Filter tasks
             filtered_tasks = []
@@ -371,8 +386,10 @@ class BotAdmin(commands.Cog):
 
                 filtered_tasks.append((task_id, task, user_task_data))
 
+            print(f"Debug: After filtering, {len(filtered_tasks)} tasks match criteria")
+
             if not filtered_tasks:
-                await interaction.followup.send(f"📋 No {status} tasks found.", ephemeral=True)
+                await interaction.followup.send(f"📋 No {status} tasks found after filtering.", ephemeral=True)
                 return
 
             # Create paginated response
@@ -421,8 +438,8 @@ class BotAdmin(commands.Cog):
                 await interaction.followup.send(embed=embeds[0])
 
         except Exception as e:
-            logger.error(f"Error listing tasks: {e}")
-            await interaction.followup.send("❌ Failed to load tasks.", ephemeral=True)
+            print(f"Error listing tasks: {e}")
+            await interaction.followup.send(f"❌ Failed to load tasks: {str(e)}", ephemeral=True)
 
     # ===== SHOP MANAGEMENT =====
 
@@ -835,17 +852,27 @@ class BotAdmin(commands.Cog):
 
     @app_commands.command(name="set_moderator_roles", description="Add moderator roles to server configuration")
     @app_commands.describe(
-        roles="Roles to add as moderator roles (can select multiple)"
+        role1="First moderator role to add",
+        role2="Second moderator role to add (optional)",
+        role3="Third moderator role to add (optional)",
+        role4="Fourth moderator role to add (optional)",
+        role5="Fifth moderator role to add (optional)"
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def set_moderator_roles(
         self,
         interaction: discord.Interaction,
-        roles: discord.commands.Greedy[discord.Role]
+        role1: discord.Role,
+        role2: discord.Role = None,
+        role3: discord.Role = None,
+        role4: discord.Role = None,
+        role5: discord.Role = None
     ):
         """Add moderator roles (roles that can perform moderation actions)."""
         await interaction.response.defer(ephemeral=True)
 
+        # Collect provided roles
+        roles = [role for role in [role1, role2, role3, role4, role5] if role is not None]
         if not roles:
             await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
             return
