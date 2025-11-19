@@ -150,6 +150,11 @@ def set_bot_instance(bot):
     _bot_instance = bot
     logger.info("Bot instance linked to backend")
 
+    # Also set bot instance on managers that need it
+    if 'announcement_manager' in globals():
+        announcement_manager.set_bot(bot)
+        logger.info("Bot instance linked to announcement manager")
+
 def set_data_manager(dm):
     """Set global data manager reference"""
     global _data_manager_instance
@@ -552,16 +557,23 @@ def stream():
             sse_manager.unregister_client(client_id)
 
     # Return SSE response
+    origin = request.headers.get('Origin')
     response = app.response_class(
         generate(),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
-            'Access-Control-Allow-Origin': request.headers.get('Origin', '*'),
-            'Access-Control-Allow-Credentials': 'true'
         }
     )
+
+    # Set CORS headers manually for SSE (Flask-CORS doesn't handle streaming responses)
+    if origin and origin in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+
     return response
 
 @app.route('/api/stream/test', methods=['POST'])

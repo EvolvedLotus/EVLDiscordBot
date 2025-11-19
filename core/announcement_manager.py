@@ -8,11 +8,15 @@ import asyncio
 from core.data_manager import DataManager
 
 class AnnouncementManager:
-    def __init__(self, data_manager: DataManager, bot):
+    def __init__(self, data_manager: DataManager, bot=None):
         self.data_manager = data_manager
         self.bot = bot
         self._processing_lock = asyncio.Lock()
         self._sync_in_progress = set()  # Prevents sync loops
+
+    def set_bot(self, bot):
+        """Set the bot instance (for delayed initialization)"""
+        self.bot = bot
 
     def _generate_announcement_id(self) -> str:
         """Generate unique announcement ID"""
