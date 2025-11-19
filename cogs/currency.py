@@ -177,11 +177,20 @@ class Currency(commands.Cog):
             logger = logging.getLogger(__name__)
             logger.error(f"Error broadcasting cache invalidation: {e}")
 
+        # IMMEDIATE CACHE INVALIDATION: Force clear cache immediately for balance operations
+        if data_type == 'currency':
+            try:
+                # Force immediate cache invalidation for currency data
+                self.data_manager.invalidate_cache(guild_id, data_type)
+                logger.debug(f"Immediate cache invalidation for guild {guild_id} currency data")
+            except Exception as e:
+                logger.warning(f"Failed immediate cache invalidation: {e}")
+
 
     @app_commands.command(name='balance', description='Check your balance')
     @app_commands.guild_only()
     async def balance(self, interaction: discord.Interaction, user: discord.Member = None):
-        """Check balance with recent transaction summary"""
+        """Check balance with recent transaction summary - IMMEDIATE updates"""
         # Defer immediately for database operations
         await interaction.response.defer(ephemeral=True)
 
@@ -192,8 +201,12 @@ class Currency(commands.Cog):
             # Ensure user exists FIRST
             self.data_manager.ensure_user_exists(guild_id, target.id)
 
-            # Then load their data
+            # Force fresh load from database (bypass cache for immediate updates)
             user_data = self.data_manager.load_user_data(guild_id, target.id)
+            if not user_data:
+                # If user data not found, try loading fresh currency data
+                currency_data = self.data_manager.load_guild_data(guild_id, 'currency', force_reload=True)
+                user_data = currency_data.get('users', {}).get(str(target.id), {})
 
             balance = user_data.get('balance', 0)
             symbol = self._get_currency_symbol(guild_id)
@@ -225,7 +238,7 @@ class Currency(commands.Cog):
                 logger = logging.getLogger(__name__)
                 logger.error(f"Failed to load recent transactions for balance display: {e}")
 
-            embed.set_footer(text=f"Server: {interaction.guild.name}")
+            embed.set_footer(text=f"Server: {interaction.guild.name} | Real-time balance")
 
             await interaction.followup.send(embed=embed, ephemeral=True)
 

@@ -45,10 +45,11 @@ class DataManager:
         self._consecutive_failures = 0
         self._max_consecutive_failures = 5
 
-        # Cache system (in-memory only, no file storage)
+        # Cache system DISABLED for immediate updates
         self._cache: Dict[str, Any] = {}
         self._cache_timestamps: Dict[str, float] = {}
-        self._cache_ttl = int(os.getenv('CACHE_TTL', '300'))  # 5 minutes
+        self._cache_ttl = int(os.getenv('CACHE_TTL', '0'))  # DISABLED - 0 seconds
+        self._balance_cache_ttl = int(os.getenv('BALANCE_CACHE_TTL', '0'))  # DISABLED - 0 seconds
 
         # Event listener system
         self._listeners: List[Callable] = []
@@ -215,10 +216,12 @@ class DataManager:
         """Load guild-specific data from Supabase with retry logic"""
         cache_key = f"{guild_id}:{data_type}"
 
-        # Check cache
+        # Check cache with data-type-specific TTL
         if not force_reload and cache_key in self._cache:
             cache_age = time.time() - self._cache_timestamps.get(cache_key, 0)
-            if cache_age < self._cache_ttl:
+            # Use shorter TTL for balance-critical data
+            ttl = self._balance_cache_ttl if data_type == 'currency' else self._cache_ttl
+            if cache_age < ttl:
                 self._performance_stats['cache_hits'] += 1
                 return self._cache[cache_key].copy()
 
