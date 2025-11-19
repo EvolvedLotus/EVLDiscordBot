@@ -699,30 +699,30 @@ class Currency(commands.Cog):
             new_stock = item_data['stock'] - quantity if item_data['stock'] != -1 else -1
 
             # Use atomic transaction for the actual updates
+            # Note: Since AtomicTransactionContext is async, we now do direct operations
             try:
-                with self.data_manager.atomic_transaction():
-                    # Update stock if not unlimited
-                    if item_data['stock'] != -1:
-                        self.data_manager.supabase.table('shop_items').update({'stock': new_stock}).eq('item_id', item).eq('guild_id', guild_id).execute()
+                # Update stock if not unlimited
+                if item_data['stock'] != -1:
+                    self.data_manager.supabase.table('shop_items').update({'stock': new_stock}).eq('item_id', item).eq('guild_id', guild_id).execute()
 
-                    # Update user balance
-                    self.data_manager.supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).eq('guild_id', guild_id).execute()
+                # Update user balance
+                self.data_manager.supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).eq('guild_id', guild_id).execute()
 
-                    # Update inventory
-                    inventory_data = {'user_id': user_id, 'guild_id': guild_id, 'item_id': item, 'quantity': quantity}
-                    self.data_manager.supabase.table('inventory').upsert(inventory_data, on_conflict='user_id,guild_id,item_id').execute()
+                # Update inventory
+                inventory_data = {'user_id': user_id, 'guild_id': guild_id, 'item_id': item, 'quantity': quantity}
+                self.data_manager.supabase.table('inventory').upsert(inventory_data, on_conflict='user_id,guild_id,item_id').execute()
 
-                    # Log transaction
-                    self.transaction_manager.log_transaction(
-                        user_id=user_id,
-                        guild_id=guild_id,
-                        amount=-total_cost,
-                        transaction_type="shop_purchase",
-                        balance_before=user_data['balance'],
-                        balance_after=new_balance,
-                        description=f"Purchased {quantity}x {item_data['name']}",
-                        metadata={'item_id': item, 'quantity': quantity}
-                    )
+                # Log transaction
+                self.transaction_manager.log_transaction(
+                    user_id=int(user_id),
+                    guild_id=int(guild_id),
+                    amount=-total_cost,
+                    transaction_type="shop_purchase",
+                    balance_before=user_data['balance'],
+                    balance_after=new_balance,
+                    description=f"Purchased {quantity}x {item_data['name']}",
+                    metadata={'item_id': item, 'quantity': quantity}
+                )
 
             except Exception as e:
                 logger.exception(f"Purchase transaction error: {e}")

@@ -511,11 +511,37 @@ class DataManager:
                 guild_id_str = str(gid)
 
                 if dtype == "config":
-                    # ✅ FIXED: Include ALL fields from data, especially server_name and owner_id
+                    # ✅ FIXED: Handle MISSING required fields properly
+                    # Try to get missing required fields from bot instance or database
+                    server_name = None
+                    owner_id = None
+
+                    # Get from bot instance if available
+                    if self.bot_instance and gid:
+                        guild = self.bot_instance.get_guild(int(gid))
+                        if guild:
+                            server_name = guild.name
+                            owner_id = str(guild.owner_id)
+
+                    # If not found, try to load from existing database record
+                    if not server_name or not owner_id:
+                        try:
+                            existing_result = self.admin_client.table('guilds').select('server_name, owner_id').eq('guild_id', guild_id_str).execute()
+                            if existing_result.data and len(existing_result.data) > 0:
+                                existing_data = existing_result.data[0]
+                                server_name = server_name or existing_data.get('server_name')
+                                owner_id = owner_id or existing_data.get('owner_id')
+                        except Exception:
+                            pass  # Continue with defaults if error
+
+                    # Set defaults if still not found
+                    server_name = server_name or save_data.get('server_name') or f'Guild_{guild_id_str}'
+                    owner_id = owner_id or save_data.get('owner_id') or 'unknown'
+
                     guild_data = {
                         'guild_id': guild_id_str,
-                        'server_name': save_data.get('server_name'),  # ✅ CRITICAL FIELD
-                        'owner_id': save_data.get('owner_id'),  # ✅ CRITICAL FIELD
+                        'server_name': server_name,
+                        'owner_id': owner_id,
                         'member_count': save_data.get('member_count', 0),
                         'icon_url': save_data.get('icon_url'),
                         'prefix': save_data.get('prefix', '!'),
@@ -533,34 +559,14 @@ class DataManager:
                         'feature_announcements': save_data.get('feature_announcements', True),
                         'feature_moderation': save_data.get('feature_moderation', True),
                         'global_shop': save_data.get('global_shop', False),
-                        'global_tasks': save_data.get('global_tasks', False),
-                        'is_active': save_data.get('is_active', True),
-                        'updated_at': datetime.now(timezone.utc).isoformat()
+                        'global_tasks': save_data.get('global_tasks', False)
                     }
 
-                    # Use upsert with on_conflict to update existing or insert new
-                    result = self.admin_client.table('guilds').upsert(
-                        guild_data,
-                        on_conflict='guild_id'
-                    ).execute()
-
-                    if result.data:
-                        logger.info(f"  ✅ Config saved for guild {guild_id_str}")
-                        return True
-                    else:
-                        logger.error(f"  ❌ Failed to save config for guild {guild_id_str}")
-                        return False
-
-                elif dtype == "embeds":
-                    # ENSURE data is always a dict, not a string
-                    if isinstance(save_data, str):
-                        logger.warning(f"Embeds data for guild {guild_id_str} is a string, converting to dict")
-                        save_data = {"embeds": {}}  # Default empty embeds structure
-
-                    # Now safely process as dict
-                    embeds_data = save_data.get("embeds", {})
+                    # Save guild data
+                    self.admin_client.table('guilds').upsert(guild_data, on_conflict='guild_id').execute()
 
                     # Handle embeds data - store in embeds table
+                    embeds_data = save_data.get('embeds', {})
                     for embed_id, embed_data in embeds_data.items():
                         self.admin_client.table('embeds').upsert({
                             'embed_id': embed_id,
@@ -577,6 +583,8 @@ class DataManager:
                             'created_by': embed_data.get('created_by'),
                             'updated_at': datetime.now(timezone.utc).isoformat()
                         }).execute()
+
+                    logger.info(f"✅ Config data saved for guild {guild_id_str}")
 
                 elif dtype == "tasks":
                     # Save tasks data to database
