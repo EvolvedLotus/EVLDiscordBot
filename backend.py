@@ -137,34 +137,81 @@ from flask import Flask, request, jsonify, session, make_response
 from flask_cors import CORS
 import os
 
-# CRITICAL: CORS Configuration
+# CRITICAL: CORS Configuration - Support both development and production
+def get_allowed_origins():
+    """Get allowed origins based on environment"""
+    # Production origins
+    production_origins = ["https://evolvedlotus.github.io"]
+
+    # Development origins (localhost with common ports)
+    development_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:5000",
+        "http://127.0.0.1:8000"
+    ]
+
+    # Check if we're in production (Railway/Netlify)
+    is_production = bool(
+        os.getenv('RAILWAY_PROJECT_ID') or
+        os.getenv('RAILWAY_ENVIRONMENT_ID') or
+        os.getenv('NETLIFY')
+    )
+
+    if is_production:
+        return production_origins
+    else:
+        # Allow both production and development origins in development
+        return production_origins + development_origins
+
 CORS(app,
      resources={
          r"/api/*": {
-             "origins": ["https://evolvedlotus.github.io"],
+             "origins": get_allowed_origins(),
              "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-             "allow_headers": ["Content-Type", "Authorization"],
+             "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
              "supports_credentials": True,
-             "expose_headers": ["Content-Type"]
+             "expose_headers": ["Content-Type", "X-Total-Count"]
          }
      })
 
 # Session configuration for authentication
 app.config['SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-secret-change-in-production')
 app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS only
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for CORS
 
-# Add explicit OPTIONS handler for preflight requests
+# Configure session cookies based on environment
+is_production = bool(
+    os.getenv('RAILWAY_PROJECT_ID') or
+    os.getenv('RAILWAY_ENVIRONMENT_ID') or
+    os.getenv('NETLIFY')
+)
+
+if is_production:
+    app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS only in production
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for CORS in production
+else:
+    app.config['SESSION_COOKIE_SECURE'] = False  # Allow HTTP in development
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # More permissive in development
+
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+# Enhanced OPTIONS handler for preflight requests
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')
-    if origin == 'https://evolvedlotus.github.io':
+    allowed_origins = get_allowed_origins()
+
+    if origin and origin in allowed_origins:
         response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
         response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
         response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Max-Age'] = '86400'  # Cache preflight for 24 hours
+
     return response
 
 # Configure JWT

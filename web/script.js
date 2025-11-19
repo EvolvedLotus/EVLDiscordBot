@@ -1,9 +1,31 @@
 // Discord Bot CMS Dashboard JavaScript
 
-// API Configuration - Uses environment variable from Netlify
-const API_BASE_URL = window.location.hostname === 'localhost'
-    ? 'http://localhost:3000'  // Local development
-    : (window.API_BASE_URL || process.env.API_BASE_URL || 'https://your-railway-app.railway.app'); // Production
+// API Configuration - Supports both development and production
+function getApiBaseUrl() {
+    const hostname = window.location.hostname;
+
+    // Production: GitHub Pages
+    if (hostname === 'evolvedlotus.github.io') {
+        return 'https://your-railway-app.railway.app'; // Replace with your actual Railway app URL
+    }
+
+    // Local development: Try common ports
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        // Try to detect if backend is running on port 5000 (Flask default)
+        // If not available, fallback to port 3000
+        return 'http://localhost:5000';
+    }
+
+    // Railway/Netlify deployment
+    if (window.API_BASE_URL) {
+        return window.API_BASE_URL;
+    }
+
+    // Fallback
+    return 'http://localhost:5000';
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Helper function to build API URLs
 function apiUrl(endpoint) {
@@ -120,6 +142,8 @@ async function login(event) {
             headers: {
                 'Content-Type': 'application/json'
             },
+            credentials: 'include',
+            mode: 'cors',
             body: JSON.stringify({ username, password })
         });
 
@@ -167,7 +191,9 @@ async function logout() {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${authToken}`
-                }
+                },
+                credentials: 'include',
+                mode: 'cors'
             });
         }
     } catch (error) {
@@ -283,7 +309,8 @@ async function checkAuth() {
 
         // Validate session
         const response = await fetch(apiUrl('/api/auth/validate'), {
-            credentials: 'include' // Include cookies
+            credentials: 'include', // Include cookies
+            mode: 'cors'
         });
 
         if (response.ok) {
