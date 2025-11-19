@@ -806,29 +806,34 @@ class Currency(commands.Cog):
             # For now, allow anyone to view other's transactions (remove moderator check for slash commands)
             pass
 
-        transactions = self.data_manager.load_guild_data(guild_id, "transactions") or []
+        # Use transaction manager instead of direct data loading
+        try:
+            result = self.transaction_manager.get_transactions(
+                guild_id=str(guild_id),
+                user_id=target.id,
+                limit=limit
+            )
+            transactions = result['transactions']
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to load transactions via transaction manager: {e}")
+            await interaction.response.send_message("❌ Error loading transaction history!", ephemeral=True)
+            return
 
-        # Filter transactions for this user
-        user_transactions = [t for t in transactions if t.get('user_id') == user_id_str]
-
-        if not user_transactions:
+        if not transactions:
             await interaction.response.send_message(f"{target.mention} has no transaction history!", ephemeral=True)
             return
 
-        # Sort by timestamp (newest first) and limit
-        user_transactions.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
-        user_transactions = user_transactions[:limit]
-
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.data_manager.load_guild_data(guild_id, "config")
         symbol = config.get('currency_symbol', '$')
 
         embed = discord.Embed(
             title=f"{target.display_name}'s Transaction History",
-            description=f"Showing last {len(user_transactions)} transactions",
+            description=f"Showing last {len(transactions)} transactions",
             color=discord.Color.blue()
         )
 
-        for txn in user_transactions:
+        for txn in transactions:
             amount = txn.get('amount', 0)
             amount_str = f"+{symbol}{amount}" if amount > 0 else f"{symbol}{amount}"
 
@@ -842,6 +847,75 @@ class Currency(commands.Cog):
             )
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="admin_give", description="Give currency to any user (Admin only)")
+    @app_commands.describe(
+        user="The user to give currency to",
+        amount="Amount of currency to give",
+        reason="Reason for giving currency (optional)"
+    )
+    @app_commands.guild_only()
+    async def admin_give_money(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str = "Admin grant"):
+        """Admin command to give currency to any user"""
+        # Check admin permissions
+        from core.permissions import is_admin
+        if not is_admin(interaction.user, interaction.guild):
+            await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
+            return
+
+        # Defer for database operations
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Validation
+            if amount <= 0:
+                await interaction.followup.send("❌ Amount must be positive!", ephemeral=True)
+                return
+
+            if user.bot:
+                await interaction.followup.send("❌ Cannot give money to bots!", ephemeral=True)
+                return
+
+            guild_id = interaction.guild.id
+
+            # Ensure user exists
+            self.data_manager.ensure_user_exists(guild_id, user.id)
+
+            # Add balance
+            result = self._add_balance(
+                guild_id,
+                user.id,
+                amount,
+                f"{reason} (by {interaction.user.name})",
+                transaction_type='admin_grant',
+                metadata={
+                    "source": "discord_command",
+                    "command": "/admin_give",
+                    "admin_id": str(interaction.user.id),
+                    "reason": reason
+                }
+            )
+
+            if result is False:
+                await interaction.followup.send("❌ Failed to give currency!", ephemeral=True)
+                return
+
+            symbol = self._get_currency_symbol(guild_id)
+            embed = discord.Embed(
+                title="✅ Currency Granted",
+                description=f"Successfully gave {symbol}{amount:,} to {user.mention}",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="Reason", value=reason, inline=False)
+            embed.add_field(name="New Balance", value=f"{symbol}{result:,}", inline=True)
+            embed.add_field(name="Granted By", value=interaction.user.mention, inline=True)
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in admin_give_money command: {e}")
+            await interaction.followup.send("❌ An error occurred while granting currency.", ephemeral=True)
 
 
 
@@ -899,173 +973,6 @@ class PurchaseConfirmView(discord.ui.View):
             view=None
         )
         self.stop()
-
-
-    def _process_shop_purchase(self, guild_id, user_id, item_id, item_name, total_cost, quantity):
-        """
-        Deduct currency for shop purchase with rollback capability.
-        Returns tuple: (success: bool, new_balance: int or error_msg: str)
-        """
-        try:
-            # Use the existing _add_balance method with negative amount for deduction
-            result = self._add_balance(
-                guild_id,
-                user_id,
-                -total_cost,  # Negative amount for deduction
-                f"Purchased {quantity}x {item_name}",
-                transaction_type='shop_purchase',
-                metadata={
-                    "source": "shop_system",
-                    "item_id": item_id,
-                    "quantity": quantity,
-                    "item_name": item_name
-                }
-            )
-
-            if result is False:
-                return False, "Failed to deduct currency - insufficient balance or system error"
-
-            # Return success with new balance
-            return True, result
-
-        except Exception as e:
-            error_msg = f"Critical error processing shop purchase: {str(e)}"
-            print(error_msg)
-            return False, error_msg
-
-    def _ensure_user_exists(self, guild_id, user_id):
-        """Create user entry if doesn't exist, return user data"""
-        data = self.data_manager.load_guild_data(guild_id, "currency")
-        user_id_str = str(user_id)
-
-        if user_id_str not in data["users"]:
-            data["users"][user_id_str] = {
-                "balance": 0,
-                "total_earned": 0,
-                "total_spent": 0,
-                "last_daily": None,
-                "created_at": datetime.now().isoformat()
-            }
-            data_manager.save_guild_data(guild_id, "currency", data)
-
-        return data["users"][user_id_str]
-
-    def _get_balance(self, guild_id, user_id):
-        """Safely get balance, return 0 if user not found"""
-        user_data = self._ensure_user_exists(guild_id, user_id)
-        return user_data["balance"]
-
-    def _validate_amount(self, amount):
-        """Validate currency amount is positive integer"""
-        try:
-            amount = int(amount)
-            if amount <= 0:
-                raise ValueError("Amount must be positive")
-            return amount
-        except (ValueError, TypeError):
-            raise ValueError("Amount must be a positive integer")
-
-    def _check_sufficient_balance(self, guild_id, user_id, required_amount):
-        """Return bool if user can afford amount"""
-        current_balance = self._get_balance(guild_id, user_id)
-        return current_balance >= required_amount
-
-    async def post_shop_message(self, guild_id: str, item: dict):
-        """Post a shop item message to Discord and return message info."""
-        try:
-            # Get shop channel from config
-            config = data_manager.load_guild_data(guild_id, 'config')
-            shop_channel_id = config.get('shop_channel_id')
-
-            if not shop_channel_id:
-                logger.warning(f"No shop channel configured for guild {guild_id}")
-                return None
-
-            guild = self.bot.get_guild(int(guild_id))
-            if not guild:
-                logger.error(f"Guild {guild_id} not found")
-                return None
-
-            channel = guild.get_channel(int(shop_channel_id))
-            if not channel:
-                logger.error(f"Shop channel {shop_channel_id} not found in guild {guild_id}")
-                return None
-
-            # Create embed
-            symbol = config.get('currency_symbol', '$')
-            embed = discord.Embed(
-                title=f"{item.get('emoji', '🛒')} {item['name']}",
-                description=item['description'],
-                color=discord.Color.green()
-            )
-            embed.add_field(name="Price", value=f"{symbol}{item['price']}", inline=True)
-
-            stock = item.get('stock', -1)
-            stock_text = "♾️ Unlimited" if stock == -1 else f"📦 {stock} available"
-            embed.add_field(name="Stock", value=stock_text, inline=True)
-
-            category = item.get('category', 'misc')
-            embed.add_field(name="Category", value=f"🏷️ {category.title()}", inline=True)
-
-            embed.set_footer(text="Use /buy <item_id> to purchase")
-
-            # Send message
-            message = await channel.send(embed=embed)
-
-            logger.info(f"Shop item message posted: {message.id} for item {item.get('id', 'unknown')} in guild {guild_id}")
-            return str(message.id)
-
-        except Exception as e:
-            logger.error(f"Error posting shop item to Discord: {e}")
-            return None
-
-    async def update_shop_message(self, guild_id: str, item_id: str, item: dict):
-        """Update existing shop item message."""
-        if not item.get('message_id'):
-            return
-
-        try:
-            # Get shop channel from config
-            config = data_manager.load_guild_data(guild_id, 'config')
-            shop_channel_id = config.get('shop_channel_id')
-
-            if not shop_channel_id:
-                return
-
-            guild = self.bot.get_guild(int(guild_id))
-            if not guild:
-                return
-
-            channel = guild.get_channel(int(shop_channel_id))
-            if not channel:
-                return
-
-            message = await channel.fetch_message(int(item['message_id']))
-
-            # Update embed
-            symbol = config.get('currency_symbol', '$')
-            embed = discord.Embed(
-                title=f"{item.get('emoji', '🛒')} {item['name']}",
-                description=item['description'],
-                color=discord.Color.green() if item.get('is_active', True) else discord.Color.grey()
-            )
-            embed.add_field(name="Price", value=f"{symbol}{item['price']}", inline=True)
-
-            stock = item.get('stock', -1)
-            stock_text = "♾️ Unlimited" if stock == -1 else f"📦 {stock} available"
-            embed.add_field(name="Stock", value=stock_text, inline=True)
-
-            category = item.get('category', 'misc')
-            embed.add_field(name="Category", value=f"🏷️ {category.title()}", inline=True)
-
-            embed.set_footer(text="Use /buy <item_id> to purchase")
-
-            await message.edit(embed=embed)
-
-        except discord.NotFound:
-            logger.warning(f"Shop item message {item.get('message_id')} not found")
-        except Exception as e:
-            logger.error(f"Error updating shop item message: {e}")
 
 
 async def setup(bot):
