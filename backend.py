@@ -125,7 +125,7 @@ try:
     # Initialize managers
     data_manager = DataManager()
     transaction_manager = TransactionManager(data_manager)
-    task_manager = TaskManager(data_manager)
+    task_manager = TaskManager(data_manager, transaction_manager)
     shop_manager = ShopManager(data_manager)
     announcement_manager = AnnouncementManager(data_manager)
     embed_builder = EmbedBuilder()
