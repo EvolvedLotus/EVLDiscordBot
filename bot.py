@@ -189,6 +189,15 @@ async def run_bot():
                 except Exception as e:
                     logger.error(f"✗ Failed to set managers on {cog_name} cog: {e}")
 
+        # Set managers for Tasks cog specifically
+        tasks_cog = bot.get_cog('Tasks')
+        if tasks_cog and hasattr(tasks_cog, 'set_managers'):
+            try:
+                tasks_cog.set_managers(data_manager, bot.transaction_manager)
+                logger.info("✓ Set managers on Tasks cog")
+            except Exception as e:
+                logger.error(f"✗ Failed to set managers on Tasks cog: {e}")
+
         # Create initializer
         initializer = GuildInitializer(data_manager, bot)
 
