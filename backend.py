@@ -198,14 +198,14 @@ try:
 
     # Initialize managers
     data_manager = DataManager()
+    cache_manager = CacheManager()
+    audit_manager = AuditManager(data_manager)
+    auth_manager = AuthManager(data_manager, os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me'))
     transaction_manager = TransactionManager(data_manager, audit_manager, cache_manager)
     task_manager = TaskManager(data_manager, transaction_manager)
     shop_manager = ShopManager(data_manager, transaction_manager)
     announcement_manager = AnnouncementManager(data_manager)
     embed_builder = EmbedBuilder()
-    cache_manager = CacheManager()
-    auth_manager = AuthManager(data_manager, os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me'))
-    audit_manager = AuditManager(data_manager)
     sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
 
     logger.info("✅ All managers initialized")
