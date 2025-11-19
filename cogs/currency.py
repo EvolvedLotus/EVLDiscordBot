@@ -442,64 +442,62 @@ class Currency(commands.Cog):
             return
 
         try:
-            # ATOMIC TRANSACTION with row locks to prevent race condition
-            async with self.data_manager.atomic_transaction(guild_id) as conn:
-                # Lock sender row first (prevent concurrent gives)
-                sender_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', sender_id).eq('guild_id', guild_id).execute()
+            # Get sender balance (synchronous Supabase call - NO await)
+            sender_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', sender_id).eq('guild_id', guild_id).execute()
 
-                if not sender_data.data or len(sender_data.data) == 0:
-                    await interaction.response.send_message("You don't have an account.", ephemeral=True)
-                    return
+            if not sender_data.data or len(sender_data.data) == 0:
+                await interaction.response.send_message("You don't have an account.", ephemeral=True)
+                return
 
-                sender_balance = sender_data.data[0]['balance']
+            sender_balance = sender_data.data[0]['balance']
 
-                # VALIDATION: Check sufficient balance
-                if sender_balance < amount:
-                    await interaction.response.send_message(
-                        f"Insufficient balance. You have {sender_balance} coins.",
-                        ephemeral=True
-                    )
-                    return
-
-                # Ensure receiver exists
-                self.data_manager.ensure_user_exists(guild_id, user.id)
-
-                # Lock receiver row
-                receiver_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
-                receiver_balance = receiver_data.data[0]['balance'] if receiver_data.data and len(receiver_data.data) > 0 else 0
-
-                # Calculate new balances
-                sender_new_balance = sender_balance - amount
-                receiver_new_balance = receiver_balance + amount
-
-                # Log both transactions
-                self.transaction_manager.log_transaction(
-                    user_id=int(sender_id),
-                    guild_id=int(guild_id),
-                    amount=-amount,
-                    transaction_type="give_sent",
-                    balance_before=sender_balance,
-                    balance_after=sender_new_balance,
-                    description=f"Gave {amount} coins to {user.display_name}",
-                    metadata={"recipient_id": receiver_id}
+            # VALIDATION: Check sufficient balance
+            if sender_balance < amount:
+                await interaction.response.send_message(
+                    f"Insufficient balance. You have {sender_balance} coins.",
+                    ephemeral=True
                 )
+                return
 
-                self.transaction_manager.log_transaction(
-                    user_id=int(receiver_id),
-                    guild_id=int(guild_id),
-                    amount=amount,
-                    transaction_type="give_received",
-                    balance_before=receiver_balance,
-                    balance_after=receiver_new_balance,
-                    description=f"Received {amount} coins from {interaction.user.display_name}",
-                    metadata={"sender_id": sender_id}
-                )
+            # Ensure receiver exists (async method - NEEDS await)
+            await self.data_manager.ensure_user_exists(guild_id, user.id)
 
-                # Update both balances
-                await self.data_manager.supabase.table('users').update({'balance': sender_new_balance}).eq('user_id', sender_id).eq('guild_id', guild_id).execute()
-                await self.data_manager.supabase.table('users').update({'balance': receiver_new_balance}).eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
+            # Get receiver balance (synchronous Supabase call - NO await)
+            receiver_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
+            receiver_balance = receiver_data.data[0]['balance'] if receiver_data.data and len(receiver_data.data) > 0 else 0
 
-            # Invalidate both caches
+            # Calculate new balances
+            sender_new_balance = sender_balance - amount
+            receiver_new_balance = receiver_balance + amount
+
+            # Log transactions (synchronous methods - NO await)
+            self.transaction_manager.log_transaction(
+                user_id=int(sender_id),
+                guild_id=int(guild_id),
+                amount=-amount,
+                transaction_type="give_sent",
+                balance_before=sender_balance,
+                balance_after=sender_new_balance,
+                description=f"Gave {amount} coins to {user.display_name}",
+                metadata={"recipient_id": receiver_id}
+            )
+
+            self.transaction_manager.log_transaction(
+                user_id=int(receiver_id),
+                guild_id=int(guild_id),
+                amount=amount,
+                transaction_type="give_received",
+                balance_before=receiver_balance,
+                balance_after=receiver_new_balance,
+                description=f"Received {amount} coins from {interaction.user.display_name}",
+                metadata={"sender_id": sender_id}
+            )
+
+            # Update balances (synchronous Supabase calls - NO await)
+            self.data_manager.supabase.table('users').update({'balance': sender_new_balance}).eq('user_id', sender_id).eq('guild_id', guild_id).execute()
+            self.data_manager.supabase.table('users').update({'balance': receiver_new_balance}).eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
+
+            # Invalidate caches
             self.data_manager.invalidate_cache(int(guild_id), 'currency')
 
             # Emit SSE events for both users
