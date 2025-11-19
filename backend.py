@@ -132,7 +132,7 @@ try:
     announcement_manager = AnnouncementManager(data_manager)
     embed_builder = EmbedBuilder()
     cache_manager = CacheManager()
-    auth_manager = AuthManager(data_manager)
+    auth_manager = AuthManager(data_manager, os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me'))
     audit_manager = AuditManager(data_manager)
     sync_manager = SyncManager(data_manager)
 
