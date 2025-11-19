@@ -5,7 +5,7 @@ builder = "NIXPACKS"
 # Railway unified deployment - runs both Flask web app and Discord bot
 startCommand = "python railway_start.py"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 60
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 

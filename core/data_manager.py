@@ -99,9 +99,9 @@ class DataManager:
             logger.error(f"Failed to create Supabase client: {e}")
             raise
 
-    async def _execute_with_retry(self, operation, operation_name, *args, **kwargs):
-        """Execute operation with retry logic (async)"""
-        import asyncio
+    def _execute_with_retry(self, operation, operation_name, *args, **kwargs):
+        """Execute operation with retry logic (synchronous)"""
+        import time
         for attempt in range(1, self.max_retries + 1):
             try:
                 return operation(*args, **kwargs)
@@ -115,7 +115,7 @@ class DataManager:
                 delay = self.retry_delay * (2 ** (attempt - 1))
                 logger.warning(f"⚠️  Operation {operation_name} failed (attempt {attempt}/{self.max_retries}): {e}. Retrying in {delay:.2f}s")
 
-                await asyncio.sleep(delay)
+                time.sleep(delay)
     
         # Fallback if all retries exhausted
         return self._get_fallback_result(operation_name)
