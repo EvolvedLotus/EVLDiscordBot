@@ -653,7 +653,7 @@ class Currency(commands.Cog):
     )
     @app_commands.guild_only()
     async def buy(self, interaction: discord.Interaction, item: str, quantity: int = 1):
-        """Purchase item with CRITICAL EXPLOIT PREVENTION - atomic transactions with row locking"""
+        """Purchase item with CRITICAL EXPLOIT PREVENTION - atomic using existing balance check"""
         user_id = str(interaction.user.id)
         guild_id = str(interaction.guild_id)
 
@@ -663,90 +663,81 @@ class Currency(commands.Cog):
             return
 
         try:
-            # ATOMIC TRANSACTION with row locks
-            async with self.data_manager.atomic_transaction() as conn:
-                # 1. LOCK ITEM ROW FIRST (prevent race condition)
-                item_data = await conn.fetchrow(
-                    """SELECT item_id, name, price, stock, is_active, channel_id, message_id
-                       FROM shop_items
-                       WHERE item_id = $1 AND guild_id = $2 AND is_active = true
-                       FOR UPDATE""",
-                    item, guild_id
-                )
+            # Get item data to check stock
+            item_result = self.data_manager.supabase.table('shop_items').select('*').eq('item_id', item).eq('guild_id', guild_id).eq('is_active', True).execute()
+            if not item_result.data or len(item_result.data) == 0:
+                await interaction.response.send_message("Item not found or inactive.", ephemeral=True)
+                return
 
-                if not item_data:
-                    await interaction.response.send_message("Item not found or inactive.", ephemeral=True)
+            item_data = item_result.data[0]
+
+            # VALIDATION: Check stock availability
+            if item_data['stock'] != -1 and item_data['stock'] < quantity:
+                await interaction.response.send_message(
+                    f"Insufficient stock. Available: {item_data['stock']}",
+                    ephemeral=True
+                )
+                return
+
+            # Calculate total cost
+            total_cost = item_data['price'] * quantity
+
+            # Get current balance
+            balance_data = self._get_balance(int(guild_id), interaction.user.id)
+
+            # VALIDATION: Check balance
+            if balance_data < total_cost:
+                await interaction.response.send_message(
+                    f"Insufficient balance. Cost: {total_cost}, Balance: {balance_data}",
+                    ephemeral=True
+                )
+                return
+
+            # Get updated user data
+            user_result = self.data_manager.supabase.table('users').select('*').eq('user_id', user_id).eq('guild_id', guild_id).execute()
+            if not user_result.data or len(user_result.data) == 0:
+                await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
+                user_result = self.data_manager.supabase.table('users').select('*').eq('user_id', user_id).eq('guild_id', guild_id).execute()
+                if not user_result.data or len(user_result.data) == 0:
+                    await interaction.response.send_message("Unable to create user account. Please try again.", ephemeral=True)
                     return
 
-                # VALIDATION: Check stock availability
-                if item_data['stock'] != -1 and item_data['stock'] < quantity:
-                    await interaction.response.send_message(
-                        f"Insufficient stock. Available: {item_data['stock']}",
-                        ephemeral=True
-                    )
-                    return
+            user_data = user_result.data[0]
+            new_balance = user_data['balance'] - total_cost
+            new_stock = item_data['stock'] - quantity if item_data['stock'] != -1 else -1
 
-                # Calculate total cost
-                total_cost = item_data['price'] * quantity
+            # Use atomic transaction for the actual updates
+            try:
+                with self.data_manager.atomic_transaction():
+                    # Update stock if not unlimited
+                    if item_data['stock'] != -1:
+                        self.data_manager.supabase.table('shop_items').update({'stock': new_stock}).eq('item_id', item).eq('guild_id', guild_id).execute()
 
-                # 2. LOCK USER ROW
-                user_data = await conn.fetchrow(
-                    "SELECT balance FROM users WHERE user_id = $1 AND guild_id = $2 FOR UPDATE",
-                    user_id, guild_id
-                )
+                    # Update user balance
+                    self.data_manager.supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).eq('guild_id', guild_id).execute()
 
-                if not user_data:
-                    await self.data_manager.ensure_user_exists(user_id, guild_id, conn=conn)
-                    user_data = {'balance': 0}
+                    # Update inventory
+                    inventory_data = {'user_id': user_id, 'guild_id': guild_id, 'item_id': item, 'quantity': quantity}
+                    self.data_manager.supabase.table('inventory').upsert(inventory_data, on_conflict='user_id,guild_id,item_id').execute()
 
-                user_balance = user_data['balance']
-
-                # VALIDATION: Check balance
-                if user_balance < total_cost:
-                    await interaction.response.send_message(
-                        f"Insufficient balance. Cost: {total_cost}, Balance: {user_balance}",
-                        ephemeral=True
-                    )
-                    return
-
-                # 3. UPDATE STOCK (with CHECK constraint preventing negative)
-                if item_data['stock'] != -1:
-                    new_stock = item_data['stock'] - quantity
-                    await conn.execute(
-                        "UPDATE shop_items SET stock = $1 WHERE item_id = $2 AND guild_id = $3",
-                        new_stock, item, guild_id
+                    # Log transaction
+                    self.transaction_manager.log_transaction(
+                        user_id=user_id,
+                        guild_id=guild_id,
+                        amount=-total_cost,
+                        transaction_type="shop_purchase",
+                        balance_before=user_data['balance'],
+                        balance_after=new_balance,
+                        description=f"Purchased {quantity}x {item_data['name']}",
+                        metadata={'item_id': item, 'quantity': quantity}
                     )
 
-                # 4. DEDUCT BALANCE
-                new_balance = user_balance - total_cost
-                await conn.execute(
-                    "UPDATE users SET balance = $1 WHERE user_id = $2 AND guild_id = $3",
-                    new_balance, user_id, guild_id
-                )
+            except Exception as e:
+                logger.exception(f"Purchase transaction error: {e}")
+                await interaction.response.send_message("Purchase failed. Please try again.", ephemeral=True)
+                return
 
-                # 5. UPDATE INVENTORY (insert or increment)
-                await conn.execute(
-                    """INSERT INTO inventory (user_id, guild_id, item_id, quantity)
-                       VALUES ($1, $2, $3, $4)
-                       ON CONFLICT (user_id, guild_id, item_id)
-                       DO UPDATE SET quantity = inventory.quantity + $4""",
-                    user_id, guild_id, item, quantity
-                )
-
-                # 6. LOG TRANSACTION
-                await self.transaction_manager.log_transaction(
-                    user_id=user_id,
-                    guild_id=guild_id,
-                    amount=-total_cost,
-                    transaction_type="shop_purchase",
-                    balance_before=user_balance,
-                    balance_after=new_balance,
-                    description=f"Purchased {quantity}x {item_data['name']}",
-                    metadata={'item_id': item, 'quantity': quantity},
-                    conn=conn
-                )
-
-            # 7. UPDATE DISCORD MESSAGE (outside transaction)
+            # Update Discord message (outside transaction)
             if item_data['channel_id'] and item_data['message_id']:
                 try:
                     channel = interaction.guild.get_channel(int(item_data['channel_id']))
@@ -764,9 +755,7 @@ class Currency(commands.Cog):
                     logger.warning(f"Failed to update shop message: {e}")
 
             # Invalidate caches
-            self.cache_manager.invalidate(f"balance:{guild_id}:{user_id}")
-            self.cache_manager.invalidate(f"inventory:{guild_id}:{user_id}")
-            self.cache_manager.invalidate(f"shop:{guild_id}")
+            self.data_manager.invalidate_cache(int(guild_id), 'currency')
 
             # Emit SSE events
             try:
@@ -777,7 +766,7 @@ class Currency(commands.Cog):
                     'item_id': item,
                     'quantity': quantity,
                     'new_balance': new_balance,
-                    'new_stock': new_stock if item_data['stock'] != -1 else -1
+                    'new_stock': new_stock
                 })
             except Exception as e:
                 logger.warning(f"Failed to emit SSE event for purchase: {e}")
