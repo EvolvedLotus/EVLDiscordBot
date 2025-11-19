@@ -1,6 +1,70 @@
 from datetime import datetime
 import discord
 from core.data_manager import DataManager
+import re
+
+class Validator:
+    """Input validation utilities"""
+
+    @staticmethod
+    def validate_positive_integer(value, field_name, max_value=None):
+        """Validate positive integer"""
+        if not isinstance(value, int):
+            raise ValueError(f"{field_name} must be an integer")
+        if value <= 0:
+            raise ValueError(f"{field_name} must be positive")
+        if max_value and value > max_value:
+            raise ValueError(f"{field_name} cannot exceed {max_value}")
+        return value
+
+    @staticmethod
+    def validate_non_negative_integer(value, field_name):
+        """Validate non-negative integer"""
+        if not isinstance(value, int):
+            raise ValueError(f"{field_name} must be an integer")
+        if value < 0:
+            raise ValueError(f"{field_name} cannot be negative")
+        return value
+
+    @staticmethod
+    def validate_string(value, field_name, min_length=1, max_length=None):
+        """Validate string length"""
+        if not isinstance(value, str):
+            raise ValueError(f"{field_name} must be a string")
+        if len(value) < min_length:
+            raise ValueError(f"{field_name} must be at least {min_length} characters")
+        if max_length and len(value) > max_length:
+            raise ValueError(f"{field_name} cannot exceed {max_length} characters")
+        return value.strip()
+
+    @staticmethod
+    def validate_discord_id(value, field_name):
+        """Validate Discord ID format"""
+        if not isinstance(value, str):
+            value = str(value)
+        if not value.isdigit() or len(value) < 17 or len(value) > 19:
+            raise ValueError(f"{field_name} is not a valid Discord ID")
+        return value
+
+    @staticmethod
+    def validate_enum(value, field_name, allowed_values):
+        """Validate value is in allowed set"""
+        if value not in allowed_values:
+            raise ValueError(
+                f"{field_name} must be one of: {', '.join(allowed_values)}"
+            )
+        return value
+
+    @staticmethod
+    def sanitize_sql_input(value):
+        """Basic SQL injection prevention"""
+        if isinstance(value, str):
+            # Remove potentially dangerous characters
+            dangerous_chars = ["'", '"', ";", "--", "/*", "*/", "xp_", "sp_"]
+            for char in dangerous_chars:
+                if char in value:
+                    raise ValueError("Input contains invalid characters")
+        return value
 
 class DataValidator:
     """Validates data integrity across bot and CMS"""

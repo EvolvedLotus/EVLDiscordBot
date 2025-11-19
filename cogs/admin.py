@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import asyncio
 from core.permissions import admin_only, admin_only_interaction, feature_enabled, is_moderator, is_moderator_interaction
 from core.utils import create_embed, add_embed_footer
-from core.validator import DataValidator
+from core.validator import DataValidator, Validator
 from core.initializer import GuildInitializer
 from core.shop_manager import ShopManager
 
@@ -89,7 +89,7 @@ class Admin(commands.Cog):
             return
 
         guild_id = ctx.guild.id
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
 
         changes = []
         if symbol:
@@ -102,7 +102,7 @@ class Admin(commands.Cog):
             config["currency_name"] = name
             changes.append(f"Name: `{old_name}` → `{name}`")
 
-        data_manager.save_guild_data(guild_id, "config", config)
+        self.bot.data_manager.save_guild_data(guild_id, "config", config)
 
         embed = create_embed(
             title="✅ Currency Updated",
@@ -118,7 +118,7 @@ class Admin(commands.Cog):
     async def server_config(self, ctx):
         """View current server configuration"""
         guild_id = ctx.guild.id
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
 
         embed = create_embed(
             title=f"⚙️ {ctx.guild.name} Configuration",
@@ -171,14 +171,14 @@ class Admin(commands.Cog):
             return
 
         guild_id = ctx.guild.id
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
 
         features = config.get("features", {})
         current = features.get(feature.lower(), True)
         features[feature.lower()] = not current
         config["features"] = features
 
-        data_manager.save_guild_data(guild_id, "config", config)
+        self.bot.data_manager.save_guild_data(guild_id, "config", config)
 
         status = "enabled" if not current else "disabled"
         embed = create_embed(
@@ -195,7 +195,7 @@ class Admin(commands.Cog):
     async def add_admin_role(self, ctx, role: discord.Role):
         """Add a role to the admin roles list"""
         guild_id = ctx.guild.id
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
 
         admin_roles = config.get("admin_roles", [])
         if role.id in admin_roles:
@@ -204,7 +204,7 @@ class Admin(commands.Cog):
 
         admin_roles.append(role.id)
         config["admin_roles"] = admin_roles
-        data_manager.save_guild_data(guild_id, "config", config)
+        self.bot.data_manager.save_guild_data(guild_id, "config", config)
 
         embed = create_embed(
             title="✅ Admin Role Added",
@@ -220,16 +220,16 @@ class Admin(commands.Cog):
     async def add_mod_role(self, ctx, role: discord.Role):
         """Add a role to the moderator roles list"""
         guild_id = ctx.guild.id
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
 
-        mod_roles = config.get("moderator_roles", [])
-        if role.id in mod_roles:
-            await ctx.send(f"❌ Role {role.name} is already a moderator role!")
+        admin_roles = config.get("admin_roles", [])
+        if role.id in admin_roles:
+            await ctx.send(f"❌ Role {role.name} is already an admin role!")
             return
 
-        mod_roles.append(role.id)
-        config["moderator_roles"] = mod_roles
-        data_manager.save_guild_data(guild_id, "config", config)
+        admin_roles.append(role.id)
+        config["admin_roles"] = admin_roles
+        self.bot.data_manager.save_guild_data(guild_id, "config", config)
 
         embed = create_embed(
             title="✅ Moderator Role Added",
@@ -245,16 +245,16 @@ class Admin(commands.Cog):
     async def remove_admin_role(self, ctx, role: discord.Role):
         """Remove a role from the admin roles list"""
         guild_id = ctx.guild.id
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
 
-        admin_roles = config.get("admin_roles", [])
-        if role.id not in admin_roles:
-            await ctx.send(f"❌ Role {role.name} is not an admin role!")
+        mod_roles = config.get("moderator_roles", [])
+        if role.id in mod_roles:
+            await ctx.send(f"❌ Role {role.name} is already a moderator role!")
             return
 
-        admin_roles.remove(role.id)
-        config["admin_roles"] = admin_roles
-        data_manager.save_guild_data(guild_id, "config", config)
+        mod_roles.append(role.id)
+        config["moderator_roles"] = mod_roles
+        self.bot.data_manager.save_guild_data(guild_id, "config", config)
 
         embed = create_embed(
             title="✅ Admin Role Removed",
@@ -270,7 +270,7 @@ class Admin(commands.Cog):
     async def remove_mod_role(self, ctx, role: discord.Role):
         """Remove a role from the moderator roles list"""
         guild_id = ctx.guild.id
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
 
         mod_roles = config.get("moderator_roles", [])
         if role.id not in mod_roles:
@@ -279,7 +279,7 @@ class Admin(commands.Cog):
 
         mod_roles.remove(role.id)
         config["moderator_roles"] = mod_roles
-        data_manager.save_guild_data(guild_id, "config", config)
+        self.bot.data_manager.save_guild_data(guild_id, "config", config)
 
         embed = create_embed(
             title="✅ Moderator Role Removed",
@@ -297,7 +297,7 @@ class Admin(commands.Cog):
         guild_id = ctx.guild.id
 
         try:
-            data_manager.create_backup(guild_id)
+            self.bot.data_manager.create_backup(guild_id)
 
             embed = create_embed(
                 title="✅ Backup Created",
@@ -328,7 +328,7 @@ class Admin(commands.Cog):
 
         currency_cog._add_balance(guild_id, user.id, amount, f"{reason} (by {ctx.author.name})")
 
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
         symbol = config.get('currency_symbol', '$')
 
         new_balance = currency_cog._get_balance(guild_id, user.id)
@@ -367,7 +367,7 @@ class Admin(commands.Cog):
 
         currency_cog._add_balance(guild_id, user.id, -amount, f"{reason} (by {ctx.author.name})")
 
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
         symbol = config.get('currency_symbol', '$')
 
         new_balance = currency_cog._get_balance(guild_id, user.id)
@@ -403,7 +403,7 @@ class Admin(commands.Cog):
 
         currency_cog._add_balance(guild_id, user.id, difference, f"{reason} (by {ctx.author.name})")
 
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
         symbol = config.get('currency_symbol', '$')
 
         embed = discord.Embed(
@@ -443,14 +443,14 @@ class Admin(commands.Cog):
         # Create backup before reset
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         backup_data = {
-            'currency': data_manager.load_guild_data(guild_id, "currency"),
-            'transactions': data_manager.load_guild_data(guild_id, "transactions"),
+            'currency': self.bot.data_manager.load_guild_data(guild_id, "currency"),
+            'transactions': self.bot.data_manager.load_guild_data(guild_id, "transactions"),
             'backup_time': timestamp,
             'backup_by': str(ctx.author.id)
         }
 
         # Save backup
-        data_manager.save_guild_data(guild_id, f"backup_economy_{timestamp}", backup_data)
+        self.bot.data_manager.save_guild_data(guild_id, f"backup_economy_{timestamp}", backup_data)
 
         # Reset currency data
         fresh_currency_data = {
@@ -465,8 +465,8 @@ class Admin(commands.Cog):
             }
         }
 
-        data_manager.save_guild_data(guild_id, "currency", fresh_currency_data)
-        data_manager.save_guild_data(guild_id, "transactions", [])
+        self.bot.data_manager.save_guild_data(guild_id, "currency", fresh_currency_data)
+        self.bot.data_manager.save_guild_data(guild_id, "transactions", [])
 
         embed = discord.Embed(
             title="✅ Economy Reset Complete",
@@ -484,14 +484,14 @@ class Admin(commands.Cog):
     async def economy_stats(self, ctx):
         """View server economy statistics"""
         guild_id = ctx.guild.id
-        currency_data = data_manager.load_guild_data(guild_id, "currency")
+        currency_data = self.bot.data_manager.load_guild_data(guild_id, "currency")
         if not currency_data:
             await ctx.send("No economy data available!")
             return
 
         users = currency_data.get('users', {})
         shop_items = currency_data.get('shop_items', {})
-        transactions = data_manager.load_guild_data(guild_id, "transactions") or []
+        transactions = self.bot.data_manager.load_guild_data(guild_id, "transactions") or []
 
         # Calculate stats
         total_users = len(users)
@@ -509,7 +509,7 @@ class Admin(commands.Cog):
                                    if datetime.fromisoformat(t.get('timestamp', '2000-01-01'))
                                    > datetime.now() - timedelta(days=7)])
 
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
         symbol = config.get('currency_symbol', '$')
         currency_name = config.get('currency_name', 'currency')
 
@@ -547,7 +547,7 @@ class Admin(commands.Cog):
         """Admin command to validate guild data"""
         await interaction.response.defer(ephemeral=True)
 
-        validator = DataValidator(self.bot, data_manager)
+        validator = DataValidator(self.bot, self.bot.data_manager)
         report = await validator.validate_guild(interaction.guild.id)
 
         # Create embed with report
@@ -584,7 +584,7 @@ class Admin(commands.Cog):
         """Force complete re-initialization of guild"""
         await interaction.response.defer(ephemeral=True)
 
-        initializer = GuildInitializer(self.bot, data_manager)
+        initializer = GuildInitializer(self.bot, self.bot.data_manager)
 
         try:
             await initializer.initialize_guild(interaction.guild)
@@ -624,15 +624,20 @@ class Admin(commands.Cog):
         emoji: str = "🛍️"
     ):
         """Add new shop item"""
-        if price < 0:
-            await interaction.response.send_message("❌ Price cannot be negative!", ephemeral=True)
-            return
-
-        if stock < -1:
-            await interaction.response.send_message("❌ Stock cannot be less than -1!", ephemeral=True)
-            return
-
         try:
+            # VALIDATE ALL INPUTS
+            item_id = Validator.validate_string(item_id, "Item ID", max_length=50)
+            name = Validator.validate_string(name, "Name", max_length=100)
+            price = Validator.validate_positive_integer(price, "Price", max_value=1000000)
+            description = Validator.validate_string(description, "Description", max_length=500)
+            category = Validator.validate_enum(category, "Category", ["general", "consumable", "role", "collectible"])
+            stock = Validator.validate_non_negative_integer(stock, "Stock") if stock != -1 else stock
+            emoji = Validator.validate_string(emoji, "Emoji", max_length=10)
+
+            # Sanitize for SQL injection
+            item_id = Validator.sanitize_sql_input(item_id)
+            name = Validator.sanitize_sql_input(name)
+
             item = self.shop_manager.add_item(
                 interaction.guild_id,
                 item_id,
@@ -787,7 +792,7 @@ class Admin(commands.Cog):
         quantity: int = None,
         operation: str = "set"
     ):
-        """Restock item or view stock levels"""
+        """Restock item - PREVENT NEGATIVE STOCK"""
         if item_id is None:
             # Show all stock levels
             items = self.shop_manager.get_shop_items(interaction.guild_id, active_only=False, include_out_of_stock=True)
@@ -830,6 +835,11 @@ class Admin(commands.Cog):
             embed.add_field(name="Unlimited", value="Yes" if stock_info['unlimited'] else "No", inline=True)
 
             await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # VALIDATION: Prevent negative stock
+        if quantity < 0:
+            await interaction.response.send_message("Stock cannot be negative.", ephemeral=True)
             return
 
         # Update stock

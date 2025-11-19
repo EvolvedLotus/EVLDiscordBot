@@ -5,12 +5,18 @@ Complete backend with all functionality restored
 
 from flask import Flask, request, jsonify, make_response, session, send_from_directory
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import os
 import sys
 import logging
 from datetime import datetime, timedelta, timezone
 import asyncio
 from threading import Thread
+import hashlib
+import secrets
+import json
+from functools import wraps
 
 # Logging setup
 logging.basicConfig(
@@ -54,6 +60,102 @@ CORS(app,
      max_age=3600
 )
 
+# Initialize rate limiter
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
+
+# Track failed login attempts
+failed_login_attempts = {}  # {ip: [(timestamp, username), ...]}
+
+def require_auth(f):
+    """Decorator to require valid session"""
+    from functools import wraps
+
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        session_token = request.cookies.get('session_token')
+
+        if not session_token:
+            return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+        # Validate session
+        user = auth_manager.validate_session(session_token)
+
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid or expired session'}), 401
+
+        # Check if session needs refresh (expires in < 1 hour)
+        if user['session_expires'] - datetime.now(timezone.utc) < timedelta(hours=1):
+            # Refresh session
+            new_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+            auth_manager.refresh_session(session_token, new_expires)
+
+        # Add user to request context
+        request.user = user
+
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+def require_guild_access(f):
+    """Decorator to require guild access validation"""
+    from functools import wraps
+
+    @wraps(f)
+    def decorated_function(server_id, *args, **kwargs):
+        # First ensure user is authenticated
+        session_token = request.cookies.get('session_token')
+        if not session_token:
+            return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+        user = auth_manager.validate_session(session_token)
+        if not user:
+            return jsonify({'success': False, 'error': 'Invalid or expired session'}), 401
+
+        # Validate user has access to this guild
+        try:
+            user_guilds = data_manager.get_user_guilds(user['id'])
+            if server_id not in [str(g.get('guild_id', g)) for g in user_guilds]:
+                logger.warning(f"Access denied: User {user['id']} attempted to access guild {server_id}")
+                return jsonify({'error': 'Access denied to this server'}), 403
+        except Exception as e:
+            logger.error(f"Error validating guild access for user {user['id']}, guild {server_id}: {e}")
+            return jsonify({'error': 'Server error validating access'}), 500
+
+        # Add user to request context
+        request.user = user
+
+        return f(server_id, *args, **kwargs)
+
+    return decorated_function
+
+def safe_error_response(error, status_code=500, log_error=True):
+    """
+    Create a safe error response that doesn't leak sensitive information.
+    Only returns user-friendly error messages.
+    """
+    if log_error and error:
+        # Log the full error for debugging (server-side only)
+        logger.error(f"API Error: {str(error)}", exc_info=True)
+
+    # User-friendly error messages based on status code
+    user_messages = {
+        400: 'Bad request - please check your input',
+        401: 'Authentication required',
+        403: 'Access denied',
+        404: 'Resource not found',
+        429: 'Too many requests - please try again later',
+        500: 'Server error - please try again later'
+    }
+
+    message = user_messages.get(status_code, 'An error occurred')
+
+    return jsonify({'error': message}), status_code
+
 # Session configuration
 app.config['SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me')
 
@@ -96,7 +198,7 @@ try:
 
     # Initialize managers
     data_manager = DataManager()
-    transaction_manager = TransactionManager(data_manager)
+    transaction_manager = TransactionManager(data_manager, audit_manager, cache_manager)
     task_manager = TaskManager(data_manager, transaction_manager)
     shop_manager = ShopManager(data_manager, transaction_manager)
     announcement_manager = AnnouncementManager(data_manager)
@@ -253,34 +355,86 @@ def get_status():
 
 # ========== AUTHENTICATION ==========
 @app.route('/api/auth/login', methods=['POST'])
+@limiter.limit("5 per minute")  # Max 5 login attempts per minute per IP
 def login():
-    try:
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
 
-        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'changeme123')
+    if not username or not password:
+        return jsonify({'success': False, 'error': 'Missing credentials'}), 400
 
-        if username == admin_username and password == admin_password:
-            session['authenticated'] = True
-            session['username'] = username
-            session.permanent = True
+    client_ip = get_remote_address()
 
-            return jsonify({
-                'success': True,
-                'message': 'Login successful',
-                'user': {'username': username}
-            }), 200
-        else:
+    # Check for account lockout (5 failed attempts in 15 minutes)
+    if client_ip in failed_login_attempts:
+        recent_failures = [
+            (ts, user) for ts, user in failed_login_attempts[client_ip]
+            if datetime.now() - ts < timedelta(minutes=15)
+        ]
+        failed_login_attempts[client_ip] = recent_failures
+
+        if len(recent_failures) >= 5:
+            logger.warning(f"Account lockout triggered for IP: {client_ip}")
             return jsonify({
                 'success': False,
-                'error': 'Invalid username or password'
-            }), 401
+                'error': 'Too many failed attempts. Try again in 15 minutes.'
+            }), 429
+
+    try:
+        # Hash password with SHA256
+        password_hash = hashlib.sha256(password.encode()).hexdigest()
+
+        # Query user
+        user = auth_manager.authenticate_user(username, password_hash)
+
+        if not user:
+            # Log failed attempt
+            if client_ip not in failed_login_attempts:
+                failed_login_attempts[client_ip] = []
+            failed_login_attempts[client_ip].append((datetime.now(), username))
+
+            logger.warning(f"Failed login attempt for username: {username} from IP: {client_ip}")
+            return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+
+        # Clear failed attempts on success
+        if client_ip in failed_login_attempts:
+            del failed_login_attempts[client_ip]
+
+        # Create secure session
+        session_token = secrets.token_urlsafe(32)
+        session_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+
+        # Store session in database
+        auth_manager.create_session(user['id'], session_token, session_expires)
+
+        # Update last_login
+        auth_manager.update_last_login(user['id'])
+
+        # Set secure cookie
+        response = jsonify({
+            'success': True,
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'is_superadmin': user.get('is_superadmin', False)
+            }
+        })
+        response.set_cookie(
+            'session_token',
+            session_token,
+            httponly=True,  # Prevent XSS
+            secure=True,    # HTTPS only
+            samesite='Strict',  # CSRF protection
+            max_age=86400   # 24 hours
+        )
+
+        logger.info(f"Successful login for user: {username}")
+        return response
 
     except Exception as e:
-        logger.error(f"Login error: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.exception(f"Login error: {e}")
+        return jsonify({'success': False, 'error': 'Server error'}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
@@ -304,220 +458,236 @@ def validate_session():
 
 # ========== SERVER MANAGEMENT ==========
 @app.route('/api/servers', methods=['GET'])
+@require_auth
 def get_servers():
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         servers = data_manager.get_all_guilds()
         return jsonify({'servers': servers}), 200
     except Exception as e:
-        logger.error(f"Error getting servers: {e}")
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/config', methods=['GET'])
+@require_guild_access
 def get_server_config(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         config = data_manager.get_guild_config(server_id)
         return jsonify(config), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/config', methods=['PUT'])
+@require_guild_access
 def update_server_config(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         data = request.get_json()
         data_manager.update_guild_config(server_id, data)
         return jsonify({'success': True}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/channels', methods=['GET'])
+@require_guild_access
 def get_channels(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         channels = data_manager.get_guild_channels(server_id)
         return jsonify({'channels': channels}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 # ========== USER MANAGEMENT ==========
 @app.route('/api/<server_id>/users', methods=['GET'])
+@require_guild_access
 def get_users(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 50))
         users = data_manager.get_guild_users(server_id, page, limit)
         return jsonify(users), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/users/<user_id>', methods=['GET'])
+@require_guild_access
 def get_user(server_id, user_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         user = data_manager.get_user(server_id, user_id)
         return jsonify(user), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/users/<user_id>/balance', methods=['PUT'])
+@require_guild_access
 def update_balance(server_id, user_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         data = request.get_json()
         amount = data.get('amount', 0)
         transaction_manager.adjust_balance(server_id, user_id, amount, 'Admin adjustment')
         return jsonify({'success': True}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 # ========== TASK MANAGEMENT ==========
 @app.route('/api/<server_id>/tasks', methods=['GET'])
+@require_guild_access
 def get_tasks(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         tasks = task_manager.get_tasks(server_id)
         return jsonify({'tasks': tasks}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/tasks', methods=['POST'])
+@require_guild_access
 def create_task(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         data = request.get_json()
         task = task_manager.create_task(server_id, data)
         return jsonify(task), 201
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/tasks/<task_id>', methods=['PUT'])
+@require_guild_access
 def update_task(server_id, task_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         data = request.get_json()
         task_manager.update_task(server_id, task_id, data)
         return jsonify({'success': True}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/tasks/<task_id>', methods=['DELETE'])
+@require_guild_access
 def delete_task(server_id, task_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         task_manager.delete_task(server_id, task_id)
         return jsonify({'success': True}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 # ========== SHOP MANAGEMENT ==========
 @app.route('/api/<server_id>/shop', methods=['GET'])
+@require_guild_access
 def get_shop(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         items = shop_manager.get_items(server_id)
         return jsonify({'items': items}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/shop', methods=['POST'])
+@require_guild_access
 def create_shop_item(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         data = request.get_json()
         item = shop_manager.create_item(server_id, data)
         return jsonify(item), 201
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/shop/<item_id>', methods=['PUT'])
+@require_guild_access
 def update_shop_item(server_id, item_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         data = request.get_json()
         shop_manager.update_item(server_id, item_id, data)
         return jsonify({'success': True}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/shop/<item_id>', methods=['DELETE'])
+@require_guild_access
 def delete_shop_item(server_id, item_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         shop_manager.delete_item(server_id, item_id)
         return jsonify({'success': True}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 # ========== TRANSACTIONS ==========
 @app.route('/api/<server_id>/transactions', methods=['GET'])
+@require_guild_access
 def get_transactions(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         transactions = transaction_manager.get_transactions(server_id)
         return jsonify({'transactions': transactions}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 # ========== ANNOUNCEMENTS ==========
 @app.route('/api/<server_id>/announcements', methods=['GET'])
+@require_guild_access
 def get_announcements(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         announcements = announcement_manager.get_announcements(server_id)
         return jsonify({'announcements': announcements}), 200
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 @app.route('/api/<server_id>/announcements', methods=['POST'])
+@require_guild_access
 def create_announcement(server_id):
-    if not session.get('authenticated'):
-        return jsonify({'error': 'Unauthorized'}), 401
-
     try:
         data = request.get_json()
         announcement = announcement_manager.create_announcement(server_id, data)
         return jsonify(announcement), 201
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 # ========== SERVER-SENT EVENTS (SSE) ==========
+@app.route('/api/sse/<guild_id>')
+@require_auth
+def sse_stream(guild_id):
+    """Server-Sent Events stream with guild isolation"""
+
+    # Validate user has access to this guild
+    user_guilds = data_manager.get_user_guilds(request.user['id'])
+    if guild_id not in [g['guild_id'] for g in user_guilds]:
+        return jsonify({'error': 'Access denied'}), 403
+
+    def generate():
+        import uuid
+        client_id = str(uuid.uuid4())
+
+        # Register client with guild filter
+        sse_manager.register_client(client_id, guild_id)
+
+        try:
+            # Send initial connection event
+            yield f"data: {json.dumps({'type': 'connected', 'client_id': client_id})}\n\n"
+
+            last_event_time = datetime.now()
+            while True:
+                # Get events for this guild only
+                events = sse_manager.get_client_events(client_id, guild_id)
+
+                for event in events:
+                    # Double-check guild_id matches (security)
+                    if event.get('guild_id') == guild_id:
+                        yield f"data: {json.dumps(event)}\n\n"
+
+                # Send keepalive every 30 seconds
+                if datetime.now() - last_event_time > timedelta(seconds=30):
+                    yield f": keepalive\n\n"
+                    last_event_time = datetime.now()
+
+                import time
+                time.sleep(1)
+
+        except GeneratorExit:
+            # Client disconnected
+            sse_manager.unregister_client(client_id)
+
+    from flask import Response
+    return Response(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no'
+        }
+    )
+
 @app.route('/api/stream', methods=['GET'])
 def stream():
     """Server-Sent Events endpoint for real-time updates"""
@@ -624,8 +794,7 @@ def test_stream():
 
         return jsonify({'success': True, 'message': f'Test event "{event_type}" broadcasted'}), 200
     except Exception as e:
-        logger.error(f"Test stream error: {e}")
-        return jsonify({'error': str(e)}), 500
+        return safe_error_response(e)
 
 # ========== STATIC FILES ==========
 @app.route('/')

@@ -12,32 +12,50 @@ class MessageScanner:
     def __init__(self, protection_manager: ProtectionManager):
         self.protection_manager = protection_manager
 
-    def scan_message_for_profanity(self, guild_id: int, message_content: str) -> List[Dict]:
-        """Scans text content against profanity list using normalized matching"""
-        config = self.protection_manager.load_protection_config(guild_id)
+    async def scan_message_for_profanity(self, message, guild_id):
+        """Scan message content for profanity with whitelist support"""
 
-        if not config.get('profanity_filter', True):
-            return []
+        # Skip bot messages
+        if message.author.bot:
+            return None
 
-        profanity_list = self.protection_manager.get_profanity_list(guild_id)
-        matches = []
+        # Load protection config
+        config = await self.protection_manager.get_config(guild_id)
 
-        # Normalize content for better matching
-        normalized_content = self._normalize_text(message_content)
+        if not config or not config.get('profanity_filter_enabled'):
+            return None
 
-        for word in profanity_list:
-            # Use word boundaries and case-insensitive matching
-            pattern = r'\b' + re.escape(word) + r'\b'
-            for match in re.finditer(pattern, normalized_content, re.IGNORECASE):
-                severity = self._calculate_severity(word, config.get('profanity_level', 'moderate'))
-                matches.append({
-                    'word': word,
-                    'start': match.start(),
-                    'end': match.end(),
-                    'severity': severity
-                })
+        # Get profanity list and whitelist
+        profanity_list = config.get('profanity_words', [])
+        whitelist = config.get('whitelist_words', [])
 
-        return matches
+        content = message.content.lower()
+
+        # Check whitelist first (prevent false positives)
+        for whitelisted_word in whitelist:
+            if whitelisted_word.lower() in content:
+                # If whitelisted word contains profanity, ignore it
+                content = content.replace(whitelisted_word.lower(), '')
+
+        # Now check for profanity
+        detected_words = []
+        for bad_word in profanity_list:
+            # Word boundary check to prevent partial matches
+            import re
+            pattern = r'\b' + re.escape(bad_word.lower()) + r'\b'
+            if re.search(pattern, content):
+                detected_words.append(bad_word)
+
+        if detected_words:
+            return {
+                'violation_type': 'profanity',
+                'detected_words': detected_words,
+                'message_id': str(message.id),
+                'user_id': str(message.author.id),
+                'channel_id': str(message.channel.id)
+            }
+
+        return None
 
     def scan_message_for_links(self, guild_id: int, message_content: str) -> List[Dict]:
         """Extracts URLs from text and classifies them"""

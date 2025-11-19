@@ -22,283 +22,287 @@ class TaskManager:
         """Set bot instance for Discord operations"""
         self.bot = bot
 
-    def create_task(self, guild_id: int, task_data: Dict) -> Dict:
-        """
-        Create a new task with validation.
+    async def create_task(self, guild_id, name, description, reward, duration_hours, max_claims=None):
+        """Create new task with atomic task_id generation"""
 
-        Args:
-            guild_id: Guild ID
-            task_data: Task data dictionary
+        # VALIDATION
+        if reward <= 0:
+            raise ValueError("Reward must be positive")
+        if duration_hours <= 0:
+            raise ValueError("Duration must be positive")
 
-        Returns:
-            Created task data or error dict
-        """
-        try:
-            # Validate required fields
-            required_fields = ['name', 'description', 'reward', 'duration_hours']
-            for field in required_fields:
-                if field not in task_data:
-                    return {'success': False, 'error': f'Missing required field: {field}'}
-
-            # Validate data types and ranges
-            try:
-                reward = int(task_data['reward'])
-                duration_hours = int(task_data['duration_hours'])
-                if reward < 0 or duration_hours < 1:
-                    raise ValueError("Invalid reward or duration values")
-            except (ValueError, TypeError):
-                return {'success': False, 'error': 'Invalid reward or duration format'}
-
-            # Get next task ID
-            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
-            if not tasks_data:
-                tasks_data = {'tasks': {}, 'user_tasks': {}, 'settings': {}}
-
-            next_id = tasks_data.get('settings', {}).get('next_task_id', 1)
-            task_id = str(next_id)
-
-            # Calculate expiry
-            created = datetime.now(timezone.utc)
-            expires_at = created + timedelta(hours=duration_hours)
-
-            # Prepare task data
-            task = {
-                'id': int(task_id),
-                'name': str(task_data['name']).strip(),
-                'description': str(task_data['description']).strip(),
-                'reward': reward,
-                'duration_hours': duration_hours,
-                'status': 'active',
-                'created_at': created.isoformat(),
-                'expires_at': expires_at.isoformat(),
-                'channel_id': str(task_data.get('channel_id', '')),
-                'max_claims': int(task_data.get('max_claims', -1)),
-                'current_claims': 0,
-                'assigned_users': [],
-                'category': str(task_data.get('category', 'General')),
-                'role_name': task_data.get('role_name'),
-                'message_id': None
-            }
-
-            # Save task
-            if 'tasks' not in tasks_data:
-                tasks_data['tasks'] = {}
-            tasks_data['tasks'][task_id] = task
-
-            # Update next task ID
-            if 'settings' not in tasks_data:
-                tasks_data['settings'] = {}
-            tasks_data['settings']['next_task_id'] = next_id + 1
-
-            success = self.data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
-
-            if success:
-                logger.info(f"Task created: {task_id} in guild {guild_id}")
-                return {'success': True, 'task': task}
-            else:
-                return {'success': False, 'error': 'Failed to save task'}
-
-        except Exception as e:
-            logger.error(f"Error creating task in guild {guild_id}: {e}")
-            return {'success': False, 'error': str(e)}
-
-    def claim_task(self, guild_id: int, user_id: int, task_id: str) -> Dict:
-        """
-        Claim a task for a user with atomic operations.
-
-        Args:
-            guild_id: Guild ID
-            user_id: User ID
-            task_id: Task ID
-
-        Returns:
-            Result dictionary
-        """
-        def claim_operation(tasks_data, currency_data):
-            task = tasks_data.get('tasks', {}).get(task_id)
-
-            if not task:
-                return {'success': False, 'error': "Task not found."}
-
-            # Validation checks
-            if task['status'] != 'active':
-                return {'success': False, 'error': f"This task is no longer active (Status: {task['status']})."}
-
-            # Check expiry
-            if datetime.now(timezone.utc) > datetime.fromisoformat(task['expires_at']):
-                task['status'] = 'expired'
-                tasks_data['settings']['total_expired'] = tasks_data.get('settings', {}).get('total_expired', 0) + 1
-                return {'success': False, 'error': "This task has expired."}
-
-            # Check max claims
-            if task['max_claims'] != -1 and task['current_claims'] >= task['max_claims']:
-                return {'success': False, 'error': "This task has reached maximum claims."}
-
-            # Check if user already claimed
-            user_tasks = tasks_data.get('user_tasks', {}).get(str(user_id), {})
-            if task_id in user_tasks:
-                status = user_tasks[task_id]['status']
-                return {'success': False, 'error': f"You have already claimed this task (Status: {status})."}
-
-            # Check user task limit
-            settings = tasks_data.get('settings', {})
-            max_per_user = settings.get('max_tasks_per_user', 10)
-            active_count = sum(
-                1 for t in user_tasks.values()
-                if t['status'] in ['claimed', 'in_progress', 'submitted']
+        async with self.data_manager.atomic_transaction() as conn:
+            # ATOMIC INCREMENT of task_id (prevent race condition)
+            result = await conn.fetchrow(
+                """UPDATE task_settings
+                   SET next_task_id = next_task_id + 1
+                   WHERE guild_id = $1
+                   RETURNING next_task_id""",
+                guild_id
             )
-            if active_count >= max_per_user:
-                return {'success': False, 'error': f"You have reached the maximum of {max_per_user} active tasks."}
 
-            # Claim task
-            claimed_at = datetime.now(timezone.utc)
-            deadline = claimed_at + timedelta(hours=task['duration_hours'])
+            if not result:
+                # Initialize task_settings if not exists
+                await conn.execute(
+                    """INSERT INTO task_settings (guild_id, next_task_id)
+                       VALUES ($1, 1)
+                       ON CONFLICT (guild_id) DO NOTHING""",
+                    guild_id
+                )
+                task_id = 1
+            else:
+                task_id = result['next_task_id']
 
-            tasks_data.setdefault('user_tasks', {}).setdefault(str(user_id), {})[task_id] = {
-                'claimed_at': claimed_at.isoformat(),
-                'deadline': deadline.isoformat(),
-                'status': 'in_progress',
-                'proof_message_id': None,
-                'proof_attachments': [],
-                'proof_content': '',
-                'submitted_at': None,
-                'completed_at': None,
-                'notes': ''
-            }
+            # Calculate expiration
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
 
-            # Update task claims
-            task['current_claims'] += 1
-            task['assigned_users'].append(str(user_id))
+            # Insert task
+            await conn.execute(
+                """INSERT INTO tasks (task_id, guild_id, name, description, reward,
+                                      duration_hours, max_claims, current_claims, status, expires_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 'active', $8)""",
+                task_id, guild_id, name, description, reward, duration_hours, max_claims, expires_at
+            )
+
+        return task_id
+
+    async def claim_task(self, guild_id: int, user_id: int, task_id: int) -> Dict:
+        """Claim task with PREVENT OVER-CLAIMING - atomic validation"""
+        user_id = str(user_id)
+        guild_id = str(guild_id)
+        task_id = str(task_id)
+
+        try:
+            async with self.data_manager.atomic_transaction() as conn:
+                # 1. LOCK TASK ROW FIRST
+                task_data = await conn.fetchrow(
+                    """SELECT task_id, name, reward, duration_hours, max_claims,
+                              current_claims, status, expires_at
+                       FROM tasks
+                       WHERE task_id = $1 AND guild_id = $2
+                       FOR UPDATE""",
+                    task_id, guild_id
+                )
+
+                if not task_data:
+                    return {'success': False, 'error': "Task not found."}
+
+                # VALIDATION: Task must be active
+                if task_data['status'] != 'active':
+                    return {'success': False, 'error': "Task is not active."}
+
+                # VALIDATION: Task not expired
+                if task_data['expires_at'] < datetime.now(timezone.utc):
+                    return {'success': False, 'error': "Task has expired."}
+
+                # VALIDATION: Max claims not exceeded
+                if task_data['max_claims'] and task_data['current_claims'] >= task_data['max_claims']:
+                    return {'success': False, 'error': "Task is full."}
+
+                # VALIDATION: User hasn't already claimed
+                existing_claim = await conn.fetchrow(
+                    """SELECT id FROM user_tasks
+                       WHERE user_id = $1 AND guild_id = $2 AND task_id = $3""",
+                    user_id, guild_id, task_id
+                )
+
+                if existing_claim:
+                    return {'success': False, 'error': "You already claimed this task."}
+
+                # Calculate deadline
+                deadline = datetime.now(timezone.utc) + timedelta(hours=task_data['duration_hours'])
+
+                # CREATE USER TASK
+                await conn.execute(
+                    """INSERT INTO user_tasks (user_id, guild_id, task_id, status, claimed_at, deadline)
+                       VALUES ($1, $2, $3, 'in_progress', $4, $5)""",
+                    user_id, guild_id, task_id, datetime.now(timezone.utc), deadline
+                )
+
+                # INCREMENT CURRENT_CLAIMS
+                await conn.execute(
+                    """UPDATE tasks SET current_claims = current_claims + 1
+                       WHERE task_id = $1 AND guild_id = $2""",
+                    task_id, guild_id
+                )
+
+            # Invalidate cache
+            self.cache_manager.invalidate(f"tasks:{guild_id}")
+            self.cache_manager.invalidate(f"user_tasks:{guild_id}:{user_id}")
+
+            # Emit SSE event
+            await self.sse_manager.broadcast_event(guild_id, {
+                'type': 'task_claimed',
+                'user_id': user_id,
+                'task_id': task_id
+            })
 
             return {
                 'success': True,
-                'task': task,
-                'deadline': deadline,
-                'claimed_at': claimed_at
+                'task': task_data,
+                'deadline': deadline
             }
 
-        # Execute atomic operation
-        try:
-            result = self._atomic_task_operation(guild_id, claim_operation)
-            return result
         except Exception as e:
-            logger.error(f"Atomic task claim failed: {e}")
-            return {'success': False, 'error': "An error occurred while claiming the task. Please try again."}
+            logger.exception(f"Claim task error: {e}")
+            return {'success': False, 'error': "Failed to claim task."}
 
-    def submit_task(self, guild_id: int, user_id: int, task_id: str, proof_data: Dict) -> Dict:
-        """
-        Submit a task for review.
-
-        Args:
-            guild_id: Guild ID
-            user_id: User ID
-            task_id: Task ID
-            proof_data: Proof submission data
-
-        Returns:
-            Result dictionary
-        """
-        def submit_operation(tasks_data, currency_data):
-            user_tasks = tasks_data.get('user_tasks', {}).get(str(user_id), {})
-            user_task = user_tasks.get(task_id)
-
-            if not user_task:
-                return {'success': False, 'error': "You haven't claimed this task."}
-
-            if user_task['status'] != 'in_progress':
-                return {'success': False, 'error': f"Task is not in progress (Status: {user_task['status']})."}
-
-            # Check deadline
-            deadline = datetime.fromisoformat(user_task['deadline'])
-            if datetime.now(timezone.utc) > deadline:
-                user_task['status'] = 'expired'
-                return {'success': False, 'error': "Task deadline has passed."}
-
-            # Update submission
-            user_task['status'] = 'submitted'
-            user_task['submitted_at'] = datetime.now(timezone.utc).isoformat()
-            user_task['proof_content'] = proof_data.get('content', '')
-            user_task['proof_attachments'] = proof_data.get('attachments', [])
-            user_task['proof_message_id'] = proof_data.get('message_id')
-
-            return {'success': True, 'user_task': user_task}
+    async def submit_task(self, guild_id: int, user_id: int, task_id: int, proof: str) -> Dict:
+        """Submit task with PREVENT LATE SUBMISSIONS - deadline validation"""
+        user_id = str(user_id)
+        guild_id = str(guild_id)
+        task_id = str(task_id)
 
         try:
-            result = self._atomic_task_operation(guild_id, submit_operation)
-            return result
+            async with self.data_manager.atomic_transaction() as conn:
+                # Get user task with lock
+                user_task = await conn.fetchrow(
+                    """SELECT id, status, deadline, submitted_at
+                       FROM user_tasks
+                       WHERE user_id = $1 AND guild_id = $2 AND task_id = $3
+                       FOR UPDATE""",
+                    user_id, guild_id, task_id
+                )
+
+                if not user_task:
+                    return {'success': False, 'error': "You haven't claimed this task."}
+
+                # VALIDATION: Not already submitted
+                if user_task['status'] != 'in_progress':
+                    return {'success': False, 'error': f"Task already {user_task['status']}."}
+
+                # VALIDATION: Deadline not passed
+                now = datetime.now(timezone.utc)
+                if now > user_task['deadline']:
+                    # Auto-expire the task
+                    await conn.execute(
+                        """UPDATE user_tasks SET status = 'expired'
+                           WHERE id = $1""",
+                        user_task['id']
+                    )
+                    return {'success': False, 'error': "Deadline has passed. Cannot submit."}
+
+                # UPDATE SUBMISSION
+                await conn.execute(
+                    """UPDATE user_tasks
+                       SET status = 'submitted',
+                           proof_content = $1,
+                           submitted_at = $2,
+                           proof_message_id = $3
+                       WHERE id = $4""",
+                    proof, now, None, user_task['id']  # proof_message_id can be updated later
+                )
+
+            # Invalidate cache
+            self.cache_manager.invalidate(f"user_tasks:{guild_id}:{user_id}")
+
+            # Emit SSE event
+            await self.sse_manager.broadcast_event(guild_id, {
+                'type': 'task_submitted',
+                'user_id': user_id,
+                'task_id': task_id
+            })
+
+            return {'success': True}
+
         except Exception as e:
-            logger.error(f"Task submission failed: {e}")
+            logger.exception(f"Task submit error: {e}")
             return {'success': False, 'error': "Failed to submit task."}
 
-    def approve_task(self, guild_id: int, user_id: int, task_id: str, approver_id: int) -> Dict:
-        """
-        Approve a submitted task and award reward.
+    async def approve_task(self, guild_id: int, user_id: int, task_id: int, approver_id: int) -> Dict:
+        """Approve task with PREVENT DUPLICATE REWARDS - atomic validation"""
+        user_id = str(user_id)
+        guild_id = str(guild_id)
+        task_id = str(task_id)
+        approver_id = str(approver_id)
 
-        Args:
-            guild_id: Guild ID
-            user_id: User ID
-            task_id: Task ID
-            approver_id: Admin approving the task
+        try:
+            async with self.data_manager.atomic_transaction() as conn:
+                # Get user task with lock
+                user_task = await conn.fetchrow(
+                    """SELECT ut.id, ut.status, t.reward, t.name
+                       FROM user_tasks ut
+                       JOIN tasks t ON ut.task_id = t.task_id AND ut.guild_id = t.guild_id
+                       WHERE ut.user_id = $1 AND ut.guild_id = $2 AND ut.task_id = $3
+                       FOR UPDATE""",
+                    user_id, guild_id, task_id
+                )
 
-        Returns:
-            Result dictionary
-        """
-        def approve_operation(tasks_data, currency_data):
-            user_tasks = tasks_data.get('user_tasks', {}).get(str(user_id), {})
-            user_task = user_tasks.get(task_id)
+                if not user_task:
+                    return {'success': False, 'error': "User hasn't claimed this task."}
 
-            if not user_task:
-                return {'success': False, 'error': "Task not found for user."}
+                # VALIDATION: Not already completed
+                if user_task['status'] == 'accepted':
+                    return {'success': False, 'error': "Task already completed."}
 
-            if user_task['status'] != 'submitted':
-                return {'success': False, 'error': f"Task is not submitted (Status: {user_task['status']})."}
+                # Get user balance
+                user_data = await conn.fetchrow(
+                    "SELECT balance FROM users WHERE user_id = $1 AND guild_id = $2 FOR UPDATE",
+                    user_id, guild_id
+                )
 
-            task = tasks_data.get('tasks', {}).get(task_id)
-            if not task:
-                return {'success': False, 'error': "Task definition not found."}
+                if not user_data:
+                    return {'success': False, 'error': "User not found."}
 
-            # Award reward
-            reward_amount = task['reward']
-            description = f"Task completion: {task['name']}"
+                old_balance = user_data['balance']
+                new_balance = old_balance + user_task['reward']
 
-            # Log transaction
-            transaction_result = self.transaction_manager.log_transaction(
-                guild_id=guild_id,
-                user_id=user_id,
-                amount=reward_amount,
-                balance_before=0,  # Will be calculated by transaction manager
-                balance_after=0,   # Will be calculated by transaction manager
-                transaction_type='task',
-                description=description,
-                metadata={
-                    'task_id': task_id,
-                    'task_name': task['name'],
-                    'approver_id': approver_id
-                }
-            )
+                # Update task status
+                await conn.execute(
+                    """UPDATE user_tasks
+                       SET status = 'accepted', completed_at = $1
+                       WHERE id = $2""",
+                    datetime.now(timezone.utc), user_task['id']
+                )
 
-            if not transaction_result:
-                return {'success': False, 'error': "Failed to log transaction."}
+                # Award reward
+                await conn.execute(
+                    "UPDATE users SET balance = $1 WHERE user_id = $2 AND guild_id = $3",
+                    new_balance, user_id, guild_id
+                )
 
-            # Update task status
-            user_task['status'] = 'accepted'
-            user_task['completed_at'] = datetime.now(timezone.utc).isoformat()
+                # Log transaction
+                await self.transaction_manager.log_transaction(
+                    user_id=user_id,
+                    guild_id=guild_id,
+                    amount=user_task['reward'],
+                    transaction_type="task_reward",
+                    balance_before=old_balance,
+                    balance_after=new_balance,
+                    description=f"Task completed: {user_task['name']}",
+                    metadata={'task_id': task_id, 'approver_id': approver_id},
+                    conn=conn
+                )
 
-            # Update task statistics
-            tasks_data['settings']['total_completed'] = tasks_data.get('settings', {}).get('total_completed', 0) + 1
+                # Update task_settings counter
+                await conn.execute(
+                    """UPDATE task_settings
+                       SET total_completed = total_completed + 1
+                       WHERE guild_id = $1""",
+                    guild_id
+                )
+
+            # Invalidate caches
+            self.cache_manager.invalidate(f"balance:{guild_id}:{user_id}")
+            self.cache_manager.invalidate(f"user_tasks:{guild_id}:{user_id}")
+
+            # Emit SSE events
+            await self.sse_manager.broadcast_event(guild_id, {
+                'type': 'task_completed',
+                'user_id': user_id,
+                'task_id': task_id,
+                'reward': user_task['reward']
+            })
 
             return {
                 'success': True,
-                'reward_amount': reward_amount,
-                'transaction_id': transaction_result
+                'reward_amount': user_task['reward'],
+                'new_balance': new_balance
             }
 
-        try:
-            result = self._atomic_task_operation(guild_id, approve_operation)
-            return result
         except Exception as e:
-            logger.error(f"Task approval failed: {e}")
-            return {'success': False, 'error': "Failed to approve task."}
+            logger.exception(f"Complete task error: {e}")
+            return {'success': False, 'error': "Failed to complete task."}
 
     def reject_task(self, guild_id: int, user_id: int, task_id: str, reason: str = None) -> Dict:
         """

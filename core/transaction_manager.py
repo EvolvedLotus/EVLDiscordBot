@@ -5,8 +5,10 @@ import threading
 from collections import defaultdict
 
 class TransactionManager:
-    def __init__(self, data_manager):
+    def __init__(self, data_manager, audit_manager=None, cache_manager=None):
         self.data_manager = data_manager
+        self.audit_manager = audit_manager
+        self.cache_manager = cache_manager
         self.indexes = {}  # guild_id -> indexes
         self.index_locks = {}  # guild_id -> threading.Lock
         self.cache = {}  # Simple cache for recent queries
@@ -140,6 +142,13 @@ class TransactionManager:
         # Invalidate cache
         with self.cache_lock:
             self.cache.clear()
+
+        # Invalidate centralized cache
+        if self.cache_manager:
+            # Invalidate balance cache for this user
+            self.cache_manager.invalidate(f"balance:{guild_id}:{user_id}")
+            # Invalidate transaction caches
+            self.cache_manager.invalidate_pattern(f"transactions:{guild_id}:{user_id}:*")
 
         return transaction
 
@@ -373,3 +382,55 @@ class TransactionManager:
         self.rebuild_indexes(guild_id)
 
         return len(transactions) - len(recent_transactions)  # Return number of transactions removed
+
+    async def validate_transaction_integrity(self, guild_id=None):
+        """Validate all transactions have correct balance calculations"""
+
+        violations = []
+
+        try:
+            query = """
+                SELECT transaction_id, user_id, guild_id, amount,
+                       balance_before, balance_after
+                FROM transactions
+            """
+
+            if guild_id:
+                query += " WHERE guild_id = $1"
+                transactions = await self.data_manager.fetch(query, guild_id)
+            else:
+                transactions = await self.data_manager.fetch(query)
+
+            for tx in transactions:
+                expected_balance = tx['balance_before'] + tx['amount']
+
+                if tx['balance_after'] != expected_balance:
+                    violations.append({
+                        'transaction_id': tx['transaction_id'],
+                        'user_id': tx['user_id'],
+                        'guild_id': tx['guild_id'],
+                        'expected': expected_balance,
+                        'actual': tx['balance_after'],
+                        'difference': tx['balance_after'] - expected_balance
+                    })
+
+                    # Log to audit
+                    await self.audit_manager.log_event(
+                        guild_id=tx['guild_id'],
+                        event_type='transaction_integrity_violation',
+                        details={
+                            'transaction_id': tx['transaction_id'],
+                            'user_id': tx['user_id'],
+                            'expected_balance': expected_balance,
+                            'actual_balance': tx['balance_after']
+                        }
+                    )
+
+            if violations:
+                logger.error(f"Found {len(violations)} transaction integrity violations")
+
+            return violations
+
+        except Exception as e:
+            logger.exception(f"Transaction integrity validation error: {e}")
+            return []

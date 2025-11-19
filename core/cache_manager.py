@@ -188,6 +188,29 @@ class CacheManager:
                 'uptime': time.time() - (self._start_time if hasattr(self, '_start_time') else time.time())
             }
 
+    def invalidate(self, key: str):
+        """Invalidate a specific cache key"""
+        with self._lock:
+            self._cache.pop(key, None)
+            self._cache_ttl.pop(key, None)
+            logger.debug(f"Invalidated cache key: {key}")
+
+    def invalidate_pattern(self, pattern: str):
+        """Invalidate all keys matching pattern"""
+        import fnmatch
+        keys_to_remove = []
+        with self._lock:
+            for key in self._cache.keys():
+                if fnmatch.fnmatch(key, pattern):
+                    keys_to_remove.append(key)
+
+            for key in keys_to_remove:
+                self._cache.pop(key, None)
+                self._cache_ttl.pop(key, None)
+
+            if keys_to_remove:
+                logger.debug(f"Invalidated {len(keys_to_remove)} cache keys matching pattern: {pattern}")
+
     def clear_all_cache(self):
         """Clear all cached data (admin function)"""
         with self._lock:

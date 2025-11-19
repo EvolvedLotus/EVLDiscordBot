@@ -113,3 +113,71 @@ class ModerationScheduler:
 
         if expired_jobs:
             logger.info(f"Cleaned up {len(expired_jobs)} expired moderation jobs")
+
+    async def execute_scheduled_jobs(self):
+        """Execute all pending scheduled jobs"""
+
+        try:
+            now = datetime.now()
+
+            # Get pending jobs with lock (simulated - in real implementation would use database)
+            pending_jobs = []
+            for job_id, job_info in self._scheduled_jobs.items():
+                if job_info['unmute_timestamp'] <= now:
+                    pending_jobs.append(job_info)
+
+            for job in pending_jobs:
+                try:
+                    # Execute job based on type
+                    if job['job_type'] == 'unmute':
+                        await self._execute_unmute(job)
+                    elif job['job_type'] == 'unban':
+                        await self._execute_unban(job)
+                    elif job['job_type'] == 'expire_strike':
+                        await self._execute_expire_strike(job)
+
+                    # Remove completed job
+                    del self._scheduled_jobs[job['job_id']]
+
+                    logger.info(f"Executed scheduled job: {job['job_id']} ({job['job_type']})")
+
+                except Exception as e:
+                    logger.exception(f"Failed to execute job {job['job_id']}: {e}")
+                    # Don't remove failed jobs so they can be retried
+
+        except Exception as e:
+            logger.exception(f"Scheduled jobs execution error: {e}")
+
+    async def _execute_unmute(self, job):
+        """Execute unmute job"""
+        guild = self.bot.get_guild(job['guild_id'])
+        if not guild:
+            return
+
+        member = guild.get_member(job['user_id'])
+        if not member:
+            return
+
+        # Remove timeout
+        await member.timeout(None, reason="Scheduled unmute")
+
+        # Update moderation_actions (would need database integration)
+        logger.info(f"Executed unmute for user {job['user_id']} in guild {job['guild_id']}")
+
+    async def _execute_unban(self, job):
+        """Execute unban job"""
+        guild = self.bot.get_guild(job['guild_id'])
+        if not guild:
+            return
+
+        try:
+            user = await self.bot.fetch_user(job['user_id'])
+            await guild.unban(user, reason="Scheduled unban")
+            logger.info(f"Executed unban for user {job['user_id']} in guild {job['guild_id']}")
+        except discord.NotFound:
+            logger.warning(f"User {job['user_id']} not found for unban in guild {job['guild_id']}")
+
+    async def _execute_expire_strike(self, job):
+        """Execute strike expiration job"""
+        # Mark strike as expired (would need database integration)
+        logger.info(f"Executed strike expiration for strike {job.get('strike_id', 'unknown')}")

@@ -64,31 +64,97 @@ class ModerationActions:
             logger.error(f"Failed to warn user {user_id}: {e}")
             return {'success': False, 'error': str(e)}
 
-    async def add_strike(self, guild_id: int, user_id: int, reason: str, moderator_id: int) -> Dict:
-        """Adds a strike record and evaluates escalation thresholds"""
+    async def add_strike(self, user_id, guild_id, reason, moderator_id, auto_generated=False, expires_hours=None):
+        """Add strike with automatic escalation"""
+
         try:
-            # For now, just log the strike - would need database table for persistent strikes
-            strike_record = {
-                'guild_id': guild_id,
-                'user_id': user_id,
-                'reason': reason,
-                'moderator_id': moderator_id,
-                'timestamp': datetime.now().isoformat()
-            }
+            async with self.data_manager.atomic_transaction() as conn:
+                # Generate unique strike_id
+                import uuid
+                strike_id = str(uuid.uuid4())
 
-            logger.info(f"Strike added: {strike_record}")
+                expires_at = None
+                if expires_hours:
+                    expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
 
-            # Check escalation thresholds (simplified - would need strike count from DB)
-            # For now, just return the record
-            return {
-                'success': True,
-                'strike_record': strike_record,
-                'escalation': 'none'  # none, mute, kick, ban
-            }
+                # Insert strike
+                await conn.execute(
+                    """INSERT INTO strikes (strike_id, guild_id, user_id, reason, moderator_id,
+                                            auto_generated, expires_at, is_active)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, true)""",
+                    strike_id, guild_id, user_id, reason, moderator_id, auto_generated, expires_at
+                )
+
+                # Get active strike count
+                active_strikes = await conn.fetch(
+                    """SELECT id FROM strikes
+                       WHERE user_id = $1 AND guild_id = $2 AND is_active = true
+                       AND (expires_at IS NULL OR expires_at > NOW())""",
+                    user_id, guild_id
+                )
+
+                strike_count = len(active_strikes)
+
+                # Log audit
+                await self.audit_manager.log_event(
+                    guild_id=guild_id,
+                    event_type='strike_added',
+                    user_id=user_id,
+                    moderator_id=moderator_id,
+                    details={
+                        'strike_id': strike_id,
+                        'reason': reason,
+                        'total_strikes': strike_count,
+                        'auto_generated': auto_generated
+                    },
+                    conn=conn
+                )
+
+                # ESCALATION LOGIC
+                guild = self.bot.get_guild(int(guild_id))
+                member = guild.get_member(int(user_id)) if guild else None
+
+                if not member:
+                    return strike_id
+
+                # Strike thresholds
+                if strike_count >= 5:
+                    # BAN at 5 strikes
+                    await member.ban(reason=f"Strike threshold exceeded (5 strikes)")
+                    await conn.execute(
+                        """INSERT INTO moderation_actions (action_id, guild_id, user_id, action_type,
+                                                            reason, moderator_id)
+                           VALUES ($1, $2, $3, 'ban', $4, $5)""",
+                        str(uuid.uuid4()), guild_id, user_id, "Strike threshold: 5 strikes", moderator_id
+                    )
+
+                elif strike_count >= 3:
+                    # KICK at 3 strikes
+                    await member.kick(reason=f"Strike threshold exceeded (3 strikes)")
+                    await conn.execute(
+                        """INSERT INTO moderation_actions (action_id, guild_id, user_id, action_type,
+                                                            reason, moderator_id)
+                           VALUES ($1, $2, $3, 'kick', $4, $5)""",
+                        str(uuid.uuid4()), guild_id, user_id, "Strike threshold: 3 strikes", moderator_id
+                    )
+
+                elif strike_count >= 2:
+                    # TIMEOUT at 2 strikes (24 hours)
+                    timeout_until = datetime.now(timezone.utc) + timedelta(hours=24)
+                    await member.timeout(timeout_until, reason=f"Strike threshold exceeded (2 strikes)")
+                    await conn.execute(
+                        """INSERT INTO moderation_actions (action_id, guild_id, user_id, action_type,
+                                                            reason, moderator_id, duration_seconds, expires_at)
+                           VALUES ($1, $2, $3, 'timeout', $4, $5, 86400, $6)""",
+                        str(uuid.uuid4()), guild_id, user_id, "Strike threshold: 2 strikes",
+                        moderator_id, timeout_until
+                    )
 
         except Exception as e:
-            logger.error(f"Failed to add strike for user {user_id}: {e}")
-            return {'success': False, 'error': str(e)}
+            logger.exception(f"Add strike error: {e}")
+            raise
+
+        return strike_id
 
     async def remove_strike(self, guild_id: int, user_id: int, strike_id: str, moderator_id: int) -> Dict:
         """Removes a strike (manual) and logs action"""

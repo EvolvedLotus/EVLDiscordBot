@@ -16,6 +16,7 @@ from core.data_manager import DataManager
 from core.transaction_manager import TransactionManager
 from core.task_manager import TaskManager
 from core.shop_manager import ShopManager
+from core.cache_manager import CacheManager
 from core.initializer import GuildInitializer
 from config import config
 
@@ -103,7 +104,8 @@ async def run_bot():
         # CRITICAL: Attach managers to bot BEFORE loading cogs
         logger.info("Initializing managers...")
         bot.data_manager = data_manager
-        bot.transaction_manager = TransactionManager(data_manager)
+        bot.cache_manager = CacheManager()
+        bot.transaction_manager = TransactionManager(data_manager, cache_manager=bot.cache_manager)
         bot.task_manager = TaskManager(data_manager, bot.transaction_manager)
         bot.shop_manager = ShopManager(data_manager, bot.transaction_manager)
 
@@ -639,6 +641,10 @@ async def run_bot():
         # Start the sync job
         sync_pending_discord_messages.start()
 
+        @sync_pending_discord_messages.error
+        async def sync_pending_discord_messages_error(error):
+            logger.exception(f"Discord message sync job failed: {error}")
+
         @tasks.loop(hours=1)
         async def cleanup_expired_cache():
             """Remove expired entries from data manager cache."""
@@ -669,6 +675,10 @@ async def run_bot():
 
         # Start the cache cleanup job
         cleanup_expired_cache.start()
+
+        @cleanup_expired_cache.error
+        async def cleanup_expired_cache_error(error):
+            logger.exception(f"Cache cleanup job failed: {error}")
 
         @tasks.loop(hours=1)
         async def hourly_guild_sync():
@@ -704,6 +714,10 @@ async def run_bot():
 
         # Start the hourly guild sync job
         hourly_guild_sync.start()
+
+        @hourly_guild_sync.error
+        async def hourly_guild_sync_error(error):
+            logger.exception(f"Hourly guild sync job failed: {error}")
 
         @tasks.loop(hours=24)
         async def validate_transaction_integrity():
@@ -802,6 +816,10 @@ async def run_bot():
 
         # Start the integrity validation job
         validate_transaction_integrity.start()
+
+        @validate_transaction_integrity.error
+        async def validate_transaction_integrity_error(error):
+            logger.exception(f"Transaction integrity validation job failed: {error}")
 
         @tasks.loop(hours=24)
         async def mark_inactive_users():
@@ -980,6 +998,10 @@ async def run_bot():
         # Start the backup job
         create_data_backups.start()
 
+        @create_data_backups.error
+        async def create_data_backups_error(error):
+            logger.exception(f"Data backup job failed: {error}")
+
         @tasks.loop(hours=24)
         async def check_inactive_users():
             """Mark users as inactive if they haven't had transactions within configured period"""
@@ -1030,6 +1052,10 @@ async def run_bot():
 
         # Start the inactive user check job
         check_inactive_users.start()
+
+        @check_inactive_users.error
+        async def check_inactive_users_error(error):
+            logger.exception(f"Inactive user check job failed: {error}")
 
         @bot.event
         async def on_command_error(ctx, error):
