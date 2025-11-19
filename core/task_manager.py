@@ -22,6 +22,14 @@ class TaskManager:
         """Set bot instance for Discord operations"""
         self.bot = bot
 
+    def set_cache_manager(self, cache_manager):
+        """Set cache manager instance"""
+        self.cache_manager = cache_manager
+
+    def set_sse_manager(self, sse_manager):
+        """Set SSE manager instance"""
+        self.sse_manager = sse_manager
+
     async def create_task(self, guild_id, name, description, reward, duration_hours, max_claims=None):
         """Create new task with atomic task_id generation"""
 
@@ -126,16 +134,18 @@ class TaskManager:
                     task_id, guild_id
                 )
 
-            # Invalidate cache
-            self.cache_manager.invalidate(f"tasks:{guild_id}")
-            self.cache_manager.invalidate(f"user_tasks:{guild_id}:{user_id}")
+            # Invalidate cache safely
+            if self.cache_manager:
+                self.cache_manager.invalidate(f"tasks:{guild_id}")
+                self.cache_manager.invalidate(f"user_tasks:{guild_id}:{user_id}")
 
-            # Emit SSE event
-            await self.sse_manager.broadcast_event(guild_id, {
-                'type': 'task_claimed',
-                'user_id': user_id,
-                'task_id': task_id
-            })
+            # Emit SSE event safely
+            if self.sse_manager:
+                await self.sse_manager.broadcast_event(guild_id, {
+                    'type': 'task_claimed',
+                    'user_id': user_id,
+                    'task_id': task_id
+                })
 
             return {
                 'success': True,

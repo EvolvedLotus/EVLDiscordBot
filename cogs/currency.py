@@ -855,7 +855,7 @@ class Currency(commands.Cog):
 
         task = tasks[task_id]
 
-        if task.get('status') != 'pending':
+        if task.get('status') != 'active':
             await interaction.response.send_message("❌ This task is no longer available!", ephemeral=True)
             return
 

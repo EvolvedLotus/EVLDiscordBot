@@ -384,6 +384,13 @@ class Tasks(commands.Cog):
         from core.task_manager import TaskManager
         self.task_manager = TaskManager(data_manager, transaction_manager)
         self.task_manager.set_bot(self.bot)
+        self.task_manager.set_cache_manager(self.bot.cache_manager)
+        try:
+            sse_manager = self.bot.sse_manager
+            if sse_manager:
+                self.task_manager.set_sse_manager(sse_manager)
+        except AttributeError:
+            pass  # SSE manager not available yet
 
     @app_commands.command(name="task_submit", description="Submit proof for a claimed task")
     @app_commands.describe(
@@ -818,27 +825,49 @@ class TaskReviewView(discord.ui.View):
         target_user_id = str(user.id) if user else str(interaction.user.id)
 
         try:
-            tasks_data = data_manager.load_guild_data(guild_id, 'tasks')
-            tasks = tasks_data.get('tasks', {})
-            user_tasks = tasks_data.get('user_tasks', {}).get(target_user_id, {})
+            # Use the TaskManager to get tasks from Supabase
+            available_tasks = self.task_manager.get_available_tasks(guild_id, target_user_id)
 
-            if not tasks:
+            if not available_tasks:
                 await interaction.followup.send("📋 No tasks available.", ephemeral=True)
                 return
 
-            # Filter tasks
+            tasks = available_tasks
+            # Filter by status if needed
+            if filter != 'all':
+                tasks = [task for task in tasks if task.get('status') == filter]
+
+            if not tasks:
+                await interaction.followup.send(
+                    f"📋 No {filter} tasks found.",
+                    ephemeral=True
+                )
+                return
+
+            # Get user tasks if needed
+            user_tasks = []
+            if user:
+                user_tasks = self.task_manager.get_user_tasks(guild_id, target_user_id)
+
+            # Filter and format tasks
             filtered_tasks = []
-            for task_id, task in tasks.items():
+            for task in tasks:
+                task_status = task.get('status', 'active')
+
                 # Apply status filter
-                if filter != 'all' and task['status'] != filter:
+                if filter != 'all' and task_status != filter:
                     continue
 
                 # If showing user tasks, check if they claimed it
                 user_task_data = None
                 if user:
-                    user_task_data = user_tasks.get(task_id)
+                    # Find matching user task
+                    for user_task in user_tasks:
+                        if user_task.get('task_id') == task.get('id'):
+                            user_task_data = user_task.get('user_task')
+                            break
 
-                filtered_tasks.append((task_id, task, user_task_data))
+                filtered_tasks.append((task.get('id'), task, user_task_data))
 
             if not filtered_tasks:
                 await interaction.followup.send(

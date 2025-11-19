@@ -107,6 +107,7 @@ async def run_bot():
         bot.cache_manager = CacheManager()
         bot.transaction_manager = TransactionManager(data_manager, cache_manager=bot.cache_manager)
         bot.task_manager = TaskManager(data_manager, bot.transaction_manager)
+        bot.task_manager.set_cache_manager(bot.cache_manager)
         bot.shop_manager = ShopManager(data_manager, bot.transaction_manager)
 
         # Set global references for backend
