@@ -1,114 +1,320 @@
-// Discord Bot CMS Dashboard JavaScript
+// Discord Bot CMS Dashboard - SSE Core Module
 
-// API Configuration - Using Bypass Cors for all requests
-const BYPASS_CORS_URL = 'http://localhost:3167';
-
-// Helper function to build API URLs (actual backend URLs)
+// API Configuration
 function getBackendUrl(endpoint) {
     const hostname = window.location.hostname;
-
-    // Production: Railway backend
     if (hostname === 'evolvedlotus.github.io') {
         return `https://evldiscordbot-production.up.railway.app${endpoint}`;
     }
-
-    // Local development: Flask backend
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return `http://localhost:5000${endpoint}`;
-    }
-
-    // Railway/Netlify deployment
-    if (window.API_BASE_URL) {
-        return `${window.API_BASE_URL}${endpoint}`;
-    }
-
-    // Fallback
     return `http://localhost:5000${endpoint}`;
 }
 
-// Bypass Cors request wrapper
-async function bypassCorsRequest(endpoint, options = {}) {
-    const backendUrl = getBackendUrl(endpoint);
+// SSE Connection Management
+let eventSource = null;
+let reconnectDelay = 1000;
+let reconnectAttempts = 0;
+let maxReconnectAttempts = 50;
+let isReconnecting = false;
+let lastHeartbeat = Date.now();
+let heartbeatInterval = null;
+let connectionStatus = 'disconnected';
+let clientId = null;
 
-    // Prepare Bypass Cors request
-    const bypassData = {
-        url: backendUrl,
-        headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            ...options.headers
-        },
-        cookies: [], // Add cookies if needed
-        post: options.body || null,
-        fullPageRender: false,
-        javascript: '',
-        scrollInterval: 500,
-        debug: false
+// SSE Status Management
+function updateConnectionStatus(status, message = '') {
+    connectionStatus = status;
+    const statusElement = document.getElementById('sse-status');
+    if (statusElement) {
+        statusElement.className = `sse-status status-${status}`;
+        statusElement.textContent = message || getStatusText(status);
+    }
+
+    const indicator = document.getElementById('connection-indicator');
+    if (indicator) {
+        indicator.className = `connection-indicator ${status}`;
+    }
+
+    console.log(`SSE Status: ${status}${message ? ' - ' + message : ''}`);
+    updatePageTitle(status);
+}
+
+function updatePageTitle(status) {
+    const baseTitle = 'Task Bot Dashboard';
+    const statusIndicators = {
+        'connected': '🟢',
+        'connecting': '🟡',
+        'disconnected': '🔴',
+        'error': '❌'
     };
+    document.title = `${statusIndicators[status] || '⚪'} ${baseTitle}`;
+}
 
-    // Convert method to POST data if needed
-    if (options.method && options.method !== 'GET') {
-        bypassData.post = options.body;
+function getStatusText(status) {
+    switch(status) {
+        case 'connected': return '🟢 Connected';
+        case 'connecting': return '🟡 Connecting...';
+        case 'disconnected': return '🔴 Disconnected';
+        case 'error': return '❌ Connection Error';
+        default: return '⚪ Unknown';
+    }
+}
+
+// Initialize SSE Connection
+function initRealtimeUpdates() {
+    if (isReconnecting) {
+        console.log('Already attempting to reconnect, skipping...');
+        return;
+    }
+
+    if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+    }
+
+    updateConnectionStatus('connecting', `Attempting to connect... (${reconnectAttempts + 1}/${maxReconnectAttempts})`);
+
+    let sseUrl = getBackendUrl('/api/stream');
+    const params = new URLSearchParams();
+
+    if (!clientId) {
+        clientId = 'web_' + Math.random().toString(36).substr(2, 9);
+    }
+    params.append('client_id', clientId);
+
+    if (window.currentServerId) {
+        params.append('guilds', window.currentServerId);
+    }
+
+    const eventFilters = getEventFiltersForTab(window.currentTab || 'overview');
+    if (eventFilters.length > 0) {
+        params.append('subscriptions', eventFilters.join(','));
+    }
+
+    if (params.toString()) {
+        sseUrl += '?' + params.toString();
     }
 
     try {
-        const response = await fetch(BYPASS_CORS_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(bypassData)
-        });
+        eventSource = new EventSource(sseUrl, { withCredentials: true });
 
-        if (!response.ok) {
-            throw new Error(`Bypass Cors request failed: ${response.status}`);
-        }
+        eventSource.onopen = (event) => {
+            console.log('SSE connection opened');
+            updateConnectionStatus('connected');
+            reconnectAttempts = 0;
+            reconnectDelay = 1000;
+            isReconnecting = false;
+            startHeartbeatMonitoring();
+        };
 
-        const bypassResponse = await response.json();
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
 
-        // Extract the actual API response from Bypass Cors
-        if (bypassResponse.fullResponse) {
-            // Parse the actual response
-            const actualResponse = JSON.parse(bypassResponse.fullResponse);
-            return {
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve(actualResponse),
-                text: () => Promise.resolve(JSON.stringify(actualResponse))
-            };
-        } else {
-            // Fallback for non-JSON responses
-            return {
-                ok: true,
-                status: 200,
-                json: () => Promise.resolve({}),
-                text: () => Promise.resolve('')
-            };
-        }
+                if (data.type === 'keepalive') {
+                    lastHeartbeat = Date.now();
+                    return;
+                }
+
+                if (data.type === 'connected') {
+                    console.log('SSE connected with client ID:', data.client_id);
+                    if (data.client_id) {
+                        clientId = data.client_id;
+                    }
+                    return;
+                }
+
+                console.log('Received SSE update:', data);
+                handleSSEEvent(data);
+                reconnectDelay = 1000;
+
+            } catch (error) {
+                console.error('Error parsing SSE event data:', error, 'Raw data:', event.data);
+            }
+        };
+
+        eventSource.onerror = (event) => {
+            console.error('SSE connection error:', event);
+            updateConnectionStatus('error', 'Connection failed');
+            stopHeartbeatMonitoring();
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            attemptReconnection();
+        };
 
     } catch (error) {
-        console.error('Bypass Cors request error:', error);
-        throw error;
+        console.error('Failed to create EventSource:', error);
+        updateConnectionStatus('error', 'Failed to initialize connection');
+        attemptReconnection();
     }
 }
 
-// Helper function to build API URLs (for compatibility)
-function apiUrl(endpoint) {
-    return endpoint; // Just return endpoint, bypassCorsRequest will handle the full URL
+function getEventFiltersForTab(currentTab) {
+    const filters = ['guild_update'];
+
+    switch(currentTab) {
+        case 'users':
+            filters.push('balance_update', 'inventory_update', 'guild_update');
+            break;
+        case 'shop':
+            filters.push('shop_update', 'inventory_update', 'guild_update');
+            break;
+        case 'transactions':
+            filters.push('balance_update', 'inventory_update', 'guild_update');
+            break;
+        default:
+            filters.push('guild_update');
+    }
+
+    return filters;
 }
 
-// Global variables
-let currentTab = 'overview';
-let botStatus = 'offline';
-let uptimeStart = Date.now();
-let currentServerId = null;
-let servers = [];
+// Handle SSE Events
+function handleSSEEvent(data) {
+    console.log('SSE Event:', data);
 
-// Authentication variables
-let authToken = null;
-let refreshToken = null;
-let isAuthenticated = false;
-let currentUser = null;
+    switch (data.type) {
+        case 'task_created':
+        case 'task_updated':
+        case 'task_deleted':
+        case 'shop_item_created':
+        case 'shop_item_deleted':
+        case 'user_updated':
+        case 'embed_created':
+        case 'announcement_posted':
+            handleDataUpdate(data);
+            break;
+        case 'guild_update':
+            if (window.currentServerId && data.guild_id === window.currentServerId) {
+                handleDataUpdate(data);
+            }
+            break;
+        case 'task_update':
+        case 'balance_update':
+        case 'shop_update':
+        case 'inventory_update':
+            if (window.currentServerId && data.guild_id === window.currentServerId) {
+                handleDataUpdate(data);
+            }
+            break;
+        case 'batch':
+            console.log(`Processing batch of ${data.events.length} events`);
+            data.events.forEach(event => handleSSEEvent(event));
+            break;
+        default:
+            console.log('Unhandled SSE event:', data.type);
+    }
+}
+
+function handleDataUpdate(data) {
+    // Trigger refresh based on current tab and data type
+    const currentTab = window.currentTab || 'overview';
+
+    if (typeof window.refreshCurrentTab === 'function') {
+        window.refreshCurrentTab(data);
+    } else {
+        // Fallback refresh logic
+        switch(currentTab) {
+            case 'users':
+                if (typeof loadUsers === 'function') loadUsers();
+                break;
+            case 'tasks':
+                if (typeof loadTasks === 'function') loadTasks();
+                break;
+            case 'shop':
+                if (typeof loadShop === 'function') loadShop();
+                break;
+            case 'transactions':
+                if (typeof loadTransactions === 'function') loadTransactions();
+                break;
+        }
+    }
+}
+
+// Reconnection Logic
+function attemptReconnection() {
+    if (isReconnecting) return;
+
+    isReconnecting = true;
+    reconnectAttempts++;
+
+    if (reconnectAttempts >= maxReconnectAttempts) {
+        updateConnectionStatus('error', `Max reconnection attempts (${maxReconnectAttempts}) reached`);
+        showNotification('⚠️ Real-time updates unavailable. Please refresh the page.', 'warning');
+        isReconnecting = false;
+        return;
+    }
+
+    const jitter = Math.random() * 1000;
+    const delay = Math.min(reconnectDelay + jitter, 30000);
+
+    console.log(`Attempting SSE reconnection in ${Math.round(delay/1000)}s (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+
+    setTimeout(() => {
+        isReconnecting = false;
+        initRealtimeUpdates();
+    }, delay);
+
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+}
+
+// Heartbeat Monitoring
+function startHeartbeatMonitoring() {
+    stopHeartbeatMonitoring();
+
+    heartbeatInterval = setInterval(() => {
+        const timeSinceLastHeartbeat = Date.now() - lastHeartbeat;
+
+        if (timeSinceLastHeartbeat > 60000) {
+            console.warn('SSE heartbeat timeout, reconnecting...');
+            updateConnectionStatus('error', 'Heartbeat timeout');
+            if (eventSource) {
+                eventSource.close();
+            }
+        }
+    }, 30000);
+}
+
+function stopHeartbeatMonitoring() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+// Manual Reconnection
+function reconnectSSE() {
+    console.log('Manual SSE reconnection requested');
+    reconnectAttempts = 0;
+    reconnectDelay = 1000;
+    initRealtimeUpdates();
+}
+
+// Cleanup
+window.addEventListener('beforeunload', () => {
+    if (eventSource) {
+        eventSource.close();
+    }
+    stopHeartbeatMonitoring();
+});
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('SSE Module loaded, initializing connection...');
+    initRealtimeUpdates();
+});
+
+// Notification helper
+function showNotification(message, type) {
+    console.log(`Notification [${type}]: ${message}`);
+    // Can be overridden by main dashboard script
+}
+
+// Export functions for global access
+window.initRealtimeUpdates = initRealtimeUpdates;
+window.reconnectSSE = reconnectSSE;
+window.updateConnectionStatus = updateConnectionStatus;
 
 // Error handling functions
 function showError(message, details = null) {
@@ -3149,11 +3355,13 @@ function onServerChange() {
 let eventSource = null;
 let reconnectDelay = 1000;
 let reconnectAttempts = 0;
-let maxReconnectAttempts = 10;
+let maxReconnectAttempts = 50; // Increased for better reliability
 let isReconnecting = false;
 let lastHeartbeat = Date.now();
 let heartbeatInterval = null;
 let connectionStatus = 'disconnected'; // 'connected', 'connecting', 'disconnected', 'error'
+let clientId = null; // Store client ID for reconnection
+let reconnectTimeout = null; // Store timeout ID for cleanup
 
 // SSE Connection Status Management
 function updateConnectionStatus(status, message = '') {
@@ -3171,6 +3379,21 @@ function updateConnectionStatus(status, message = '') {
     }
 
     console.log(`SSE Status: ${status}${message ? ' - ' + message : ''}`);
+
+    // Update page title to show connection status
+    updatePageTitle(status);
+}
+
+function updatePageTitle(status) {
+    const baseTitle = 'Task Bot Dashboard';
+    const statusIndicators = {
+        'connected': '🟢',
+        'connecting': '🟡',
+        'disconnected': '🔴',
+        'error': '❌'
+    };
+
+    document.title = `${statusIndicators[status] || '⚪'} ${baseTitle}`;
 }
 
 function getStatusText(status) {
@@ -3198,8 +3421,14 @@ function initRealtimeUpdates() {
     updateConnectionStatus('connecting', `Attempting to connect... (${reconnectAttempts + 1}/${maxReconnectAttempts})`);
 
     // Build SSE URL with authentication and filters
-    let sseUrl = apiUrl('/api/stream');
+    let sseUrl = getBackendUrl('/api/stream');
     const params = new URLSearchParams();
+
+    // Generate or use existing client ID
+    if (!clientId) {
+        clientId = 'web_' + Math.random().toString(36).substr(2, 9);
+    }
+    params.append('client_id', clientId);
 
     // Add server filter if selected
     if (currentServerId) {
@@ -3209,7 +3438,7 @@ function initRealtimeUpdates() {
     // Add event type filters based on current tab
     const eventFilters = getEventFiltersForTab(currentTab);
     if (eventFilters.length > 0) {
-        params.append('events', eventFilters.join(','));
+        params.append('subscriptions', eventFilters.join(','));
     }
 
     if (params.toString()) {
@@ -3217,8 +3446,8 @@ function initRealtimeUpdates() {
     }
 
     try {
-        // Create EventSource with authentication headers
-        eventSource = new EventSource(sseUrl);
+        // Create EventSource with credentials for authentication
+        eventSource = new EventSource(sseUrl, { withCredentials: true });
 
         // Connection opened
         eventSource.onopen = (event) => {
@@ -3237,8 +3466,8 @@ function initRealtimeUpdates() {
             try {
                 const data = JSON.parse(event.data);
 
-                // Handle heartbeat
-                if (data.type === 'heartbeat') {
+                // Handle keepalive
+                if (data.type === 'keepalive') {
                     lastHeartbeat = Date.now();
                     return;
                 }
@@ -3246,6 +3475,9 @@ function initRealtimeUpdates() {
                 // Handle connection info
                 if (data.type === 'connected') {
                     console.log('SSE connected with client ID:', data.client_id);
+                    if (data.client_id) {
+                        clientId = data.client_id; // Update with server-assigned ID
+                    }
                     return;
                 }
 
@@ -3286,16 +3518,6 @@ function initRealtimeUpdates() {
         updateConnectionStatus('error', 'Failed to initialize connection');
         attemptReconnection();
     }
-}
-
-// Get event filters based on current tab
-function getEventFiltersForTab(tabName) {
-    const filters = [];
-
-    switch(tabName) {
-        case 'tasks':
-            filters.push('task_update', 'guild_update');
-            break;
         case 'users':
             filters.push('balance_update', 'inventory_update', 'guild_update');
             break;

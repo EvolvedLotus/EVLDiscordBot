@@ -380,7 +380,7 @@ class DataManager:
 
             elif data_type == 'transactions':
                 # Get transactions for this guild
-                transactions_result = self.admin_client.table('transactions').select('*').eq('guild_id', str(guild_id)).order('timestamp', desc=True).execute()
+                transactions_result = self.admin_client.table('transactions').select('*').eq('guild_id', str(guild_id)).order('"timestamp"', desc=True).execute()
                 transactions = []
                 for txn in transactions_result.data:
                     transactions.append({

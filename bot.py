@@ -109,6 +109,11 @@ async def run_bot():
         # CRITICAL: Link bot instance to data manager for sync
         data_manager.set_bot_instance(bot)
 
+        # Initialize SSE manager with event loop
+        from core.sse_manager import sse_manager
+        sse_manager.set_event_loop(asyncio.get_event_loop())
+        sse_manager.start()
+
         # Load cogs AFTER managers are attached
         logger.info("Loading cogs...")
         try:

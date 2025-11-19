@@ -83,7 +83,7 @@ description TEXT,
 
 -- Metadata
 metadata JSONB DEFAULT '{}',
-timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+"timestamp" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 
 -- Validation
 CHECK (balance_after = balance_before + amount)
@@ -375,7 +375,7 @@ CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
 CREATE INDEX IF NOT EXISTS idx_transactions_guild ON transactions(guild_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(transaction_type);
-CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions("timestamp" DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_guild_user ON transactions(guild_id, user_id);
 
 -- Shop items indexes
@@ -586,6 +586,60 @@ RETURN QUERY SELECT v_balance_after, v_transaction_id;
 END;
 $$ LANGUAGE plpgsql;
 
+-- Atomic transaction logging function (used by TransactionManager)
+CREATE OR REPLACE FUNCTION log_transaction_atomic(
+    p_guild_id TEXT,
+    p_user_id TEXT,
+    p_amount INTEGER,
+    p_balance_before INTEGER,
+    p_balance_after INTEGER,
+    p_transaction_type TEXT,
+    p_description TEXT,
+    p_transaction_id TEXT,
+    p_metadata JSONB DEFAULT '{}'
+) RETURNS TABLE(
+    transaction_id TEXT,
+    "timestamp" TIMESTAMP WITH TIME ZONE
+) AS $$
+DECLARE
+    v_timestamp TIMESTAMP WITH TIME ZONE;
+BEGIN
+    -- Validate balance consistency
+    IF p_balance_after != p_balance_before + p_amount THEN
+        RAISE EXCEPTION 'Balance validation failed: balance_after != balance_before + amount';
+    END IF;
+
+    -- Insert transaction atomically
+    INSERT INTO transactions (
+        transaction_id,
+        user_id,
+        guild_id,
+        amount,
+        balance_before,
+        balance_after,
+        transaction_type,
+        description,
+        metadata,
+        "timestamp"
+    ) VALUES (
+        p_transaction_id,
+        p_user_id,
+        p_guild_id,
+        p_amount,
+        p_balance_before,
+        p_balance_after,
+        p_transaction_type,
+        p_description,
+        p_metadata,
+        NOW()
+    )
+    RETURNING transactions.transaction_id, transactions."timestamp"
+    INTO transaction_id, v_timestamp;
+
+    RETURN QUERY SELECT transaction_id, v_timestamp;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Cleanup expired cache entries
 CREATE OR REPLACE FUNCTION cleanup_expired_cache()
 RETURNS INTEGER AS $$
@@ -743,7 +797,7 @@ BEGIN
             SELECT 1 FROM transactions
             WHERE transactions.user_id = users.user_id
                 AND transactions.guild_id = users.guild_id
-                AND transactions.timestamp > p_cutoff_date
+                AND transactions."timestamp" > p_cutoff_date
         );
 
     GET DIAGNOSTICS affected_count = ROW_COUNT;

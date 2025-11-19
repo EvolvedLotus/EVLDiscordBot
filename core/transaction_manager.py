@@ -98,23 +98,60 @@ class TransactionManager:
         if idempotency_key:
             transaction["metadata"]["idempotency_key"] = idempotency_key
 
-        # Load existing transactions
-        transactions = self._load_transactions(guild_id)
+        # Use atomic database transaction
+        try:
+            # Execute transaction atomically using Supabase RPC or direct SQL
+            result = self.data_manager.supabase.rpc(
+                'log_transaction_atomic',
+                {
+                    'p_guild_id': str(guild_id),
+                    'p_user_id': str(user_id),
+                    'p_amount': amount,
+                    'p_balance_before': balance_before,
+                    'p_balance_after': balance_after,
+                    'p_transaction_type': transaction_type,
+                    'p_description': description,
+                    'p_transaction_id': txn_id,
+                    'p_metadata': transaction["metadata"]
+                }
+            ).execute()
 
-        # Add new transaction
-        transactions.append(transaction)
+            if result.data and len(result.data) > 0:
+                # Transaction was logged successfully
+                transaction_record = result.data[0]
+                # Update our transaction object with database response
+                transaction.update({
+                    'id': transaction_record.get('transaction_id', txn_id),
+                    'timestamp': transaction_record.get('timestamp', transaction['timestamp'])
+                })
 
-        # Save atomically
-        self._save_transactions(guild_id, transactions)
+        except Exception as e:
+            # Fallback to file-based logging if RPC fails
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"RPC transaction logging failed, falling back to file-based: {e}")
 
-        # Update indexes
-        self._update_indexes(guild_id, transaction)
+            # Load existing transactions
+            transactions = self._load_transactions(guild_id)
+
+            # Add new transaction
+            transactions.append(transaction)
+
+            # Save atomically
+            self._save_transactions(guild_id, transactions)
+
+            # Update indexes
+            self._update_indexes(guild_id, transaction)
 
         # Broadcast SSE event
-        self.data_manager.broadcast_event('transaction', {
-            'guild_id': guild_id,
-            'transaction': transaction
-        })
+        try:
+            from core.sse_manager import sse_manager
+            sse_manager.broadcast_event('transaction', {
+                'guild_id': str(guild_id),
+                'transaction': transaction
+            })
+        except Exception as e:
+            logger.warning(f"Failed to broadcast transaction event: {e}")
 
         # Update user's updated_at timestamp to track activity
         try:

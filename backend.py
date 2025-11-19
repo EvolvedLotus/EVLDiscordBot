@@ -29,25 +29,16 @@ IS_PRODUCTION = (
     os.getenv('ENVIRONMENT') == 'production'
 )
 
-# CORS Configuration - Environment-based
+# CORS Configuration - Simplified and reliable
 def get_allowed_origins():
     """Get allowed CORS origins from environment variables"""
-    # Check for ALLOWED_ORIGINS environment variable (comma-separated)
+    # Primary: ALLOWED_ORIGINS environment variable (comma-separated)
     allowed_origins_env = os.getenv('ALLOWED_ORIGINS', '').strip()
 
     if allowed_origins_env:
-        # Parse comma-separated origins
         origins = [origin.strip() for origin in allowed_origins_env.split(',') if origin.strip()]
         if origins:
             logger.info(f"✅ CORS origins from ALLOWED_ORIGINS: {origins}")
-            return origins
-
-    # Check for ALLOWED_FRONTEND_DOMAINS (legacy support)
-    frontend_domains = os.getenv('ALLOWED_FRONTEND_DOMAINS', '').strip()
-    if frontend_domains:
-        origins = [domain.strip() for domain in frontend_domains.split(',') if domain.strip()]
-        if origins:
-            logger.info(f"✅ CORS origins from ALLOWED_FRONTEND_DOMAINS: {origins}")
             return origins
 
     # Fallback to hardcoded defaults based on environment
@@ -58,7 +49,7 @@ def get_allowed_origins():
             'https://evolvedlotus.github.io/EVLDiscordBot',
         ]
 
-        # Try to add Railway domain if available
+        # Add Railway domain if available
         railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
         if railway_domain:
             railway_url = f'https://{railway_domain}'
@@ -95,19 +86,29 @@ CORS(app,
 
 # Session configuration
 app.config['SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me')
-app.config['SESSION_TYPE'] = 'filesystem'
 
 if IS_PRODUCTION:
+    # Production: Use secure session settings for Railway
     app.config['SESSION_COOKIE_SECURE'] = True
-    app.config['SESSION_COOKIE_DOMAIN'] = '.railway.app'
-else:
-    app.config['SESSION_COOKIE_SECURE'] = False
-    app.config['SESSION_COOKIE_DOMAIN'] = None
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+    app.config['SESSION_COOKIE_PATH'] = '/'
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-app.config['SESSION_COOKIE_PATH'] = '/'
-app.config['PERMANENT_SESSION_LIFETIME'] = 86400
+    # Railway-specific domain handling
+    railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
+    if railway_domain:
+        app.config['SESSION_COOKIE_DOMAIN'] = railway_domain
+    else:
+        app.config['SESSION_COOKIE_DOMAIN'] = None
+else:
+    # Development: Relaxed session settings
+    app.config['SESSION_COOKIE_SECURE'] = False
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    app.config['SESSION_COOKIE_PATH'] = '/'
+    app.config['SESSION_COOKIE_DOMAIN'] = None
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
 # Import core managers
 try:
@@ -121,12 +122,13 @@ try:
     from core.auth_manager import AuthManager
     from core.audit_manager import AuditManager
     from core.sync_manager import SyncManager
+    from core.sse_manager import sse_manager
 
     # Initialize managers
     data_manager = DataManager()
     transaction_manager = TransactionManager(data_manager)
     task_manager = TaskManager(data_manager, transaction_manager)
-    shop_manager = ShopManager(data_manager)
+    shop_manager = ShopManager(data_manager, transaction_manager)
     announcement_manager = AnnouncementManager(data_manager)
     embed_builder = EmbedBuilder()
     cache_manager = CacheManager()
@@ -137,6 +139,32 @@ try:
     logger.info("✅ All managers initialized")
 except ImportError as e:
     logger.warning(f"⚠️  Some managers not available: {e}")
+
+# Global references for bot integration (avoid circular imports)
+_bot_instance = None
+_data_manager_instance = None
+
+def set_bot_instance(bot):
+    """Set global bot instance reference"""
+    global _bot_instance
+    _bot_instance = bot
+    logger.info("Bot instance linked to backend")
+
+def set_data_manager(dm):
+    """Set global data manager reference"""
+    global _data_manager_instance
+    _data_manager_instance = dm
+    logger.info("Data manager linked to backend")
+
+def run_backend():
+    """Function for bot.py to start Flask backend in separate thread"""
+    try:
+        port = int(os.environ.get('PORT', 5000))
+        logger.info(f"Starting Flask backend on port {port}")
+        app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
+    except Exception as e:
+        logger.error(f"Failed to start Flask backend: {e}")
+        raise
 
 # CORS after-request handler
 @app.after_request
@@ -450,6 +478,109 @@ def create_announcement(server_id):
         announcement = announcement_manager.create_announcement(server_id, data)
         return jsonify(announcement), 201
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ========== SERVER-SENT EVENTS (SSE) ==========
+@app.route('/api/stream', methods=['GET'])
+def stream():
+    """Server-Sent Events endpoint for real-time updates"""
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    def generate():
+        """Generator function for SSE stream"""
+        client_id = request.args.get('client_id', f"web_{id(request)}")
+        subscriptions = request.args.get('subscriptions', 'balance_update,task_update,shop_update,user_update').split(',')
+
+        # Register client with SSE manager
+        metadata = {
+            'user_agent': request.headers.get('User-Agent', 'Unknown'),
+            'ip': request.remote_addr,
+            'session_id': session.get('username', 'anonymous')
+        }
+
+        if not sse_manager.register_client(client_id, subscriptions, metadata):
+            yield "data: {\"error\": \"Failed to register client\"}\n\n"
+            return
+
+        try:
+            logger.info(f"SSE client {client_id} connected with subscriptions: {subscriptions}")
+
+            # Send initial connection confirmation
+            yield f"data: {{\"type\": \"connected\", \"client_id\": \"{client_id}\", \"subscriptions\": {subscriptions}}}\n\n"
+
+            # Get client's event queue
+            event_queue = sse_manager.get_client_events(client_id)
+            if not event_queue:
+                yield "data: {\"error\": \"No event queue available\"}\n\n"
+                return
+
+            # Use synchronous waiting instead of asyncio.run()
+            import time
+            while True:
+                try:
+                    # Check for events without blocking indefinitely
+                    # This is a simplified synchronous approach
+                    if hasattr(event_queue, '_get_nowait'):
+                        try:
+                            event = event_queue._get_nowait()
+                        except:
+                            # No event available, send keepalive and continue
+                            yield "data: {\"type\": \"keepalive\", \"timestamp\": \"" + datetime.utcnow().isoformat() + "Z\"}\n\n"
+                            time.sleep(1)  # Brief pause to prevent busy waiting
+                            continue
+                    else:
+                        # Fallback keepalive
+                        yield "data: {\"type\": \"keepalive\", \"timestamp\": \"" + datetime.utcnow().isoformat() + "Z\"}\n\n"
+                        time.sleep(1)
+                        continue
+
+                    # Format as SSE
+                    event_json = json.dumps(event)
+                    yield f"data: {event_json}\n\n"
+
+                except Exception as e:
+                    logger.error(f"SSE stream error for client {client_id}: {e}")
+                    break
+
+        except GeneratorExit:
+            logger.info(f"SSE client {client_id} disconnected")
+        except Exception as e:
+            logger.error(f"SSE stream error for client {client_id}: {e}")
+        finally:
+            # Unregister client
+            sse_manager.unregister_client(client_id)
+
+    # Return SSE response
+    response = app.response_class(
+        generate(),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'Access-Control-Allow-Origin': request.headers.get('Origin', '*'),
+            'Access-Control-Allow-Credentials': 'true'
+        }
+    )
+    return response
+
+@app.route('/api/stream/test', methods=['POST'])
+def test_stream():
+    """Test SSE functionality"""
+    if not session.get('authenticated'):
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    try:
+        data = request.get_json() or {}
+        event_type = data.get('event_type', 'test')
+        event_data = data.get('data', {'message': 'Test event'})
+
+        # Broadcast test event
+        sse_manager.broadcast_event(event_type, event_data)
+
+        return jsonify({'success': True, 'message': f'Test event "{event_type}" broadcasted'}), 200
+    except Exception as e:
+        logger.error(f"Test stream error: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ========== STATIC FILES ==========
