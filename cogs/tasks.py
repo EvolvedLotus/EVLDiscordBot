@@ -465,31 +465,28 @@ class TaskReviewView(discord.ui.View):
                 user_task['status'] = 'accepted'
                 user_task['completed_at'] = completed_at.isoformat()
 
-                # Award currency
-                currency_data.setdefault('users', {}).setdefault(self.user_id, {
-                    'balance': 0,
-                    'total_earned': 0,
-                    'total_spent': 0,
-                    'created_at': completed_at.isoformat()
-                })
+                # Award currency using the currency cog's atomic method
+                currency_cog = self.bot.get_cog('Currency')
+                if currency_cog:
+                    balance_result = currency_cog._add_balance(
+                        int(guild_id),
+                        int(self.user_id),
+                        task['reward'],
+                        f"Completed task: {task['name']}",
+                        transaction_type='task_reward',
+                        metadata={
+                            'task_id': str(self.task_id),
+                            'task_name': task['name'],
+                            'reviewer_id': str(interaction.user.id)
+                        }
+                    )
 
-                currency_data['users'][self.user_id]['balance'] += task['reward']
-                currency_data['users'][self.user_id]['total_earned'] += task['reward']
-
-                # Log transaction
-                transaction = {
-                    'id': f"txn_{int(completed_at.timestamp() * 1000)}",
-                    'user_id': self.user_id,
-                    'amount': task['reward'],
-                    'balance_before': currency_data['users'][self.user_id]['balance'] - task['reward'],
-                    'balance_after': currency_data['users'][self.user_id]['balance'],
-                    'description': f"Completed task: {task['name']}",
-                    'timestamp': completed_at.isoformat()
-                }
-
-                transactions = data_manager.load_guild_data(guild_id, 'transactions') or []
-                transactions.append(transaction)
-                data_manager.save_guild_data(guild_id, 'transactions', transactions)
+                    if balance_result is False:
+                        await interaction.followup.send("❌ Failed to award currency - balance update failed.", ephemeral=True)
+                        return
+                else:
+                    await interaction.followup.send("❌ Currency system not available.", ephemeral=True)
+                    return
 
                 # Grant role if specified
                 if task.get('role_name'):

@@ -348,14 +348,27 @@ class ShopManager:
                     return {'success': False, 'error': f'Insufficient balance. Need {total_cost}, have {current_balance}'}
 
                 # ATOMIC UPDATE PHASE
-                # 1. Deduct balance via transaction manager
-                new_balance = self.transaction_manager.deduct_balance(
+                # 1. Log transaction via transaction manager (this updates balance atomically)
+                transaction_result = self.transaction_manager.log_transaction(
                     guild_id=guild_id,
                     user_id=user_id,
-                    amount=total_cost,
+                    amount=-total_cost,  # Negative for deduction
+                    balance_before=current_balance,
+                    balance_after=current_balance - total_cost,
+                    transaction_type='shop',
                     description=f"Purchased {quantity}x {self._get_item_emoji(item)} {item['name']}",
-                    transaction_type='shop'
+                    metadata={
+                        'item_id': item_id,
+                        'quantity': quantity,
+                        'item_name': item['name'],
+                        'item_price': item['price']
+                    }
                 )
+
+                if not transaction_result:
+                    return {'success': False, 'error': 'Failed to process payment'}
+
+                new_balance = current_balance - total_cost
 
                 # 2. Update stock (if limited)
                 if current_stock != -1:

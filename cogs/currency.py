@@ -49,17 +49,15 @@ class Currency(commands.Cog):
             }
 
     def _get_balance(self, guild_id: int, user_id: int) -> int:
-        """Get user balance in specific guild"""
-        data = self.data_manager.load_guild_data(guild_id, "currency")
-        user_id_str = str(user_id)
-
-        if user_id_str not in data["users"]:
-            # Initialize new user
-            self._initialize_user(data, user_id_str)
-            self.data_manager.save_guild_data(guild_id, "currency", data)
+        """Get user balance directly from database"""
+        try:
+            # Get balance directly from users table
+            user_data = self.data_manager.load_user_data(guild_id, user_id)
+            return user_data.get('balance', 0)
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error getting balance for user {user_id} in guild {guild_id}: {e}")
             return 0
-
-        return data["users"][user_id_str]["balance"]
 
     def _add_balance(self, guild_id: int, user_id: int, amount: int, description: str, transaction_type: str = 'earn', metadata: dict = None):
         """

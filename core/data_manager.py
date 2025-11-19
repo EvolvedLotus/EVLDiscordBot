@@ -579,12 +579,122 @@ class DataManager:
                         }).execute()
 
                 elif dtype == "tasks":
-                    # Tasks are already stored in tasks table
-                    logger.debug(f"Tasks data saved for guild {guild_id_str}")
+                    # Save tasks data to database
+                    tasks_data = save_data.get('tasks', {})
+                    user_tasks_data = save_data.get('user_tasks', {})
+                    settings_data = save_data.get('settings', {})
+
+                    # Save tasks
+                    for task_id, task in tasks_data.items():
+                        self.admin_client.table('tasks').upsert({
+                            'task_id': int(task_id),
+                            'guild_id': guild_id_str,
+                            'name': task['name'],
+                            'description': task['description'],
+                            'reward': task['reward'],
+                            'duration_hours': task['duration_hours'],
+                            'status': task['status'],
+                            'expires_at': task.get('expires_at'),
+                            'channel_id': task.get('channel_id'),
+                            'message_id': task.get('message_id'),
+                            'max_claims': task.get('max_claims', -1),
+                            'current_claims': task.get('current_claims', 0),
+                            'assigned_users': task.get('assigned_users', []),
+                            'category': task.get('category', 'general'),
+                            'role_name': task.get('role_name'),
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }, on_conflict='guild_id,task_id').execute()
+
+                    # Save user tasks
+                    for user_id, user_tasks in user_tasks_data.items():
+                        for task_id, user_task in user_tasks.items():
+                            self.admin_client.table('user_tasks').upsert({
+                                'guild_id': guild_id_str,
+                                'user_id': user_id,
+                                'task_id': int(task_id),
+                                'claimed_at': user_task.get('claimed_at'),
+                                'deadline': user_task.get('deadline'),
+                                'status': user_task.get('status', 'in_progress'),
+                                'proof_message_id': user_task.get('proof_message_id'),
+                                'proof_attachments': user_task.get('proof_attachments', []),
+                                'proof_content': user_task.get('proof_content', ''),
+                                'submitted_at': user_task.get('submitted_at'),
+                                'completed_at': user_task.get('completed_at'),
+                                'notes': user_task.get('notes', ''),
+                                'updated_at': datetime.now(timezone.utc).isoformat()
+                            }, on_conflict='guild_id,user_id,task_id').execute()
+
+                    # Save task settings
+                    if settings_data:
+                        self.admin_client.table('task_settings').upsert({
+                            'guild_id': guild_id_str,
+                            'allow_user_tasks': settings_data.get('allow_user_tasks', True),
+                            'max_tasks_per_user': settings_data.get('max_tasks_per_user', 10),
+                            'auto_expire_enabled': settings_data.get('auto_expire_enabled', True),
+                            'require_proof': settings_data.get('require_proof', True),
+                            'announcement_channel_id': settings_data.get('announcement_channel_id'),
+                            'next_task_id': settings_data.get('next_task_id', 1),
+                            'total_completed': settings_data.get('total_completed', 0),
+                            'total_expired': settings_data.get('total_expired', 0),
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }, on_conflict='guild_id').execute()
+
+                    logger.info(f"✅ Tasks data saved for guild {guild_id_str}")
 
                 elif dtype == "currency":
-                    # Currency data is stored in users table
-                    logger.debug(f"Currency data saved for guild {guild_id_str}")
+                    # Save currency data to database
+                    users_data = save_data.get('users', {})
+                    shop_items_data = save_data.get('shop_items', {})
+                    inventory_data = save_data.get('inventory', {})
+
+                    # Save users
+                    for user_id, user_data in users_data.items():
+                        self.admin_client.table('users').upsert({
+                            'guild_id': guild_id_str,
+                            'user_id': user_id,
+                            'balance': user_data.get('balance', 0),
+                            'total_earned': user_data.get('total_earned', 0),
+                            'total_spent': user_data.get('total_spent', 0),
+                            'last_daily': user_data.get('last_daily'),
+                            'username': user_data.get('username'),
+                            'display_name': user_data.get('display_name'),
+                            'is_active': user_data.get('is_active', True),
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }, on_conflict='guild_id,user_id').execute()
+
+                    # Save shop items
+                    for item_id, item_data in shop_items_data.items():
+                        self.admin_client.table('shop_items').upsert({
+                            'guild_id': guild_id_str,
+                            'item_id': item_id,
+                            'name': item_data['name'],
+                            'description': item_data.get('description', ''),
+                            'price': item_data['price'],
+                            'category': item_data.get('category', 'general'),
+                            'stock': item_data.get('stock', -1),
+                            'emoji': item_data.get('emoji', '🛍️'),
+                            'is_active': item_data.get('is_active', True),
+                            'message_id': item_data.get('message_id'),
+                            'channel_id': item_data.get('channel_id'),
+                            'updated_at': datetime.now(timezone.utc).isoformat()
+                        }, on_conflict='guild_id,item_id').execute()
+
+                    # Save inventory
+                    for user_id, user_inventory in inventory_data.items():
+                        for item_id, quantity in user_inventory.items():
+                            if quantity > 0:  # Only save positive quantities
+                                self.admin_client.table('inventory').upsert({
+                                    'guild_id': guild_id_str,
+                                    'user_id': user_id,
+                                    'item_id': item_id,
+                                    'quantity': quantity,
+                                    'updated_at': datetime.now(timezone.utc).isoformat()
+                                }, on_conflict='guild_id,user_id,item_id').execute()
+                            else:
+                                # Remove zero quantity items
+                                self.admin_client.table('inventory').delete().eq('guild_id', guild_id_str).eq('user_id', user_id).eq('item_id', item_id).execute()
+
+                    logger.info(f"✅ Currency data saved for guild {guild_id_str}")
 
                 else:
                     logger.warning(f"Unknown data type for save_guild_data: {dtype}")
