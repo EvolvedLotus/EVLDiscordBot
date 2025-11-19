@@ -362,7 +362,7 @@ def create_task_embed(task):
         inline=True
     )
 
-    embed.set_footer(text=f"Task ID: {task['id']}")
+    embed.set_footer(text=f"Task ID: {task['task_id']}")
 
     return embed
 
@@ -509,8 +509,8 @@ class TaskReviewView(discord.ui.View):
         await self.handle_review(interaction, accept=False)
 
     async def handle_review(self, interaction: discord.Interaction, accept: bool):
-        """Handle task review decision with proper role ID checking."""
-        # Check permissions - use role IDs instead of role names
+        """Handle task review decision with proper role ID checking from Supabase."""
+        # Check permissions
         if not interaction.user.guild_permissions.administrator:
             # Verify user is an active member of this guild
             member = interaction.guild.get_member(interaction.user.id)
@@ -521,8 +521,18 @@ class TaskReviewView(discord.ui.View):
                 )
                 return
 
-            config = data_manager.load_guild_data(str(interaction.guild.id), 'config')
-            admin_roles = config.get('admin_roles', [])
+            # Get admin roles from Supabase
+            tasks_cog = interaction.client.get_cog('Tasks')
+            if not tasks_cog or not tasks_cog.data_manager:
+                await interaction.response.send_message(
+                    "❌ Data system not available.",
+                    ephemeral=True
+                )
+                return
+
+            guild_config = tasks_cog.data_manager.supabase.table('guilds').select('admin_roles').eq('guild_id', str(interaction.guild.id)).execute()
+            admin_roles = guild_config.data[0]['admin_roles'] if guild_config.data else []
+
             user_role_ids = [str(r.id) for r in member.roles]
 
             # Check if user has any of the required admin role IDs
@@ -1290,25 +1300,141 @@ class TaskListPaginator(discord.ui.View):
         await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
 
 
-async def setup(bot):
-    """Setup the tasks cog."""
-    cog = Tasks(bot)
-    await bot.add_cog(cog)
+    @app_commands.command(name="task_create", description="Create a new task")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def create_task(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        description: str,
+        reward: int,
+        duration_hours: int,
+        max_claims: int = None
+    ):
+        """Create a new task for users to claim."""
+        await interaction.response.defer(ephemeral=True)
 
-    # Set managers after cog is loaded
-    data_manager_instance = getattr(bot, 'data_manager', None)
-    transaction_manager_instance = getattr(bot, 'transaction_manager', None)
-    if data_manager_instance and transaction_manager_instance:
-        cog.set_managers(data_manager_instance, transaction_manager_instance)
+        guild_id = str(interaction.guild.id)
 
-    # Register persistent views for existing tasks
-    for guild in bot.guilds:
-        guild_id = str(guild.id)
         try:
-            tasks_data = cog.data_manager.load_guild_data(guild_id, 'tasks')
-            for task_id, task in tasks_data.get('tasks', {}).items():
-                if task.get('message_id') and task['status'] == 'active':
-                    view = TaskClaimView(int(task_id))
-                    bot.add_view(view, message_id=int(task['message_id']))
+            # Get task settings or initialize
+            task_settings = self.data_manager.supabase.table('task_settings').select('*').eq('guild_id', guild_id).execute()
+
+            next_id = 1
+            if task_settings.data:
+                next_id = task_settings.data[0]['next_task_id']
+                # Update next ID
+                self.data_manager.supabase.table('task_settings').update({
+                    'next_task_id': next_id + 1
+                }).eq('guild_id', guild_id).execute()
+            else:
+                # Create task settings
+                self.data_manager.supabase.table('task_settings').insert({
+                    'guild_id': guild_id,
+                    'next_task_id': 2,
+                    'total_completed': 0,
+                    'total_expired': 0
+                }).execute()
+
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
+
+            # Create task
+            task_data = {
+                'task_id': str(next_id),
+                'guild_id': guild_id,
+                'name': name,
+                'description': description,
+                'reward': reward,
+                'duration_hours': duration_hours,
+                'max_claims': max_claims or -1,
+                'current_claims': 0,
+                'status': 'active',
+                'expires_at': expires_at.isoformat(),
+                'created': datetime.now(timezone.utc).isoformat()
+            }
+
+            result = self.data_manager.supabase.table('tasks').insert(task_data).execute()
+
+            await interaction.followup.send(
+                f"✅ Task **{name}** created successfully!\nTask ID: `{next_id}`",
+                ephemeral=True
+            )
+
         except Exception as e:
-            print(f"Error registering views for guild {guild_id}: {e}")
+            print(f"Task creation error: {e}")
+            await interaction.followup.send(
+                "❌ Error creating task.",
+                ephemeral=True
+            )
+
+    @app_commands.command(name="set_admin_role", description="Set admin role for task reviews")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_admin_role(
+        self,
+        interaction: discord.Interaction,
+        role: discord.Role
+    ):
+        """Set an admin role that can review tasks."""
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = str(interaction.guild.id)
+        role_id = str(role.id)
+
+        try:
+            # Get or create config
+            config = self.data_manager.supabase.table('guilds').select('*').eq('guild_id', guild_id).execute()
+
+            admin_roles = [role_id]
+            if config.data:
+                current_roles = config.data[0].get('admin_roles', [])
+                if role_id not in current_roles:
+                    admin_roles = current_roles + [role_id]
+
+                self.data_manager.supabase.table('guilds').update({
+                    'admin_roles': admin_roles
+                }).eq('guild_id', guild_id).execute()
+            else:
+                # Create basic config
+                self.data_manager.supabase.table('guilds').insert({
+                    'guild_id': guild_id,
+                    'server_name': interaction.guild.name,
+                    'admin_roles': admin_roles,
+                    'is_active': True
+                }).execute()
+
+            await interaction.followup.send(
+                f"✅ Role **{role.name}** added to admin roles for task reviews.",
+                ephemeral=True
+            )
+
+        except Exception as e:
+            print(f"Set admin role error: {e}")
+            await interaction.followup.send(
+                "❌ Error setting admin role.",
+                ephemeral=True
+            )
+
+    async def setup(bot):
+        """Setup the tasks cog."""
+        cog = Tasks(bot)
+        await bot.add_cog(cog)
+
+        # Set managers after cog is loaded
+        data_manager_instance = getattr(bot, 'data_manager', None)
+        transaction_manager_instance = getattr(bot, 'transaction_manager', None)
+        if data_manager_instance and transaction_manager_instance:
+            cog.set_managers(data_manager_instance, transaction_manager_instance)
+
+        # Register persistent views for existing tasks
+        for guild in bot.guilds:
+            guild_id = str(guild.id)
+            try:
+                # Get active tasks from database
+                active_tasks = cog.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('status', 'active').execute()
+
+                for task in active_tasks.data or []:
+                    if task.get('message_id'):
+                        view = TaskClaimView(int(task['task_id']))
+                        bot.add_view(view, message_id=int(task['message_id']))
+            except Exception as e:
+                print(f"Error registering views for guild {guild_id}: {e}")

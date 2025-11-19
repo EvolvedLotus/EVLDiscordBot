@@ -796,47 +796,77 @@ class Currency(commands.Cog):
     @app_commands.command(name="view_tasks", description="View available tasks")
     @app_commands.guild_only()
     async def view_tasks(self, interaction: discord.Interaction):
-        guild_id = str(interaction.guild.id)
-        channel_id = str(interaction.channel.id)
-        user_id = str(interaction.user.id)
+        guild_id = int(interaction.guild.id)
 
-        # Load task data
-        task_data = self.data_manager.load_guild_data(guild_id, "tasks")
-        tasks = task_data.get("tasks", {})
-        user_tasks = task_data.get("user_tasks", {}).get(user_id, {})
+        try:
+            # Import TaskManager to get available tasks from Supabase
+            from core.task_manager import TaskManager
 
-        # Get config for global setting
-        config = self.data_manager.load_guild_data(guild_id, "config")
-        global_tasks = config.get("global_tasks", False)
+            # Create TaskManager instance
+            tasks_cog = interaction.client.get_cog('Tasks')
+            if not tasks_cog or not tasks_cog.task_manager:
+                await interaction.response.send_message("❌ Task system not available.", ephemeral=True)
+                return
 
-        # Filter by channel unless global
-        if not global_tasks:
-            tasks = {k: v for k, v in tasks.items()
-                     if v.get("channel_id") == channel_id and v.get("status") == "pending"}
-        else:
-            tasks = {k: v for k, v in tasks.items() if v.get("status") == "pending"}
+            task_manager = tasks_cog.task_manager
 
-        if not tasks:
-            await interaction.response.send_message("No tasks available in this channel.", ephemeral=True)
-            return
+            # Get available tasks for this user
+            available_tasks = task_manager.get_available_tasks(guild_id, str(interaction.user.id))
 
-        # Create embed
-        embed = discord.Embed(
-            title="📋 Available Tasks",
-            description="Claim a task to get started!",
-            color=discord.Color.green()
-        )
+            if not available_tasks:
+                await interaction.response.send_message("📋 No tasks available for you right now.", ephemeral=True)
+                return
 
-        for task_id, task in tasks.items():
-            claimed = task_id in user_tasks
-            status_emoji = "✅" if claimed else "⏳"
-            embed.add_field(
-                name=f"{status_emoji} {task['name']} - {task['reward']} {config.get('currency_symbol', '$')}",
-                value=f"{task.get('description', 'No description')}\nDuration: {task.get('duration_hours', 24)}h\nID: `{task_id}`",
-                inline=False
+            # Get config for currency symbol
+            config = self.data_manager.supabase.table('guilds').select('currency_symbol').eq('guild_id', str(guild_id)).execute()
+            symbol = config.data[0]['currency_symbol'] if config.data else '$'
+
+            # Create embed
+            embed = discord.Embed(
+                title="📋 Available Tasks",
+                description="Click buttons below to claim tasks!",
+                color=discord.Color.green()
             )
 
-        await interaction.response.send_message(embed=embed, ephemeral=False)
+            for task in available_tasks:
+                task_id = task['task_id']
+                status_emoji = "🟢"  # Available
+
+                embed.add_field(
+                    name=f"{status_emoji} {task['name']} - {task['reward']} {symbol}",
+                    value=f"{task.get('description', 'No description')[:100]}...\n"
+                          f"⏱️ {task['duration_hours']}h • "
+                          f"🔢 {task['current_claims']}"
+                          f"{f'/{task[\"max_claims\"]}' if task['max_claims'] != -1 else ''} claims\n"
+                          f"📝 ID: `{task_id}`",
+                    inline=False
+                )
+
+            # Show user their current active tasks
+            user_tasks_data = task_manager.get_user_tasks(guild_id, str(interaction.user.id))
+            if user_tasks_data:
+                active_tasks = []
+                for t in user_tasks_data:
+                    if t['user_task']['status'] in ['in_progress', 'submitted']:
+                        task_name = t['task']['name']
+                        status = t['user_task']['status'].replace('_', ' ').title()
+                        active_tasks.append(f"`{task_name}` ({status})")
+
+                if active_tasks:
+                    embed.add_field(
+                        name="🔄 Your Active Tasks",
+                        value=', '.join(active_tasks),
+                        inline=False
+                    )
+
+            embed.set_footer(text="Use /claim <task_id> to claim a task | Use /mytasks to view your claimed tasks")
+
+            await interaction.response.send_message(embed=embed, ephemeral=False)
+
+        except Exception as e:
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in view_tasks command: {e}")
+            await interaction.response.send_message("❌ Error loading tasks.", ephemeral=True)
 
     @app_commands.command(name='claim', description='Claim a task')
     @app_commands.guild_only()

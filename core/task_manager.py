@@ -396,7 +396,7 @@ class TaskManager:
 
     def get_user_tasks(self, guild_id: int, user_id: int, status_filter: str = None) -> List[Dict]:
         """
-        Get tasks for a specific user.
+        Get tasks for a specific user from Supabase.
 
         Args:
             guild_id: Guild ID
@@ -407,25 +407,35 @@ class TaskManager:
             List of user tasks
         """
         try:
-            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
-            if not tasks_data:
-                return []
-
-            user_tasks = tasks_data.get('user_tasks', {}).get(str(user_id), {})
+            # Get user tasks from Supabase
+            query = self.data_manager.supabase.table('user_tasks').select('*').eq('guild_id', str(guild_id)).eq('user_id', str(user_id))
 
             if status_filter:
-                user_tasks = {k: v for k, v in user_tasks.items() if v['status'] == status_filter}
+                query = query.eq('status', status_filter)
 
-            # Add task details
-            tasks = tasks_data.get('tasks', {})
+            user_tasks_result = query.execute()
+
+            if not user_tasks_result.data:
+                return []
+
+            # Get task details for each user task
             result = []
-            for task_id, user_task in user_tasks.items():
-                task = tasks.get(task_id)
-                if task:
+            for user_task_data in user_tasks_result.data:
+                task_id = int(user_task_data['task_id'])
+
+                # Get the task details
+                task_result = self.data_manager.supabase.table('tasks').select('*').eq('guild_id', str(guild_id)).eq('task_id', str(task_id)).execute()
+
+                if task_result.data:
+                    task_data = task_result.data[0]
+                    # Convert string dates to datetime objects
+                    if isinstance(task_data['expires_at'], str):
+                        task_data['expires_at'] = datetime.fromisoformat(task_data['expires_at'].replace('Z', '+00:00'))
+
                     result.append({
-                        'task_id': task_id,
-                        'task': task,
-                        'user_task': user_task
+                        'task_id': str(task_id),
+                        'task': task_data,
+                        'user_task': user_task_data
                     })
 
             return result
@@ -436,7 +446,7 @@ class TaskManager:
 
     def get_available_tasks(self, guild_id: int, user_id: int = None, channel_id: str = None) -> List[Dict]:
         """
-        Get available tasks for claiming.
+        Get available tasks for claiming from Supabase.
 
         Args:
             guild_id: Guild ID
@@ -447,40 +457,37 @@ class TaskManager:
             List of available tasks
         """
         try:
-            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
-            if not tasks_data:
+            # Get tasks from Supabase
+            tasks = self.data_manager.supabase.table('tasks').select('*').eq('guild_id', str(guild_id)).eq('status', 'active').execute()
+
+            if not tasks.data:
                 return []
 
-            config = self.data_manager.load_guild_data(guild_id, 'config')
-            global_tasks = config.get('global_tasks', False)
+            available_tasks = []
+            for task in tasks.data:
+                # Convert string dates to datetime objects
+                if isinstance(task['expires_at'], str):
+                    task['expires_at'] = datetime.fromisoformat(task['expires_at'].replace('Z', '+00:00'))
 
-            tasks = []
-            for task_id, task in tasks_data.get('tasks', {}).items():
-                # Filter by status
-                if task['status'] != 'active':
+                # Check expiry
+                if datetime.now(timezone.utc) > task['expires_at']:
+                    # Mark as expired in database
+                    self.data_manager.supabase.table('tasks').update({'status': 'expired'}).eq('id', task['id']).execute()
                     continue
 
-                # Filter by channel unless global
-                if not global_tasks and channel_id and task.get('channel_id') != channel_id:
+                # Check max claims
+                if task.get('max_claims') and task['max_claims'] != -1 and task.get('current_claims', 0) >= task['max_claims']:
                     continue
 
                 # Check if user already claimed
                 if user_id:
-                    user_tasks = tasks_data.get('user_tasks', {}).get(str(user_id), {})
-                    if task_id in user_tasks:
+                    user_claim = self.data_manager.supabase.table('user_tasks').select('id').eq('guild_id', str(guild_id)).eq('user_id', str(user_id)).eq('task_id', str(task['task_id'])).execute()
+                    if user_claim.data:
                         continue
 
-                # Check max claims
-                if task['max_claims'] != -1 and task['current_claims'] >= task['max_claims']:
-                    continue
+                available_tasks.append(task)
 
-                # Check expiry
-                if datetime.now(timezone.utc) > datetime.fromisoformat(task['expires_at']):
-                    continue
-
-                tasks.append(task)
-
-            return tasks
+            return available_tasks
 
         except Exception as e:
             logger.error(f"Error getting available tasks for guild {guild_id}: {e}")
