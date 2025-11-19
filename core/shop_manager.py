@@ -165,8 +165,9 @@ class ShopManager:
         if not success:
             raise RuntimeError("Failed to save shop item")
 
-        # Clear cache
+        # Clear caches - both shop manager and data manager
         self._clear_shop_cache(guild_id)
+        self.data_manager.invalidate_cache(guild_id, 'currency')
 
         # Trigger SSE update
         self._broadcast_event('shop_update', {
@@ -229,8 +230,9 @@ class ShopManager:
         if not success:
             raise RuntimeError("Failed to save item update")
 
-        # Clear cache
+        # Clear caches - both shop manager and data manager
         self._clear_shop_cache(guild_id)
+        self.data_manager.invalidate_cache(guild_id, 'currency')
 
         # Trigger SSE update
         self._broadcast_event('shop_update', {
@@ -273,8 +275,9 @@ class ShopManager:
         if not success:
             raise RuntimeError("Failed to delete shop item")
 
-        # Clear cache
+        # Clear caches - both shop manager and data manager
         self._clear_shop_cache(guild_id)
+        self.data_manager.invalidate_cache(guild_id, 'currency')
 
         # Trigger SSE update
         self._broadcast_event('shop_update', {
@@ -382,9 +385,10 @@ class ShopManager:
                     logger.error(f"Failed to save purchase data for user {user_id} in guild {guild_id}")
                     return {'success': False, 'error': 'Failed to save purchase data'}
 
-                # Clear caches
+                # Clear caches - both shop manager and data manager
                 self._clear_shop_cache(guild_id)
                 self._clear_inventory_cache(guild_id, user_id)
+                self.data_manager.invalidate_cache(guild_id, 'currency')
 
                 # Trigger SSE updates
                 self._broadcast_event('shop_update', {
@@ -493,8 +497,9 @@ class ShopManager:
             if not success:
                 raise RuntimeError("Failed to update stock")
 
-            # Clear cache
+            # Clear caches - both shop manager and data manager
             self._clear_shop_cache(guild_id)
+            self.data_manager.invalidate_cache(guild_id, 'currency')
 
             # Trigger SSE update
             self._broadcast_event('shop_update', {
@@ -606,6 +611,7 @@ class ShopManager:
         success = self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
         if success:
             self._clear_inventory_cache(guild_id, user_id)
+            self.data_manager.invalidate_cache(guild_id, 'currency')
             self._broadcast_event('inventory_update', {
                 'guild_id': guild_id,
                 'user_id': user_id,
@@ -639,6 +645,7 @@ class ShopManager:
         success = self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
         if success:
             self._clear_inventory_cache(guild_id, user_id)
+            self.data_manager.invalidate_cache(guild_id, 'currency')
             self._broadcast_event('inventory_update', {
                 'guild_id': guild_id,
                 'user_id': user_id,

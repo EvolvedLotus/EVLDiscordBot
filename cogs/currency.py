@@ -858,8 +858,8 @@ class Currency(commands.Cog):
     async def admin_give_money(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str = "Admin grant"):
         """Admin command to give currency to any user"""
         # Check admin permissions
-        from core.permissions import is_admin
-        if not is_admin(interaction.user, interaction.guild):
+        from core.permissions import is_admin_interaction
+        if not is_admin_interaction(interaction):
             await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
             return
 
