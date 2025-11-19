@@ -237,7 +237,7 @@ def handle_options(path=None):
 def health_check():
     return jsonify({
         'status': 'ok',
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(datetime.timezone.utc).isoformat(),
         'environment': 'production' if IS_PRODUCTION else 'development',
         'cors_enabled': True
     })
