@@ -1,172 +1,169 @@
-// API Configuration - Supports both development and production
+// ========== API CONFIGURATION ==========
 function getApiBaseUrl() {
     const hostname = window.location.hostname;
+    const protocol = window.location.protocol;
+
+    console.log('🌐 Detecting API URL for:', hostname);
 
     // Production: GitHub Pages
     if (hostname === 'evolvedlotus.github.io') {
-        return 'https://your-railway-app.railway.app'; // Replace with your actual Railway app URL
+        return 'https://evldiscordbot-production.up.railway.app';
     }
 
-    // Local development: Try common ports
+    // Development: Localhost
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        // Try to detect if backend is running on port 5000 (Flask default)
-        // If not available, fallback to port 3000
         return 'http://localhost:5000';
     }
 
-    // Railway/Netlify deployment
-    if (window.API_BASE_URL) {
-        return window.API_BASE_URL;
-    }
-
-    // Fallback
-    return 'http://localhost:5000';
+    // Fallback to production
+    return 'https://evldiscordbot-production.up.railway.app';
 }
 
 const API_BASE_URL = getApiBaseUrl();
+console.log('✅ API Base URL:', API_BASE_URL);
 
-// Debug logging
-console.log('=== SCRIPT.JS LOADING ===');
-console.log('Current URL:', window.location.href);
-console.log('DOM State:', document.readyState);
-console.log('API Base URL:', API_BASE_URL);
-
-// Helper function to make API calls with proper CORS support
+// ========== UNIVERSAL FETCH WRAPPER WITH CORS ==========
 async function apiCall(endpoint, options = {}) {
+    const url = `${API_BASE_URL}${endpoint}`;
+
+    // Default options with CORS credentials
+    const defaultOptions = {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        credentials: 'include',  // CRITICAL: Include cookies/session
+        mode: 'cors',             // CRITICAL: Enable CORS
+    };
+
+    // Merge options
+    const fetchOptions = {
+        ...defaultOptions,
+        ...options,
+        headers: {
+            ...defaultOptions.headers,
+            ...(options.headers || {})
+        }
+    };
+
+    console.log('📡 API Call:', {
+        url,
+        method: fetchOptions.method,
+        credentials: fetchOptions.credentials
+    });
+
     try {
-        // Default options with CORS support
-        const defaultOptions = {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            mode: 'cors'
-        };
+        const response = await fetch(url, fetchOptions);
 
-        // Merge options
-        const fetchOptions = { ...defaultOptions, ...options };
+        console.log('📥 Response:', {
+            status: response.status,
+            ok: response.ok
+        });
 
-        // Make request
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, fetchOptions);
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Handle non-JSON responses
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            return await response.json();
         }
 
-        const data = await response.json();
-        return data;
+        return response;
+
     } catch (error) {
-        console.error(`API Error (${endpoint}):`, error);
+        console.error('❌ API Call Failed:', error);
         throw error;
     }
 }
 
-// Login functionality
+// ========== LOGIN FUNCTION ==========
 async function login(event) {
-    // Prevent default at the very start
     if (event) {
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
     }
 
-    console.log('=== LOGIN FUNCTION EXECUTING ===');
+    console.log('🔐 === LOGIN ATTEMPT ===');
 
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
 
     console.log('Username:', username);
-    console.log('Attempting login...');
 
-    // Validate inputs
     if (!username || !password) {
         alert('Please enter both username and password');
         return;
     }
 
     try {
-        const loginUrl = `${API_BASE_URL}/api/auth/login`;
-        console.log('Login URL:', loginUrl);
-
-        const response = await fetch(loginUrl, {
+        const data = await apiCall('/api/auth/login', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            credentials: 'include',
-            mode: 'cors',
             body: JSON.stringify({
                 username: username,
                 password: password
             })
         });
 
-        console.log('Response status:', response.status);
+        console.log('✅ Login successful:', data);
 
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.error || `Login failed: ${response.status}`);
+        // Store token if provided (optional, sessions use cookies)
+        if (data.token) {
+            localStorage.setItem('authToken', data.token);
         }
-
-        const data = await response.json();
-        console.log('Login successful:', data);
 
         // Hide login screen, show dashboard
         document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('main-dashboard').style.display = 'block';
+        document.getElementById('dashboard').style.display = 'block';
 
         // Load initial data
         await loadServers();
 
     } catch (error) {
-        console.error('Login error:', error);
-        alert(`Login failed: ${error.message}`);
+        console.error('❌ Login failed:', error);
+        alert(`Login failed: ${error.message || 'Unknown error'}`);
     }
 }
 
-// Initialize when DOM is ready
+// ========== DOM READY INITIALIZATION ==========
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, attaching login handler');
+    console.log('📄 DOM Content Loaded');
 
+    // Attach login form handler
     const loginForm = document.getElementById('login-form');
-    const loginBtn = document.getElementById('login-btn');
-
-    console.log('Login form found:', !!loginForm);
-    console.log('Login button found:', !!loginBtn);
-
     if (loginForm) {
-        // Remove any existing listeners first
+        // Remove existing listener (if any)
         loginForm.removeEventListener('submit', login);
-        // Add the listener
-        loginForm.addEventListener('submit', function(e) {
+
+        // Add new listener
+        loginForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             e.stopPropagation();
-            login(e);
+            await login(e);
         });
-        console.log('Login form handler attached successfully');
+
+        console.log('✅ Login form handler attached');
+    } else {
+        console.error('❌ Login form not found!');
     }
 
-    // Also attach to button click as backup
+    // Also attach to button as backup
+    const loginBtn = document.getElementById('login-btn');
     if (loginBtn) {
-        loginBtn.removeEventListener('click', login);
-        loginBtn.addEventListener('click', function(e) {
+        loginBtn.addEventListener('click', async function(e) {
             e.preventDefault();
             e.stopPropagation();
-            login(e);
+            await login(e);
         });
-        console.log('Login button handler attached successfully');
+        console.log('✅ Login button handler attached');
     }
 });
 
 // Load servers function
 async function loadServers() {
     try {
-        console.log('Loading servers...');
-        const response = await apiCall('/api/servers');
-        console.log('Servers loaded:', response);
+        const data = await apiCall('/api/servers');
+        console.log('Servers loaded:', data);
         // TODO: Populate server selector
     } catch (error) {
-        console.error('Error loading servers:', error);
+        console.error('Failed to load servers:', error);
     }
 }

@@ -1,53 +1,70 @@
 #!/usr/bin/env python3
 """
-Simple CORS test script that doesn't require environment variables
+Simple CORS test for local backend
 """
-import requests
+import os
+import sys
 import json
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
-def test_cors_simple():
-    """Test CORS configuration with a simple Flask app"""
+# Set minimal environment variables for testing
+os.environ['JWT_SECRET_KEY'] = 'test_secret_key_for_cors_testing'
+os.environ['SUPABASE_URL'] = 'https://test.supabase.co'
+os.environ['SUPABASE_SERVICE_ROLE_KEY'] = 'test_key'
+os.environ['DISCORD_TOKEN'] = 'test_token'
+os.environ['PORT'] = '5001'
 
-    # Test the CORS test endpoint
-    test_url = "https://evldiscordbot-production.up.railway.app/api/test-cors"
+# Import and test our backend CORS configuration
+sys.path.insert(0, '.')
+from backend import app
 
+def test_cors_headers():
+    """Test CORS headers in our Flask app"""
     print("Testing CORS configuration...")
-    print(f"URL: {test_url}")
 
-    try:
-        # Test GET request
-        response = requests.get(test_url, headers={
-            'Origin': 'https://evolvedlotus.github.io'
-        }, timeout=10)
+    with app.test_client() as client:
+        # Test OPTIONS preflight request
+        print("\n1. Testing OPTIONS preflight request...")
+        response = client.options('/api/auth/login',
+                                headers={
+                                    'Origin': 'https://evolvedlotus.github.io',
+                                    'Access-Control-Request-Method': 'POST',
+                                    'Access-Control-Request-Headers': 'Content-Type'
+                                })
 
-        print(f"Status Code: {response.status_code}")
-        print(f"Response Headers: {dict(response.headers)}")
+        print(f"Status: {response.status_code}")
+        print("CORS Headers:")
+        for header, value in response.headers.items():
+            if header.lower().startswith('access-control'):
+                print(f"  {header}: {value}")
 
-        # Check CORS headers
-        cors_headers = {
-            'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
-            'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
-            'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers'),
-            'Access-Control-Allow-Credentials': response.headers.get('Access-Control-Allow-Credentials')
-        }
+        # Test POST request
+        print("\n2. Testing POST request...")
+        response = client.post('/api/auth/login',
+                             headers={
+                                 'Origin': 'https://evolvedlotus.github.io',
+                                 'Content-Type': 'application/json'
+                             },
+                             data=json.dumps({
+                                 'username': 'test',
+                                 'password': 'test'
+                             }))
 
-        print("\nCORS Headers:")
-        for header, value in cors_headers.items():
-            status = "✅" if value else "❌"
-            print(f"  {status} {header}: {value}")
+        print(f"Status: {response.status_code}")
+        print("CORS Headers:")
+        for header, value in response.headers.items():
+            if header.lower().startswith('access-control'):
+                print(f"  {header}: {value}")
 
-        # Check if origin is allowed
-        allowed_origin = cors_headers['Access-Control-Allow-Origin']
-        if allowed_origin == 'https://evolvedlotus.github.io':
-            print("\n✅ CORS configuration looks correct!")
-            return True
-        else:
-            print(f"\n❌ CORS origin mismatch. Expected: https://evolvedlotus.github.io, Got: {allowed_origin}")
-            return False
-
-    except requests.exceptions.RequestException as e:
-        print(f"❌ Request failed: {e}")
-        return False
+        # Test session cookie settings
+        print("\n3. Testing session cookie configuration...")
+        with app.test_request_context():
+            from backend import session
+            print("Session cookie settings:")
+            print(f"  SESSION_COOKIE_SECURE: {app.config.get('SESSION_COOKIE_SECURE')}")
+            print(f"  SESSION_COOKIE_SAMESITE: {app.config.get('SESSION_COOKIE_SAMESITE')}")
+            print(f"  SESSION_COOKIE_HTTPONLY: {app.config.get('SESSION_COOKIE_HTTPONLY')}")
 
 if __name__ == "__main__":
-    test_cors_simple()
+    test_cors_headers()

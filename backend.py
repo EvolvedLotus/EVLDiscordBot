@@ -168,6 +168,9 @@ def get_allowed_origins():
         # Allow both production and development origins in development
         return production_origins + development_origins
 
+# Set global ALLOWED_ORIGINS variable for use in after_request_cors
+ALLOWED_ORIGINS = get_allowed_origins()
+
 CORS(app,
      resources={
          r"/api/*": {
@@ -199,18 +202,47 @@ else:
 
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 
+# ========== EXPLICIT OPTIONS HANDLER ==========
+# Handles preflight requests for ALL routes
+@app.route('/<path:path>', methods=['OPTIONS'])
+@app.route('/api/<path:path>', methods=['OPTIONS'])
+def handle_options(path=None):
+    """
+    Explicit OPTIONS handler for CORS preflight requests.
+    Returns 200 with proper CORS headers.
+    """
+    origin = request.headers.get('Origin')
+
+    if origin in ALLOWED_ORIGINS:
+        response = make_response('', 200)
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = request.headers.get(
+            'Access-Control-Request-Headers',
+            'Content-Type, Authorization, X-Requested-With'
+        )
+        response.headers['Access-Control-Max-Age'] = '3600'
+        return response
+
+    return make_response('', 403)
+
 # Enhanced OPTIONS handler for preflight requests
 @app.after_request
-def after_request(response):
+def after_request_cors(response):
+    """
+    Ensure CORS headers are present on ALL responses.
+    Critical for error responses and manual header control.
+    """
     origin = request.headers.get('Origin')
-    allowed_origins = get_allowed_origins()
 
-    if origin and origin in allowed_origins:
+    # Only add headers if origin is allowed
+    if origin in ALLOWED_ORIGINS:
         response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-Requested-With'
-        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Max-Age'] = '86400'  # Cache preflight for 24 hours
+        response.headers['Access-Control-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Type, X-Total-Count'
 
     return response
 
