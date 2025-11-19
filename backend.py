@@ -1,217 +1,110 @@
-from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context, g
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
-import json
-import os
-import time
-import queue
-import asyncio
-import threading
-from datetime import datetime, timedelta, timezone
-import subprocess
-import logging
-import logging.handlers
-from collections import defaultdict
-import hashlib
-import secrets
-import traceback
-import sys
-import functools
+"""
+MINIMAL BACKEND.PY WITH CORS - Add this to the TOP of your backend.py file
+This will ensure CORS is configured BEFORE any routes or other setup
+"""
 
-# Discord imports for message creation
-import discord
-from discord import Embed
-from discord.ui import View, Button
-
-# Load environment variables (only for local development)
-if os.getenv('ENVIRONMENT') != 'production':
-    try:
-        from dotenv import load_dotenv
-        load_dotenv()
-    except ImportError:
-        pass  # dotenv not installed in production
-
-# Environment variable validation for Railway deployment
-REQUIRED_ENV_VARS = {
-    'DISCORD_TOKEN': 'Discord bot token',
-    'SUPABASE_URL': 'Supabase project URL',
-    'SUPABASE_SERVICE_ROLE_KEY': 'Supabase service role key',
-    'JWT_SECRET_KEY': 'JWT secret for authentication',
-    'PORT': 'Server port (Railway auto-assigns)',
-}
-
-missing = []
-for var, description in REQUIRED_ENV_VARS.items():
-    if not os.getenv(var):
-        missing.append(f"{var} ({description})")
-
-if missing:
-    print("❌ MISSING REQUIRED ENVIRONMENT VARIABLES:")
-    for m in missing:
-        print(f"  - {m}")
-    sys.exit(1)
-
-# Import data manager for server-specific data access
-try:
-    from core import data_manager as data_manager_module
-    from core.transaction_manager import TransactionManager
-    from core.auth_manager import AuthManager
-    from core.audit_manager import AuditManager
-    from core.sync_manager import SyncManager, SyncEntity
-except ImportError:
-    data_manager_module = None
-    TransactionManager = None
-    AuthManager = None
-    AuditManager = None
-    SyncManager = None
-    SyncEntity = None
-
-# Global instances (set by set_data_manager)
-data_manager_instance = None
-auth_manager_instance = None
-audit_manager_instance = None
-sync_manager_instance = None
-
-# === LOGGING CONFIGURATION ===
-
-def setup_logging():
-    """Setup logging configuration for Railway deployment"""
-
-    # Determine logs directory based on environment
-    if os.environ.get('RAILWAY_ENVIRONMENT_ID') or os.environ.get('RAILWAY_PROJECT_ID'):
-        # Railway: Use /tmp which is writable in ephemeral containers
-        logs_dir = '/tmp/logs'
-    else:
-        # Local development: Use ./logs directory
-        logs_dir = os.path.join(os.getcwd(), 'logs')
-
-    # Create logs directory if it doesn't exist
-    try:
-        os.makedirs(logs_dir, exist_ok=True)
-    except Exception as e:
-        print(f"Warning: Could not create logs directory: {e}")
-        # Fallback to stdout only logging
-        logging.basicConfig(
-            level=logging.INFO,
-            format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-            handlers=[logging.StreamHandler()]
-        )
-        return logging.getLogger(__name__)
-
-    # Setup logging - Railway uses stdout only, local development uses both file and stdout
-    is_railway = os.environ.get('RAILWAY_ENVIRONMENT_ID') or os.environ.get('RAILWAY_PROJECT_ID')
-
-    if is_railway:
-        # Railway: Only stdout (captured by Railway logs)
-        logging.basicConfig(
-            level=logging.INFO,
-            format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-            handlers=[logging.StreamHandler()]
-        )
-    else:
-        # Local development: Both file and stdout
-        log_file = os.path.join(logs_dir, 'bot.log')
-        logging.basicConfig(
-            level=logging.INFO,
-            format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-            handlers=[
-                logging.FileHandler(log_file, encoding='utf-8'),
-                logging.StreamHandler()
-            ]
-        )
-
-    return logging.getLogger(__name__)
-
-# Initialize logging
-logger = setup_logging()
-
-# ============================================
-# FLASK APP INITIALIZATION - MUST BE EARLY
-# ============================================
-app = Flask(__name__, static_folder='web', static_url_path='')
-
-# ============= CRITICAL: CORS CONFIGURATION =============
-from flask import Flask, request, jsonify, session, make_response
+from flask import Flask, request, make_response, jsonify
 from flask_cors import CORS
 import os
 
-# CRITICAL: CORS Configuration - Support both development and production
-def get_allowed_origins():
-    """Get allowed origins based on environment"""
-    # Production origins
-    production_origins = ["https://evolvedlotus.github.io"]
+print("="*50)
+print("🚀 BACKEND.PY STARTING")
+print("="*50)
 
-    # Development origins (localhost with common ports)
-    development_origins = [
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:5000",
-        "http://localhost:8000",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://127.0.0.1:5000",
-        "http://127.0.0.1:8000"
+app = Flask(__name__)
+
+# ========== CRITICAL: CORS MUST BE CONFIGURED FIRST ==========
+# Detect environment
+IS_PRODUCTION = os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('ENVIRONMENT') == 'production'
+IS_DEVELOPMENT = not IS_PRODUCTION
+
+print(f"🌍 Environment: {'PRODUCTION' if IS_PRODUCTION else 'DEVELOPMENT'}")
+print(f"🌍 RAILWAY_ENVIRONMENT: {os.getenv('RAILWAY_ENVIRONMENT')}")
+print(f"🌍 ENVIRONMENT: {os.getenv('ENVIRONMENT')}")
+
+# Define allowed origins based on environment
+if IS_PRODUCTION:
+    ALLOWED_ORIGINS = [
+        'https://evolvedlotus.github.io',
+        'https://evldiscordbot-production.up.railway.app',
+    ]
+else:
+    ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://localhost:5000',
+        'http://localhost:8000',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5000',
+        'http://127.0.0.1:8000',
+        'https://evolvedlotus.github.io',
     ]
 
-    # Check if we're in production (Railway/Netlify)
-    is_production = bool(
-        os.getenv('RAILWAY_PROJECT_ID') or
-        os.getenv('RAILWAY_ENVIRONMENT_ID') or
-        os.getenv('NETLIFY')
-    )
+print(f"🔒 CORS Origins: {ALLOWED_ORIGINS}")
 
-    if is_production:
-        return production_origins
-    else:
-        # Allow both production and development origins in development
-        return production_origins + development_origins
-
-# Set global ALLOWED_ORIGINS variable for use in after_request_cors
-ALLOWED_ORIGINS = get_allowed_origins()
-
+# Initialize CORS - THIS MUST HAPPEN BEFORE ROUTES
 CORS(app,
-     resources={
-         r"/api/*": {
-             "origins": get_allowed_origins(),
-             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-             "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"],
-             "supports_credentials": True,
-             "expose_headers": ["Content-Type", "X-Total-Count"]
-         }
-     })
-
-# Session configuration for authentication
-app.config['SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-secret-change-in-production')
-app.config['SESSION_TYPE'] = 'filesystem'
-
-# Configure session cookies based on environment
-is_production = bool(
-    os.getenv('RAILWAY_PROJECT_ID') or
-    os.getenv('RAILWAY_ENVIRONMENT_ID') or
-    os.getenv('NETLIFY')
+     origins=ALLOWED_ORIGINS,
+     supports_credentials=True,
+     allow_headers=['Content-Type', 'Authorization', 'X-Requested-With'],
+     expose_headers=['Content-Type', 'X-Total-Count'],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+     max_age=3600
 )
 
-if is_production:
-    app.config['SESSION_COOKIE_SECURE'] = True  # HTTPS only in production
-    app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for CORS in production
+print("✅ CORS initialized with flask-cors")
+
+# ========== SESSION CONFIGURATION ==========
+app.config['SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'dev-secret-key')
+app.config['SESSION_TYPE'] = 'filesystem'
+
+if IS_PRODUCTION:
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_DOMAIN'] = '.railway.app'
 else:
-    app.config['SESSION_COOKIE_SECURE'] = False  # Allow HTTP in development
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # More permissive in development
+    app.config['SESSION_COOKIE_SECURE'] = False
+    app.config['SESSION_COOKIE_DOMAIN'] = None
 
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_PATH'] = '/'
+app.config['PERMANENT_SESSION_LIFETIME'] = 86400
+
+print(f"🍪 Session Cookie Config:")
+print(f"   - Secure: {app.config['SESSION_COOKIE_SECURE']}")
+print(f"   - SameSite: {app.config['SESSION_COOKIE_SAMESITE']}")
+print(f"   - Domain: {app.config['SESSION_COOKIE_DOMAIN']}")
+
+# ========== AFTER_REQUEST HANDLER FOR CORS ==========
+@app.after_request
+def after_request_cors(response):
+    """Ensure CORS headers on ALL responses"""
+    origin = request.headers.get('Origin')
+
+    print(f"📨 Request from origin: {origin}")
+
+    if origin in ALLOWED_ORIGINS:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Type, X-Total-Count'
+        print(f"✅ Added CORS headers for origin: {origin}")
+    else:
+        print(f"⚠️  Origin not in allowed list: {origin}")
+
+    return response
 
 # ========== EXPLICIT OPTIONS HANDLER ==========
-# Handles preflight requests for ALL routes
 @app.route('/<path:path>', methods=['OPTIONS'])
 @app.route('/api/<path:path>', methods=['OPTIONS'])
 def handle_options(path=None):
-    """
-    Explicit OPTIONS handler for CORS preflight requests.
-    Returns 200 with proper CORS headers.
-    """
+    """Handle preflight requests"""
     origin = request.headers.get('Origin')
+
+    print(f"🔍 OPTIONS preflight for path: /{path}")
+    print(f"🔍 Origin: {origin}")
+    print(f"🔍 Request Method: {request.headers.get('Access-Control-Request-Method')}")
+    print(f"🔍 Request Headers: {request.headers.get('Access-Control-Request-Headers')}")
 
     if origin in ALLOWED_ORIGINS:
         response = make_response('', 200)
@@ -223,28 +116,38 @@ def handle_options(path=None):
             'Content-Type, Authorization, X-Requested-With'
         )
         response.headers['Access-Control-Max-Age'] = '3600'
+        print(f"✅ Preflight approved for origin: {origin}")
         return response
 
-    return make_response('', 403)
+    print(f"❌ Preflight rejected for origin: {origin}")
+    return make_response('Forbidden', 403)
 
-# Enhanced OPTIONS handler for preflight requests
-@app.after_request
-def after_request_cors(response):
-    """
-    Ensure CORS headers are present on ALL responses.
-    Critical for error responses and manual header control.
-    """
-    origin = request.headers.get('Origin')
+# ========== TEST ENDPOINT ==========
+@app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
+def test_cors():
+    """Test endpoint to verify CORS is working"""
+    return jsonify({
+        'message': 'CORS is working!',
+        'environment': 'production' if IS_PRODUCTION else 'development',
+        'allowed_origins': ALLOWED_ORIGINS
+    })
 
-    # Only add headers if origin is allowed
-    if origin in ALLOWED_ORIGINS:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-        response.headers['Access-Control-Expose-Headers'] = 'Content-Type, X-Total-Count'
+# ========== HEALTH CHECK ==========
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'ok',
+        'cors_enabled': True,
+        'environment': 'production' if IS_PRODUCTION else 'development'
+    })
 
-    return response
+print("="*50)
+print("✅ CORS CONFIGURATION COMPLETE")
+print("="*50)
+
+# ... REST OF YOUR BACKEND.PY CODE GOES HERE ...
+# (All your existing routes, managers, etc.)
 
 # Configure JWT
 app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'your-jwt-secret-key-change-in-production')
