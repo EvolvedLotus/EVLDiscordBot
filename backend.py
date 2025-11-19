@@ -134,7 +134,7 @@ try:
     cache_manager = CacheManager()
     auth_manager = AuthManager(data_manager, os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me'))
     audit_manager = AuditManager(data_manager)
-    sync_manager = SyncManager(data_manager)
+    sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
 
     logger.info("✅ All managers initialized")
 except ImportError as e:
