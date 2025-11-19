@@ -908,7 +908,7 @@ class BotAdmin(commands.Cog):
     async def remove_admin_roles(
         self,
         interaction: discord.Interaction,
-        roles: discord.commands.Greedy[discord.Role]
+        roles: commands.Greedy[discord.Role]
     ):
         """Remove admin roles."""
         await interaction.response.defer(ephemeral=True)
@@ -948,7 +948,7 @@ class BotAdmin(commands.Cog):
     async def remove_moderator_roles(
         self,
         interaction: discord.Interaction,
-        roles: discord.commands.Greedy[discord.Role]
+        roles: commands.Greedy[discord.Role]
     ):
         """Remove moderator roles."""
         await interaction.response.defer(ephemeral=True)
