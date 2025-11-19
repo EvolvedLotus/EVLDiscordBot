@@ -8,7 +8,7 @@ from flask_cors import CORS
 import os
 import sys
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import asyncio
 from threading import Thread
 
@@ -238,7 +238,7 @@ def handle_options(path=None):
 def health_check():
     return jsonify({
         'status': 'ok',
-        'timestamp': datetime.now(datetime.timezone.utc).isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'environment': 'production' if IS_PRODUCTION else 'development',
         'cors_enabled': True
     })

@@ -2,9 +2,10 @@
 builder = "NIXPACKS"
 
 [deploy]
-# Use Procfile for web deployment (Flask only, no Discord bot)
+# Railway web deployment configuration
+startCommand = "gunicorn --bind 0.0.0.0:$PORT --worker-class gevent --workers 1 --timeout 120 --preload backend:app"
 healthcheckPath = "/api/health"
-healthcheckTimeout = 300
+healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
