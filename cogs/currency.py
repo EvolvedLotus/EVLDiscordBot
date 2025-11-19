@@ -814,7 +814,10 @@ class Currency(commands.Cog):
             available_tasks = task_manager.get_available_tasks(guild_id, str(interaction.user.id))
 
             if not available_tasks:
-                await interaction.response.send_message("📋 No tasks available for you right now.", ephemeral=True)
+                try:
+                    await interaction.response.send_message("📋 No tasks available for you right now.", ephemeral=True)
+                except discord.errors.InteractionResponded:
+                    await interaction.followup.send("📋 No tasks available for you right now.", ephemeral=True)
                 return
 
             # Get config for currency symbol
@@ -870,7 +873,10 @@ class Currency(commands.Cog):
         except Exception as e:
             logger = logging.getLogger(__name__)
             logger.error(f"Error in view_tasks command: {e}")
-            await interaction.response.send_message("❌ Error loading tasks.", ephemeral=True)
+            try:
+                await interaction.response.send_message("❌ Error loading tasks.", ephemeral=True)
+            except discord.errors.InteractionResponded:
+                await interaction.followup.send("❌ Error loading tasks.", ephemeral=True)
 
     @app_commands.command(name='claim', description='Claim a task')
     @app_commands.guild_only()

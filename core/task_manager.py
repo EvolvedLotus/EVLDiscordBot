@@ -467,21 +467,23 @@ class TaskManager:
             user_tasks = tasks_data.get('user_tasks', {})
 
             available_tasks = []
+            data_modified = False
 
             for task_id, task in tasks.items():
                 # Skip non-active tasks
                 if task['status'] != 'active':
                     continue
 
-                # Convert string dates to datetime objects
-                if isinstance(task['expires_at'], str):
-                    task['expires_at'] = datetime.fromisoformat(task['expires_at'].replace('Z', '+00:00'))
+                # Convert string dates to datetime objects for comparison
+                expires_at = task['expires_at']
+                if isinstance(expires_at, str):
+                    expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
 
                 # Check expiry
-                if datetime.now(timezone.utc) > task['expires_at']:
+                if datetime.now(timezone.utc) > expires_at:
                     # Auto-expire the task
                     task['status'] = 'expired'
-                    self.data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
+                    data_modified = True
                     continue
 
                 # Check max claims
@@ -494,11 +496,18 @@ class TaskManager:
                     if str(task_id) in guild_user_tasks:
                         continue
 
-                # Add task_id to the task dict for compatibility
+                # Add task_id to the task dict for compatibility (don't modify original)
                 task_copy = task.copy()
                 task_copy['id'] = task_id  # For compatibility with existing code expecting 'id' field
 
                 available_tasks.append(task_copy)
+
+            # Save data only once if modified, after converting datetime back to string
+            if data_modified:
+                for task_id, task in tasks.items():
+                    if isinstance(task.get('expires_at'), datetime):
+                        task['expires_at'] = task['expires_at'].isoformat()
+                self.data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
 
             return available_tasks
 

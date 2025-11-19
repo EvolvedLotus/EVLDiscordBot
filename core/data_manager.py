@@ -592,9 +592,9 @@ class DataManager:
                     user_tasks_data = save_data.get('user_tasks', {})
                     settings_data = save_data.get('settings', {})
 
-                    # Save tasks
+                    # Save tasks - ensure datetime serialization
                     for task_id, task in tasks_data.items():
-                        self.admin_client.table('tasks').upsert({
+                        task_data = {
                             'task_id': int(task_id),
                             'guild_id': guild_id_str,
                             'name': task['name'],
@@ -602,7 +602,7 @@ class DataManager:
                             'reward': task['reward'],
                             'duration_hours': task['duration_hours'],
                             'status': task['status'],
-                            'expires_at': task.get('expires_at'),
+                            'expires_at': self._serialize_datetime_field(task.get('expires_at')),
                             'channel_id': task.get('channel_id'),
                             'message_id': task.get('message_id'),
                             'max_claims': task.get('max_claims', -1),
@@ -610,30 +610,40 @@ class DataManager:
                             'assigned_users': task.get('assigned_users', []),
                             'category': task.get('category', 'general'),
                             'role_name': task.get('role_name')
-                        }, on_conflict='guild_id,task_id').execute()
+                        }
 
-                    # Save user tasks
+                        # Remove None values to avoid JSON serialization issues
+                        task_data = {k: v for k, v in task_data.items() if v is not None}
+
+                        self.admin_client.table('tasks').upsert(task_data, on_conflict='guild_id,task_id').execute()
+
+                    # Save user tasks - ensure datetime serialization
                     for user_id, user_tasks in user_tasks_data.items():
                         for task_id, user_task in user_tasks.items():
-                            self.admin_client.table('user_tasks').upsert({
+                            user_task_data = {
                                 'guild_id': guild_id_str,
                                 'user_id': user_id,
                                 'task_id': int(task_id),
-                                'claimed_at': user_task.get('claimed_at'),
-                                'deadline': user_task.get('deadline'),
+                                'claimed_at': self._serialize_datetime_field(user_task.get('claimed_at')),
+                                'deadline': self._serialize_datetime_field(user_task.get('deadline')),
                                 'status': user_task.get('status', 'in_progress'),
                                 'proof_message_id': user_task.get('proof_message_id'),
                                 'proof_attachments': user_task.get('proof_attachments', []),
                                 'proof_content': user_task.get('proof_content', ''),
-                                'submitted_at': user_task.get('submitted_at'),
-                                'completed_at': user_task.get('completed_at'),
+                                'submitted_at': self._serialize_datetime_field(user_task.get('submitted_at')),
+                                'completed_at': self._serialize_datetime_field(user_task.get('completed_at')),
                                 'notes': user_task.get('notes', ''),
                                 'updated_at': datetime.now(timezone.utc).isoformat()
-                            }, on_conflict='guild_id,user_id,task_id').execute()
+                            }
 
-                    # Save task settings
+                            # Remove None values to avoid JSON serialization issues
+                            user_task_data = {k: v for k, v in user_task_data.items() if v is not None}
+
+                            self.admin_client.table('user_tasks').upsert(user_task_data, on_conflict='guild_id,user_id,task_id').execute()
+
+                    # Save task settings - ensure datetime serialization
                     if settings_data:
-                        self.admin_client.table('task_settings').upsert({
+                        settings_task_data = {
                             'guild_id': guild_id_str,
                             'allow_user_tasks': settings_data.get('allow_user_tasks', True),
                             'max_tasks_per_user': settings_data.get('max_tasks_per_user', 10),
@@ -644,7 +654,12 @@ class DataManager:
                             'total_completed': settings_data.get('total_completed', 0),
                             'total_expired': settings_data.get('total_expired', 0),
                             'updated_at': datetime.now(timezone.utc).isoformat()
-                        }, on_conflict='guild_id').execute()
+                        }
+
+                        # Remove None values to avoid JSON serialization issues
+                        settings_task_data = {k: v for k, v in settings_task_data.items() if v is not None}
+
+                        self.admin_client.table('task_settings').upsert(settings_task_data, on_conflict='guild_id').execute()
 
                     logger.info(f"✅ Tasks data saved for guild {guild_id_str}")
 
