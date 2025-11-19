@@ -1,35 +1,100 @@
 // Discord Bot CMS Dashboard JavaScript
 
-// API Configuration - Supports both development and production
-function getApiBaseUrl() {
+// API Configuration - Using Bypass Cors for all requests
+const BYPASS_CORS_URL = 'http://localhost:3167';
+
+// Helper function to build API URLs (actual backend URLs)
+function getBackendUrl(endpoint) {
     const hostname = window.location.hostname;
 
-    // Production: GitHub Pages
+    // Production: Railway backend
     if (hostname === 'evolvedlotus.github.io') {
-        return 'https://your-railway-app.railway.app'; // Replace with your actual Railway app URL
+        return `https://evldiscordbot-production.up.railway.app${endpoint}`;
     }
 
-    // Local development: Try common ports
+    // Local development: Flask backend
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        // Try to detect if backend is running on port 5000 (Flask default)
-        // If not available, fallback to port 3000
-        return 'http://localhost:5000';
+        return `http://localhost:5000${endpoint}`;
     }
 
     // Railway/Netlify deployment
     if (window.API_BASE_URL) {
-        return window.API_BASE_URL;
+        return `${window.API_BASE_URL}${endpoint}`;
     }
 
     // Fallback
-    return 'http://localhost:5000';
+    return `http://localhost:5000${endpoint}`;
 }
 
-const API_BASE_URL = getApiBaseUrl();
+// Bypass Cors request wrapper
+async function bypassCorsRequest(endpoint, options = {}) {
+    const backendUrl = getBackendUrl(endpoint);
 
-// Helper function to build API URLs
+    // Prepare Bypass Cors request
+    const bypassData = {
+        url: backendUrl,
+        headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            ...options.headers
+        },
+        cookies: [], // Add cookies if needed
+        post: options.body || null,
+        fullPageRender: false,
+        javascript: '',
+        scrollInterval: 500,
+        debug: false
+    };
+
+    // Convert method to POST data if needed
+    if (options.method && options.method !== 'GET') {
+        bypassData.post = options.body;
+    }
+
+    try {
+        const response = await fetch(BYPASS_CORS_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(bypassData)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Bypass Cors request failed: ${response.status}`);
+        }
+
+        const bypassResponse = await response.json();
+
+        // Extract the actual API response from Bypass Cors
+        if (bypassResponse.fullResponse) {
+            // Parse the actual response
+            const actualResponse = JSON.parse(bypassResponse.fullResponse);
+            return {
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve(actualResponse),
+                text: () => Promise.resolve(JSON.stringify(actualResponse))
+            };
+        } else {
+            // Fallback for non-JSON responses
+            return {
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({}),
+                text: () => Promise.resolve('')
+            };
+        }
+
+    } catch (error) {
+        console.error('Bypass Cors request error:', error);
+        throw error;
+    }
+}
+
+// Helper function to build API URLs (for compatibility)
 function apiUrl(endpoint) {
-    return `${API_BASE_URL}${endpoint}`;
+    return endpoint; // Just return endpoint, bypassCorsRequest will handle the full URL
 }
 
 // Global variables
