@@ -561,8 +561,21 @@ class ShopManager:
         inventory = currency_data.get('inventory', {})
         user_inventory = inventory.get(str(user_id), {})
 
-        # Filter out zero quantities
-        filtered_inventory = {k: v for k, v in user_inventory.items() if v > 0}
+        # Filter out zero quantities (handle both old dict format and new int format)
+        filtered_inventory = {}
+        for k, v in user_inventory.items():
+            if isinstance(v, dict):
+                # Handle legacy format where v might be a dict
+                quantity = v.get('quantity', 0)
+            elif isinstance(v, int):
+                # Normal case where v is quantity
+                quantity = v
+            else:
+                # Fallback to 0 for unknown formats
+                quantity = 0
+
+            if quantity > 0:
+                filtered_inventory[k] = quantity
 
         if not include_item_details:
             result = filtered_inventory
