@@ -916,6 +916,20 @@ DROP POLICY IF EXISTS "Service role full access" ON moderation_actions;
 CREATE POLICY "Service role full access" ON moderation_actions FOR ALL USING (true);
 
 -- =====================================================
+-- SYNC FUNCTIONS
+-- =====================================================
+
+-- Function to sync guild last_sync timestamp
+CREATE OR REPLACE FUNCTION sync_guild_last_sync(p_guild_id TEXT)
+RETURNS VOID AS $$
+BEGIN
+    UPDATE guilds
+    SET last_sync = NOW(), updated_at = NOW()
+    WHERE guild_id = p_guild_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
 -- INITIAL DATA
 -- =====================================================
 

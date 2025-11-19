@@ -7,7 +7,6 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import datetime, timedelta
 import asyncio
-from core import data_manager
 from core.permissions import admin_only, admin_only_interaction, feature_enabled, is_moderator, is_moderator_interaction
 from core.utils import create_embed, add_embed_footer
 from core.validator import DataValidator
@@ -27,7 +26,7 @@ class Admin(commands.Cog):
         if self._shop_manager is None:
             currency_cog = self.bot.get_cog('Currency')
             if currency_cog:
-                self._shop_manager = ShopManager(data_manager, currency_cog.transaction_manager)
+                self._shop_manager = ShopManager(self.bot.data_manager, currency_cog.transaction_manager)
             else:
                 # Fallback if Currency cog not available
                 self._shop_manager = None
@@ -58,12 +57,12 @@ class Admin(commands.Cog):
             return
 
         guild_id = interaction.guild.id
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.bot.data_manager.load_guild_data(guild_id, "config")
 
         old_prefix = config.get("prefix", "!")
         config["prefix"] = new_prefix
 
-        data_manager.save_guild_data(guild_id, "config", config)
+        self.bot.data_manager.save_guild_data(guild_id, "config", config)
 
         embed = create_embed(
             title="✅ Prefix Changed",

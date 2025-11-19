@@ -7,7 +7,6 @@ from discord.ext import commands
 import platform
 import psutil
 from datetime import datetime
-from core import data_manager
 from core.utils import create_embed, add_embed_footer, format_number
 
 class General(commands.Cog):
@@ -23,7 +22,7 @@ class General(commands.Cog):
         guild_id = ctx.guild.id if ctx.guild else None
 
         if guild_id:
-            config = data_manager.load_guild_data(guild_id, "config")
+            config = self.bot.data_manager.load_guild_data(guild_id, "config")
             prefix = config.get("prefix", "!")
         else:
             prefix = "!"
@@ -118,12 +117,12 @@ class General(commands.Cog):
         embed.add_field(name="🐍 Python", value=platform.python_version(), inline=True)
 
         # Data stats
-        all_guilds = data_manager.get_all_guilds()
+        all_guilds = self.bot.data_manager.get_all_guilds()
         total_currency = 0
         total_users_with_balance = 0
 
         for guild_id in all_guilds:
-            currency_data = data_manager.load_guild_data(guild_id, "currency")
+            currency_data = self.bot.data_manager.load_guild_data(guild_id, "currency")
             total_currency += currency_data.get("metadata", {}).get("total_currency", 0)
             total_users_with_balance += len(currency_data.get("users", {}))
 
@@ -177,8 +176,8 @@ class General(commands.Cog):
         embed.add_field(name="😀 Emojis", value=len(guild.emojis), inline=True)
 
         # Bot-specific data for this server
-        config = data_manager.load_guild_data(guild.id, "config")
-        currency_data = data_manager.load_guild_data(guild.id, "currency")
+        config = self.bot.data_manager.load_guild_data(guild.id, "config")
+        currency_data = self.bot.data_manager.load_guild_data(guild.id, "currency")
 
         embed.add_field(
             name="🤖 Bot Config",

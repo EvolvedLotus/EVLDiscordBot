@@ -19,14 +19,22 @@ class Currency(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.data_manager = bot.data_manager  # ✅ CRITICAL: Store data_manager reference
-        # Use bot's transaction manager instead of creating a new one
-        self.transaction_manager = bot.transaction_manager
-        self.shop_manager = bot.shop_manager
+        # Store managers with fallback to ensure they're available
+        self.data_manager = getattr(bot, 'data_manager', None)
+        self.transaction_manager = getattr(bot, 'transaction_manager', None)
+        self.shop_manager = getattr(bot, 'shop_manager', None)
+
+        # Log initialization status
+        import logging
+        logger = logging.getLogger(__name__)
+        if self.data_manager:
+            logger.info("Currency cog initialized with data_manager")
+        else:
+            logger.warning("Currency cog initialized without data_manager - will use fallback")
 
     def _get_currency_symbol(self, guild_id: int) -> str:
         """Get currency symbol for this guild"""
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.data_manager.load_guild_data(guild_id, "config")
         return config.get("currency_symbol", "$")
 
     def _initialize_user(self, data: dict, user_id_str: str):
@@ -42,13 +50,13 @@ class Currency(commands.Cog):
 
     def _get_balance(self, guild_id: int, user_id: int) -> int:
         """Get user balance in specific guild"""
-        data = data_manager.load_guild_data(guild_id, "currency")
+        data = self.data_manager.load_guild_data(guild_id, "currency")
         user_id_str = str(user_id)
 
         if user_id_str not in data["users"]:
             # Initialize new user
             self._initialize_user(data, user_id_str)
-            data_manager.save_guild_data(guild_id, "currency", data)
+            self.data_manager.save_guild_data(guild_id, "currency", data)
             return 0
 
         return data["users"][user_id_str]["balance"]
@@ -71,7 +79,7 @@ class Currency(commands.Cog):
 
         try:
             # PHASE 1: Prepare - Load data and validate
-            data = data_manager.load_guild_data(guild_id, "currency")
+            data = self.data_manager.load_guild_data(guild_id, "currency")
             if not data:
                 return False
 
@@ -125,7 +133,7 @@ class Currency(commands.Cog):
                 data["metadata"]["total_currency"] = sum(u["balance"] for u in data["users"].values())
 
                 # Save currency data
-                if not data_manager.save_guild_data(guild_id, "currency", data):
+                if not self.data_manager.save_guild_data(guild_id, "currency", data):
                     logger.critical(f"CRITICAL: Failed to save currency data after successful transaction log for user {user_id} in guild {guild_id}")
                     # This is a critical inconsistency - transaction was logged but balance not updated
                     # In a production system, this would require manual reconciliation
@@ -249,7 +257,7 @@ class Currency(commands.Cog):
             self.data_manager.ensure_user_exists(guild_id, user_id)
 
             # Load data once
-            data = data_manager.load_guild_data(guild_id, "currency")
+            data = self.data_manager.load_guild_data(guild_id, "currency")
 
         except Exception as e:
             logger = logging.getLogger(__name__)
@@ -305,7 +313,7 @@ class Currency(commands.Cog):
                             # Reset if somehow in the past (DST or clock issues)
                             last_daily = None
                             data["users"][user_id_str]["last_daily"] = None
-                            data_manager.save_guild_data(guild_id, "currency", data)
+                            self.data_manager.save_guild_data(guild_id, "currency", data)
                         else:
                             hours = int(remaining.total_seconds() // 3600)
                             minutes = int((remaining.total_seconds() % 3600) // 60)
@@ -325,7 +333,7 @@ class Currency(commands.Cog):
         data["users"][user_id_str]["last_daily"] = now_utc.isoformat().replace('+00:00', 'Z')
 
         # Save timestamp update first
-        if not data_manager.save_guild_data(guild_id, "currency", data):
+        if not self.data_manager.save_guild_data(guild_id, "currency", data):
             await interaction.response.send_message("❌ Failed to update daily cooldown!", ephemeral=True)
             return
 
@@ -343,7 +351,7 @@ class Currency(commands.Cog):
                 data["users"][user_id_str]["last_daily"] = last_daily
             else:
                 data["users"][user_id_str].pop("last_daily", None)
-            data_manager.save_guild_data(guild_id, "currency", data)
+            self.data_manager.save_guild_data(guild_id, "currency", data)
             await interaction.response.send_message("❌ Failed to claim daily reward!", ephemeral=True)
             return
 
@@ -355,7 +363,7 @@ class Currency(commands.Cog):
     async def leaderboard(self, interaction: discord.Interaction):
         """Show richest users in THIS server"""
         guild_id = interaction.guild.id
-        data = data_manager.load_guild_data(guild_id, "currency")
+        data = self.data_manager.load_guild_data(guild_id, "currency")
 
         # Sort users by balance
         sorted_users = sorted(
@@ -456,7 +464,7 @@ class Currency(commands.Cog):
 
     def _add_to_inventory(self, guild_id: int, user_id: int, item_id: str, quantity: int):
         """Add items to user inventory"""
-        data = data_manager.load_guild_data(guild_id, "currency")
+        data = self.data_manager.load_guild_data(guild_id, "currency")
         user_id_str = str(user_id)
 
         # Initialize inventory structure
@@ -465,7 +473,7 @@ class Currency(commands.Cog):
         data['inventory'][user_id_str][item_id] = \
             data['inventory'][user_id_str].get(item_id, 0) + quantity
 
-        data_manager.save_guild_data(guild_id, "currency", data)
+        self.data_manager.save_guild_data(guild_id, "currency", data)
 
     @app_commands.command(name="shop", description="Display shop items in paginated embed")
     @app_commands.guild_only()
@@ -631,12 +639,12 @@ class Currency(commands.Cog):
         user_id = str(interaction.user.id)
 
         # Load task data
-        task_data = data_manager.load_guild_data(guild_id, "tasks")
+        task_data = self.data_manager.load_guild_data(guild_id, "tasks")
         tasks = task_data.get("tasks", {})
         user_tasks = task_data.get("user_tasks", {}).get(user_id, {})
 
         # Get config for global setting
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.data_manager.load_guild_data(guild_id, "config")
         global_tasks = config.get("global_tasks", False)
 
         # Filter by channel unless global
@@ -676,7 +684,7 @@ class Currency(commands.Cog):
         user_id = interaction.user.id
         channel_id = str(interaction.channel.id)
 
-        tasks_data = data_manager.load_guild_data(guild_id, "tasks")
+        tasks_data = self.data_manager.load_guild_data(guild_id, "tasks")
         tasks = tasks_data.get('tasks', {})
 
         if task_id not in tasks:
@@ -690,7 +698,7 @@ class Currency(commands.Cog):
             return
 
         # Check channel filtering unless global
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.data_manager.load_guild_data(guild_id, "config")
         global_tasks = config.get("global_tasks", False)
         if not global_tasks and task.get("channel_id") != channel_id:
             await interaction.response.send_message("❌ This task is not available in this channel!", ephemeral=True)
@@ -715,9 +723,9 @@ class Currency(commands.Cog):
             'status': 'in_progress'
         }
 
-        data_manager.save_guild_data(guild_id, "tasks", tasks_data)
+        self.data_manager.save_guild_data(guild_id, "tasks", tasks_data)
 
-        config = data_manager.load_guild_data(guild_id, "config")
+        config = self.data_manager.load_guild_data(guild_id, "config")
         symbol = config.get('currency_symbol', '$')
 
         embed = discord.Embed(
@@ -741,7 +749,7 @@ class Currency(commands.Cog):
         user_id = interaction.user.id
         user_id_str = str(user_id)
 
-        tasks_data = data_manager.load_guild_data(guild_id, "tasks")
+        tasks_data = self.data_manager.load_guild_data(guild_id, "tasks")
         user_tasks = tasks_data.get('user_tasks', {}).get(user_id_str, {})
 
         if not user_tasks:
@@ -798,7 +806,7 @@ class Currency(commands.Cog):
             # For now, allow anyone to view other's transactions (remove moderator check for slash commands)
             pass
 
-        transactions = data_manager.load_guild_data(guild_id, "transactions") or []
+        transactions = self.data_manager.load_guild_data(guild_id, "transactions") or []
 
         # Filter transactions for this user
         user_transactions = [t for t in transactions if t.get('user_id') == user_id_str]
@@ -927,7 +935,7 @@ class PurchaseConfirmView(discord.ui.View):
 
     def _ensure_user_exists(self, guild_id, user_id):
         """Create user entry if doesn't exist, return user data"""
-        data = data_manager.load_guild_data(guild_id, "currency")
+        data = self.data_manager.load_guild_data(guild_id, "currency")
         user_id_str = str(user_id)
 
         if user_id_str not in data["users"]:

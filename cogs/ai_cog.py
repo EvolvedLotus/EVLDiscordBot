@@ -27,8 +27,16 @@ class AICog(commands.Cog):
         # Configure Gemini
         genai.configure(api_key=self.api_key)
 
-        # Initialize model
-        self.model = genai.GenerativeModel('gemini-pro')
+        # Initialize model - try newer model first, fallback to older if needed
+        try:
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
+        except Exception as e:
+            logger.warning(f"Failed to initialize gemini-1.5-flash: {e}, trying gemini-1.0-pro")
+            try:
+                self.model = genai.GenerativeModel('gemini-1.0-pro')
+            except Exception as e2:
+                logger.error(f"Failed to initialize gemini-1.0-pro: {e2}")
+                raise ValueError("No compatible Gemini model available")
 
         # Store conversation history per user per guild
         self.conversations = {}
