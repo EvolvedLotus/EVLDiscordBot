@@ -25,6 +25,12 @@ function getApiBaseUrl() {
 
 const API_BASE_URL = getApiBaseUrl();
 
+// Debug logging
+console.log('=== SCRIPT.JS LOADING ===');
+console.log('Current URL:', window.location.href);
+console.log('DOM State:', document.readyState);
+console.log('API Base URL:', API_BASE_URL);
+
 // Helper function to make API calls with proper CORS support
 async function apiCall(endpoint, options = {}) {
     try {
@@ -53,5 +59,114 @@ async function apiCall(endpoint, options = {}) {
     } catch (error) {
         console.error(`API Error (${endpoint}):`, error);
         throw error;
+    }
+}
+
+// Login functionality
+async function login(event) {
+    // Prevent default at the very start
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+    }
+
+    console.log('=== LOGIN FUNCTION EXECUTING ===');
+
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    console.log('Username:', username);
+    console.log('Attempting login...');
+
+    // Validate inputs
+    if (!username || !password) {
+        alert('Please enter both username and password');
+        return;
+    }
+
+    try {
+        const loginUrl = `${API_BASE_URL}/api/auth/login`;
+        console.log('Login URL:', loginUrl);
+
+        const response = await fetch(loginUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            mode: 'cors',
+            body: JSON.stringify({
+                username: username,
+                password: password
+            })
+        });
+
+        console.log('Response status:', response.status);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Login failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Login successful:', data);
+
+        // Hide login screen, show dashboard
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('main-dashboard').style.display = 'block';
+
+        // Load initial data
+        await loadServers();
+
+    } catch (error) {
+        console.error('Login error:', error);
+        alert(`Login failed: ${error.message}`);
+    }
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, attaching login handler');
+
+    const loginForm = document.getElementById('login-form');
+    const loginBtn = document.getElementById('login-btn');
+
+    console.log('Login form found:', !!loginForm);
+    console.log('Login button found:', !!loginBtn);
+
+    if (loginForm) {
+        // Remove any existing listeners first
+        loginForm.removeEventListener('submit', login);
+        // Add the listener
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            login(e);
+        });
+        console.log('Login form handler attached successfully');
+    }
+
+    // Also attach to button click as backup
+    if (loginBtn) {
+        loginBtn.removeEventListener('click', login);
+        loginBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            login(e);
+        });
+        console.log('Login button handler attached successfully');
+    }
+});
+
+// Load servers function
+async function loadServers() {
+    try {
+        console.log('Loading servers...');
+        const response = await apiCall('/api/servers');
+        console.log('Servers loaded:', response);
+        // TODO: Populate server selector
+    } catch (error) {
+        console.error('Error loading servers:', error);
     }
 }
