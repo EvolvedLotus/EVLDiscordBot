@@ -14,6 +14,8 @@ from core.utils import format_currency, create_embed, add_embed_footer
 from core.transaction_manager import TransactionManager
 from core.shop_manager import ShopManager
 
+logger = logging.getLogger(__name__)
+
 class Currency(commands.Cog):
     """Currency system with server-specific economies"""
 
@@ -25,8 +27,6 @@ class Currency(commands.Cog):
         self.shop_manager = getattr(bot, 'shop_manager', None)
 
         # Log initialization status
-        import logging
-        logger = logging.getLogger(__name__)
         if self.data_manager:
             logger.info("Currency cog initialized with data_manager")
         else:
@@ -272,15 +272,15 @@ class Currency(commands.Cog):
         now = datetime.now(timezone.utc)
 
         try:
-            # Get user data with row lock to prevent race condition
-            user_data = await self.data_manager.supabase.table('users').select('balance, last_daily').eq('user_id', user_id).eq('guild_id', guild_id).execute()
+            # Get user data (execute() returns APIResponse, access .data directly)
+            user_data_result = await self.data_manager.supabase.table('users').select('balance, last_daily').eq('user_id', user_id).eq('guild_id', guild_id).execute()
 
-            if not user_data.data or len(user_data.data) == 0:
+            if not user_data_result.data or len(user_data_result.data) == 0:
                 # Ensure user exists if not found
                 await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
                 user_data = {'balance': 0, 'last_daily': None}
             else:
-                user_data = user_data.data[0]
+                user_data = user_data_result.data[0]
 
             last_daily = user_data.get('last_daily')
 
@@ -328,7 +328,7 @@ class Currency(commands.Cog):
                     )
                     return
 
-                # Update balance and last_daily together in database
+                # Update balance and last_daily together in database (execute() is synchronous)
                 update_result = self.data_manager.supabase.table('users').update({
                     'balance': new_balance,
                     'last_daily': now.isoformat()
@@ -370,11 +370,18 @@ class Currency(commands.Cog):
             )
 
         except Exception as e:
+            logger = logging.getLogger(__name__)
             logger.exception(f"Daily reward error for {user_id}: {e}")
-            await interaction.response.send_message(
-                "Failed to claim daily reward. Please try again.",
-                ephemeral=True
-            )
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "Failed to claim daily reward. Please try again.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "Failed to claim daily reward. Please try again.",
+                    ephemeral=True
+                )
 
     @app_commands.command(name="leaderboard", description="Show the top 10 richest users in this server")
     @app_commands.guild_only()
@@ -446,7 +453,7 @@ class Currency(commands.Cog):
             # ATOMIC TRANSACTION with row locks to prevent race condition
             async with self.data_manager.atomic_transaction(guild_id) as conn:
                 # Lock sender row first (prevent concurrent gives)
-                sender_data = await self.data_manager.supabase.table('users').select('balance').eq('user_id', sender_id).eq('guild_id', guild_id).execute()
+                sender_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', sender_id).eq('guild_id', guild_id).execute()
 
                 if not sender_data.data or len(sender_data.data) == 0:
                     await interaction.response.send_message("You don't have an account.", ephemeral=True)
@@ -466,7 +473,7 @@ class Currency(commands.Cog):
                 await self.data_manager.ensure_user_exists(guild_id, user.id)
 
                 # Lock receiver row
-                receiver_data = await self.data_manager.supabase.table('users').select('balance').eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
+                receiver_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
                 receiver_balance = receiver_data.data[0]['balance'] if receiver_data.data and len(receiver_data.data) > 0 else 0
 
                 # Calculate new balances

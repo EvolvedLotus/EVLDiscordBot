@@ -584,7 +584,7 @@ class Admin(commands.Cog):
         """Force complete re-initialization of guild"""
         await interaction.response.defer(ephemeral=True)
 
-        initializer = GuildInitializer(self.bot, self.bot.data_manager)
+        initializer = GuildInitializer(self.bot.data_manager, self.bot)
 
         try:
             await initializer.initialize_guild(interaction.guild)
