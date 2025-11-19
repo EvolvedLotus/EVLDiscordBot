@@ -1069,5 +1069,8 @@ async def setup(bot):
     # Set managers after cog is loaded
     data_manager = getattr(bot, 'data_manager', None)
     transaction_manager = getattr(bot, 'transaction_manager', None)
+    print(f"Setting up BotAdmin: data_manager={data_manager is not None}, transaction_manager={transaction_manager is not None}")
     if data_manager and transaction_manager:
         cog.set_managers(data_manager, transaction_manager)
+    else:
+        print("Warning: BotAdmin managers not set properly")
