@@ -832,12 +832,16 @@ class Currency(commands.Cog):
                 task_id = task['task_id']
                 status_emoji = "🟢"  # Available
 
+                # Build claim count text
+                claim_count = task['current_claims']
+                if task['max_claims'] != -1:
+                    claim_count = f"{claim_count}/{task['max_claims']}"
+
                 embed.add_field(
                     name=f"{status_emoji} {task['name']} - {task['reward']} {symbol}",
                     value=f"{task.get('description', 'No description')[:100]}...\n"
                           f"⏱️ {task['duration_hours']}h • "
-                          f"🔢 {task['current_claims']}"
-                          f"{f'/{task[\"max_claims\"]}' if task['max_claims'] != -1 else ''} claims\n"
+                          f"🔢 {claim_count} claims\n"
                           f"📝 ID: `{task_id}`",
                     inline=False
                 )

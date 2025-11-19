@@ -1,7 +1,6 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from discord.commands import Greedy
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -822,6 +821,11 @@ class BotAdmin(commands.Cog):
         """Add admin roles (roles that can perform admin actions)."""
         await interaction.response.defer(ephemeral=True)
 
+        # Collect provided roles
+        roles = [role for role in [role1, role2, role3, role4, role5] if role is not None]
+        if not roles:
+            await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
+            return
 
         guild_id = str(interaction.guild.id)
 
@@ -917,6 +921,8 @@ class BotAdmin(commands.Cog):
         """Remove admin roles."""
         await interaction.response.defer(ephemeral=True)
 
+        # Collect provided roles
+        roles = [role for role in [role1, role2, role3, role4, role5] if role is not None]
         if not roles:
             await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
             return
@@ -976,8 +982,8 @@ class BotAdmin(commands.Cog):
         try:
             config = self.data_manager.load_guild_data(guild_id, 'config')
 
-            # Get current admin roles
-            current_admin_roles = set(config.get('admin_roles', []))
+            # Get current moderator roles
+            current_moderator_roles = set(config.get('moderator_roles', []))
             roles_to_remove = {str(role.id) for role in collected_roles}
 
             # Remove roles

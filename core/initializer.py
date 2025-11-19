@@ -119,25 +119,9 @@ class GuildInitializer:
     async def _initialize_tasks(self, guild: discord.Guild):
         """Initialize task system"""
         try:
-            # Load existing tasks data
-            tasks_data = self.data_manager.load_guild_data(guild.id, "tasks")
-
-            # Ensure settings exist within tasks data
-            settings = tasks_data.get('settings', {})
-            if not settings.get('next_task_id'):
-                settings = {
-                    'allow_user_tasks': True,
-                    'max_tasks_per_user': 10,
-                    'auto_expire_enabled': True,
-                    'require_proof': True,
-                    'next_task_id': 1,
-                    'total_completed': 0,
-                    'total_expired': 0
-                }
-
-                # Save updated tasks data with settings
-                tasks_data['settings'] = settings
-                self.data_manager.save_guild_data(guild.id, "tasks", tasks_data)
+            # Tasks are now managed directly through Supabase by TaskManager
+            # No need to initialize task data files anymore
+            # Task settings are automatically created by TaskManager when needed
 
             logger.info(f"  ✓ Tasks initialized for {guild.name}")
         except Exception as e:
