@@ -10,6 +10,7 @@ aiohttp>=3.9.0
 
 # Database
 supabase>=2.0.0
+asyncpg>=0.29.0
 
 # Authentication & Security
 PyJWT>=2.8.0
@@ -29,6 +30,12 @@ psutil>=5.9.0
 
 # Production Server
 gunicorn>=21.2.0
+
+# AI Integration
+google-genai>=0.8.0
+
+# Async Utilities
+asyncio-mqtt>=0.13.0
 
 # Testing (optional)
 pytest>=7.4.0

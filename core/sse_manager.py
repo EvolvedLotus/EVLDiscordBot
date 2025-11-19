@@ -183,6 +183,18 @@ class SSEManager:
                 if guild_event_type in self.subscriptions:
                     target_clients.update(self.subscriptions[guild_event_type])
 
+            # Filter clients by guild if specified in data
+            if target_guild and 'guild_id' in data:
+                # Only send to clients that are subscribed to this specific guild
+                guild_clients = set()
+                for client_id in target_clients:
+                    if client_id in self.client_metadata:
+                        client_subs = self.client_metadata[client_id].get('subscriptions', [])
+                        # Check if client is subscribed to this guild's events
+                        if any(sub in [event_type, guild_event_type] for sub in client_subs):
+                            guild_clients.add(client_id)
+                target_clients = guild_clients
+
             if not target_clients:
                 logger.debug(f"No clients subscribed to event type: {event_type}")
                 return

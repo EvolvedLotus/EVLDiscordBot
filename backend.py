@@ -140,6 +140,68 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️  Some managers not available: {e}")
 
+# Bot communication functions for Railway internal networking
+def get_bot_webhook_url():
+    """Get the bot webhook URL for Railway internal communication"""
+    if IS_PRODUCTION:
+        # In Railway, services communicate using service names
+        # The bot service is named 'bot' and runs on port 5001
+        return "http://bot:5001"
+    else:
+        # In development, use localhost
+        return "http://localhost:5001"
+
+async def send_admin_message_to_bot(guild_id, channel_id, message, embed_data=None):
+    """Send admin message to bot via internal webhook"""
+    try:
+        import aiohttp
+
+        bot_url = get_bot_webhook_url()
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                'guild_id': str(guild_id),
+                'channel_id': str(channel_id),
+                'message': message
+            }
+            if embed_data:
+                payload['embed'] = embed_data
+
+            async with session.post(f"{bot_url}/admin_message", json=payload) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result.get('success', False)
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Bot webhook error: {response.status} - {error_text}")
+                    return False
+    except Exception as e:
+        logger.error(f"Failed to send admin message to bot: {e}")
+        return False
+
+async def send_sse_signal_to_bot(event_type, event_data):
+    """Send SSE signal to bot via internal webhook"""
+    try:
+        import aiohttp
+
+        bot_url = get_bot_webhook_url()
+        async with aiohttp.ClientSession() as session:
+            payload = {
+                'event_type': event_type,
+                'data': event_data
+            }
+
+            async with session.post(f"{bot_url}/sse_signal", json=payload) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result.get('success', False)
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Bot SSE signal error: {response.status} - {error_text}")
+                    return False
+    except Exception as e:
+        logger.error(f"Failed to send SSE signal to bot: {e}")
+        return False
+
 # Global references for bot integration (avoid circular imports)
 _bot_instance = None
 _data_manager_instance = None

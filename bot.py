@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 import discord
 from discord.ext import commands, tasks
 import os
+from aiohttp import web
+import json
 
 # Import components
 from core.data_manager import DataManager
@@ -15,6 +17,7 @@ from core.transaction_manager import TransactionManager
 from core.task_manager import TaskManager
 from core.shop_manager import ShopManager
 from core.initializer import GuildInitializer
+from config import config
 
 # Setup logging first
 logging.basicConfig(
@@ -38,6 +41,7 @@ REQUIRED_ENV_VARS = {
     'SUPABASE_URL': 'Supabase project URL',
     'SUPABASE_SERVICE_ROLE_KEY': 'Supabase service role key',
     'JWT_SECRET_KEY': 'JWT secret for authentication',
+    'GEMINI_API_KEY': 'Gemini AI API key',
     'PORT': 'Server port (Railway auto-assigns)',
 }
 
@@ -151,6 +155,12 @@ async def run_bot():
             logger.info("✓ Bot Admin cog loaded")
         except Exception as e:
             logger.error(f"✗ Failed to load bot admin cog: {e}")
+
+        try:
+            await bot.load_extension('cogs.ai_cog')
+            logger.info("✓ AI cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load AI cog: {e}")
 
         try:
             await bot.load_extension('cogs.moderation')
@@ -1073,7 +1083,84 @@ async def run_bot():
             except:
                 await ctx.send("❌ An error occurred while executing this command.")
 
-        # Start bot (no Flask backend here - handled by start.py)
+        # Start internal webhook server for Flask communication
+        webhook_app = web.Application()
+        webhook_runner = None
+
+        async def handle_admin_message(request):
+            """Handle admin message injection from Flask"""
+            try:
+                data = await request.json()
+                guild_id = data.get('guild_id')
+                channel_id = data.get('channel_id')
+                message = data.get('message')
+                embed_data = data.get('embed')
+
+                if not all([guild_id, channel_id, message]):
+                    return web.json_response({'error': 'Missing required fields'}, status=400)
+
+                # Get the guild and channel
+                guild = bot.get_guild(int(guild_id))
+                if not guild:
+                    return web.json_response({'error': 'Guild not found'}, status=404)
+
+                channel = guild.get_channel(int(channel_id))
+                if not channel:
+                    return web.json_response({'error': 'Channel not found'}, status=404)
+
+                # Send the message
+                if embed_data:
+                    embed = discord.Embed.from_dict(embed_data)
+                    await channel.send(message, embed=embed)
+                else:
+                    await channel.send(message)
+
+                logger.info(f"Admin message sent to guild {guild_id}, channel {channel_id}")
+                return web.json_response({'success': True})
+
+            except Exception as e:
+                logger.error(f"Error handling admin message: {e}")
+                return web.json_response({'error': str(e)}, status=500)
+
+        async def handle_sse_signal(request):
+            """Handle SSE signal from Flask backend"""
+            try:
+                data = await request.json()
+                event_type = data.get('event_type')
+                event_data = data.get('data', {})
+
+                if not event_type:
+                    return web.json_response({'error': 'Missing event_type'}, status=400)
+
+                # Broadcast the event via SSE manager
+                from core.sse_manager import sse_manager
+                sse_manager.broadcast_event(event_type, event_data)
+
+                logger.debug(f"SSE signal processed: {event_type}")
+                return web.json_response({'success': True})
+
+            except Exception as e:
+                logger.error(f"Error handling SSE signal: {e}")
+                return web.json_response({'error': str(e)}, status=500)
+
+        # Add routes
+        webhook_app.router.add_post('/admin_message', handle_admin_message)
+        webhook_app.router.add_post('/sse_signal', handle_sse_signal)
+
+        # Start webhook server for Railway internal networking
+        # Railway assigns each service its own PORT, so we use a fixed internal port
+        try:
+            webhook_runner = web.AppRunner(webhook_app)
+            await webhook_runner.setup()
+            # Use 0.0.0.0 to bind to all interfaces for Railway internal networking
+            site = web.TCPSite(webhook_runner, '0.0.0.0', config.bot_webhook_port)
+            await site.start()
+            logger.info(f"✅ Internal webhook server started on 0.0.0.0:{config.bot_webhook_port}")
+        except Exception as e:
+            logger.error(f"Failed to start webhook server: {e}")
+            raise
+
+        # Start bot
         logger.info("Connecting to Discord...")
         await bot.start(token)
 
