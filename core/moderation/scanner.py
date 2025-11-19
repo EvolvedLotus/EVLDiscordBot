@@ -12,24 +12,20 @@ class MessageScanner:
     def __init__(self, protection_manager: ProtectionManager):
         self.protection_manager = protection_manager
 
-    async def scan_message_for_profanity(self, message, guild_id):
+    def scan_message_for_profanity(self, guild_id: int, message_content: str) -> List[Dict]:
         """Scan message content for profanity with whitelist support"""
 
-        # Skip bot messages
-        if message.author.bot:
-            return None
-
         # Load protection config
-        config = await self.protection_manager.get_config(guild_id)
+        config = self.protection_manager.load_protection_config(guild_id)
 
-        if not config or not config.get('profanity_filter_enabled'):
-            return None
+        if not config or not config.get('profanity_filter', True):
+            return []
 
-        # Get profanity list and whitelist
-        profanity_list = config.get('profanity_words', [])
+        # Get profanity list
+        profanity_list = self.protection_manager.get_profanity_list(guild_id)
         whitelist = config.get('whitelist_words', [])
 
-        content = message.content.lower()
+        content = message_content.lower()
 
         # Check whitelist first (prevent false positives)
         for whitelisted_word in whitelist:
@@ -41,21 +37,18 @@ class MessageScanner:
         detected_words = []
         for bad_word in profanity_list:
             # Word boundary check to prevent partial matches
-            import re
             pattern = r'\b' + re.escape(bad_word.lower()) + r'\b'
             if re.search(pattern, content):
                 detected_words.append(bad_word)
 
         if detected_words:
-            return {
+            return [{
                 'violation_type': 'profanity',
                 'detected_words': detected_words,
-                'message_id': str(message.id),
-                'user_id': str(message.author.id),
-                'channel_id': str(message.channel.id)
-            }
+                'severity': 'medium'
+            }]
 
-        return None
+        return []
 
     def scan_message_for_links(self, guild_id: int, message_content: str) -> List[Dict]:
         """Extracts URLs from text and classifies them"""

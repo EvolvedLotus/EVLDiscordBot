@@ -105,15 +105,21 @@ class ModerationCommands(commands.Cog):
     async def kick_user(self, interaction: discord.Interaction, user: discord.Member, reason: str):
         """Kick a user from the server"""
         try:
-            if not self.moderation_cog:
-                await interaction.response.send_message("Moderation system not available", ephemeral=True)
+            # Check permissions
+            if not interaction.guild.me.guild_permissions.kick_members:
+                await interaction.response.send_message("❌ I don't have permission to kick members!", ephemeral=True)
                 return
 
-            result = await self.moderation_cog.actions.apply_temporary_mute(
-                interaction.guild.id, user.id, 0, reason, interaction.user.id
-            )
+            # Prevent self-kicking
+            if user.id == interaction.user.id:
+                await interaction.response.send_message("❌ You cannot kick yourself!", ephemeral=True)
+                return
 
-            # For kick, we use the same pattern but with kick action
+            # Prevent kicking bots
+            if user.bot:
+                await interaction.response.send_message("❌ You cannot kick bots!", ephemeral=True)
+                return
+
             try:
                 await user.kick(reason=reason)
                 embed = discord.Embed(
@@ -122,17 +128,39 @@ class ModerationCommands(commands.Cog):
                     color=discord.Color.red()
                 )
                 embed.add_field(name="Reason", value=reason, inline=False)
+                embed.add_field(name="Kicked By", value=interaction.user.mention, inline=True)
 
-                # Log the kick
-                self.moderation_cog.logger.create_moderation_audit_log(
-                    interaction.guild.id, 'kick', user.id, interaction.user.id,
-                    details={'reason': reason}
-                )
+                # Send DM notification to the kicked user
+                try:
+                    dm_embed = discord.Embed(
+                        title="👢 You were kicked",
+                        description=f"You were kicked from **{interaction.guild.name}**",
+                        color=discord.Color.red()
+                    )
+                    dm_embed.add_field(name="Reason", value=reason, inline=False)
+                    dm_embed.add_field(name="Kicked By", value=interaction.user.mention, inline=True)
+                    await user.send(embed=dm_embed)
+                    embed.add_field(name="DM Sent", value="✅", inline=True)
+                except discord.Forbidden:
+                    embed.add_field(name="DM Sent", value="❌ (DMs disabled)", inline=True)
+
+                # Log the kick in moderation audit
+                if self.moderation_cog and hasattr(self.moderation_cog, 'logger'):
+                    self.moderation_cog.logger.create_moderation_audit_log(
+                        interaction.guild.id, 'kick', user.id, interaction.user.id,
+                        details={'reason': reason}
+                    )
 
             except discord.Forbidden:
                 embed = discord.Embed(
                     title="❌ Kick Failed",
                     description="I don't have permission to kick this user",
+                    color=discord.Color.red()
+                )
+            except discord.HTTPException as e:
+                embed = discord.Embed(
+                    title="❌ Kick Failed",
+                    description=f"Failed to communicate with Discord: {e}",
                     color=discord.Color.red()
                 )
 
@@ -147,13 +175,95 @@ class ModerationCommands(commands.Cog):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
+    @app_commands.command(name="unmute", description="Remove timeout/mute from a user")
+    @moderator_only_interaction()
+    async def unmute_user(self, interaction: discord.Interaction, user: discord.Member, reason: str = "Moderator action"):
+        """Remove timeout/mute from a user"""
+        try:
+            # Check permissions
+            if not interaction.guild.me.guild_permissions.moderate_members:
+                await interaction.response.send_message("❌ I don't have permission to moderate members!", ephemeral=True)
+                return
+
+            # Check if user is actually timed out
+            if user.communication_disabled_until is None:
+                await interaction.response.send_message("❌ This user is not currently muted/timed out!", ephemeral=True)
+                return
+
+            try:
+                # Remove timeout by setting it to None
+                await user.timeout(None, reason=reason)
+                embed = discord.Embed(
+                    title="🔊 User Unmuted",
+                    description=f"Successfully unmuted {user.mention}",
+                    color=discord.Color.green()
+                )
+                embed.add_field(name="Reason", value=reason, inline=False)
+                embed.add_field(name="Unmuted By", value=interaction.user.mention, inline=True)
+
+                # Send DM notification to the unmuted user
+                try:
+                    dm_embed = discord.Embed(
+                        title="🔊 You were unmuted",
+                        description=f"You were unmuted in **{interaction.guild.name}**",
+                        color=discord.Color.green()
+                    )
+                    dm_embed.add_field(name="Reason", value=reason, inline=False)
+                    dm_embed.add_field(name="Unmuted By", value=interaction.user.mention, inline=True)
+                    await user.send(embed=dm_embed)
+                    embed.add_field(name="DM Sent", value="✅", inline=True)
+                except discord.Forbidden:
+                    embed.add_field(name="DM Sent", value="❌ (DMs disabled)", inline=True)
+
+                # Log the unmute in moderation audit
+                if self.moderation_cog and hasattr(self.moderation_cog, 'logger'):
+                    self.moderation_cog.logger.create_moderation_audit_log(
+                        interaction.guild.id, 'unmute', user.id, interaction.user.id,
+                        details={'reason': reason}
+                    )
+
+            except discord.Forbidden:
+                embed = discord.Embed(
+                    title="❌ Unmute Failed",
+                    description="I don't have permission to unmute this user",
+                    color=discord.Color.red()
+                )
+            except discord.HTTPException as e:
+                embed = discord.Embed(
+                    title="❌ Unmute Failed",
+                    description=f"Failed to communicate with Discord: {e}",
+                    color=discord.Color.red()
+                )
+
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error unmuting user: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description="An error occurred while unmuting the user",
+                color=discord.Color.red()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="ban", description="Ban a user from the server")
     @admin_only_interaction()
     async def ban_user(self, interaction: discord.Interaction, user: discord.Member, reason: str):
         """Ban a user from the server"""
         try:
-            if not self.moderation_cog:
-                await interaction.response.send_message("Moderation system not available", ephemeral=True)
+            # Check permissions
+            if not interaction.guild.me.guild_permissions.ban_members:
+                await interaction.response.send_message("❌ I don't have permission to ban members!", ephemeral=True)
+                return
+
+            # Prevent self-banning
+            if user.id == interaction.user.id:
+                await interaction.response.send_message("❌ You cannot ban yourself!", ephemeral=True)
+                return
+
+            # Prevent banning bots
+            if user.bot:
+                await interaction.response.send_message("❌ You cannot ban bots!", ephemeral=True)
                 return
 
             try:
@@ -164,17 +274,39 @@ class ModerationCommands(commands.Cog):
                     color=discord.Color.dark_red()
                 )
                 embed.add_field(name="Reason", value=reason, inline=False)
+                embed.add_field(name="Banned By", value=interaction.user.mention, inline=True)
 
-                # Log the ban
-                self.moderation_cog.logger.create_moderation_audit_log(
-                    interaction.guild.id, 'ban', user.id, interaction.user.id,
-                    details={'reason': reason}
-                )
+                # Send DM notification to the banned user
+                try:
+                    dm_embed = discord.Embed(
+                        title="🔨 You were banned",
+                        description=f"You were banned from **{interaction.guild.name}**",
+                        color=discord.Color.dark_red()
+                    )
+                    dm_embed.add_field(name="Reason", value=reason, inline=False)
+                    dm_embed.add_field(name="Banned By", value=interaction.user.mention, inline=True)
+                    await user.send(embed=dm_embed)
+                    embed.add_field(name="DM Sent", value="✅", inline=True)
+                except discord.Forbidden:
+                    embed.add_field(name="DM Sent", value="❌ (DMs disabled)", inline=True)
+
+                # Log the ban in moderation audit
+                if self.moderation_cog and hasattr(self.moderation_cog, 'logger'):
+                    self.moderation_cog.logger.create_moderation_audit_log(
+                        interaction.guild.id, 'ban', user.id, interaction.user.id,
+                        details={'reason': reason}
+                    )
 
             except discord.Forbidden:
                 embed = discord.Embed(
                     title="❌ Ban Failed",
                     description="I don't have permission to ban this user",
+                    color=discord.Color.red()
+                )
+            except discord.HTTPException as e:
+                embed = discord.Embed(
+                    title="❌ Ban Failed",
+                    description=f"Failed to communicate with Discord: {e}",
                     color=discord.Color.red()
                 )
 

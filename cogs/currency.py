@@ -269,7 +269,7 @@ class Currency(commands.Cog):
 
             if not user_data_result.data or len(user_data_result.data) == 0:
                 # Ensure user exists if not found
-                await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
+                self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
                 user_data = {'balance': 0, 'last_daily': None}
             else:
                 user_data = user_data_result.data[0]
@@ -462,7 +462,7 @@ class Currency(commands.Cog):
                     return
 
                 # Ensure receiver exists
-                await self.data_manager.ensure_user_exists(guild_id, user.id)
+                self.data_manager.ensure_user_exists(guild_id, user.id)
 
                 # Lock receiver row
                 receiver_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
@@ -688,7 +688,7 @@ class Currency(commands.Cog):
             # Get updated user data
             user_result = self.data_manager.supabase.table('users').select('*').eq('user_id', user_id).eq('guild_id', guild_id).execute()
             if not user_result.data or len(user_result.data) == 0:
-                await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
+                self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
                 user_result = self.data_manager.supabase.table('users').select('*').eq('user_id', user_id).eq('guild_id', guild_id).execute()
                 if not user_result.data or len(user_result.data) == 0:
                     await interaction.response.send_message("Unable to create user account. Please try again.", ephemeral=True)

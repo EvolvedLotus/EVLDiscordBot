@@ -1202,7 +1202,7 @@ class DataManager:
         logger.debug(f"Cleaned up {len(expired_keys)} expired cache entries")
         return len(expired_keys)
 
-    def ensure_user_exists(self, guild_id: int, user_id: int) -> bool:
+    async def ensure_user_exists(self, guild_id: int, user_id: int) -> bool:
         """Ensure user exists in database with default values"""
         try:
             # First check if user exists to avoid unnecessary conflicts
