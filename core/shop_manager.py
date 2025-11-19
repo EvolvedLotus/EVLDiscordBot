@@ -561,14 +561,14 @@ class ShopManager:
         inventory = currency_data.get('inventory', {})
         user_inventory = inventory.get(str(user_id), {})
 
-        # Filter out zero quantities (handle both old dict format and new int format)
+        # Filter out zero quantities (handle both dict format from DB and int format from memory operations)
         filtered_inventory = {}
         for k, v in user_inventory.items():
             if isinstance(v, dict):
-                # Handle legacy format where v might be a dict
+                # Handle database format where v might be a dict with quantity
                 quantity = v.get('quantity', 0)
             elif isinstance(v, int):
-                # Normal case where v is quantity
+                # Handle in-memory format where v is directly the quantity
                 quantity = v
             else:
                 # Fallback to 0 for unknown formats

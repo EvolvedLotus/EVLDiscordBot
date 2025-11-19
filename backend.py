@@ -420,14 +420,23 @@ def login():
                 'is_superadmin': user.get('is_superadmin', False)
             }
         })
-        response.set_cookie(
-            'session_token',
-            session_token,
-            httponly=True,  # Prevent XSS
-            secure=True,    # HTTPS only
-            samesite='Strict',  # CSRF protection
-            max_age=86400   # 24 hours
-        )
+
+        # Cookie settings based on environment
+        cookie_kwargs = {
+            'httponly': True,  # Prevent XSS
+            'secure': IS_PRODUCTION,  # HTTPS only in production
+            'max_age': 86400   # 24 hours
+        }
+
+        # SameSite policy
+        if IS_PRODUCTION:
+            # Allow cross-domain cookies in production
+            cookie_kwargs['samesite'] = 'None'
+        else:
+            # Relaxed in development
+            cookie_kwargs['samesite'] = 'Lax'
+
+        response.set_cookie('session_token', session_token, **cookie_kwargs)
 
         logger.info(f"Successful login for user: {username}")
         return response

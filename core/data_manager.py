@@ -685,9 +685,17 @@ class DataManager:
                             'updated_at': datetime.now(timezone.utc).isoformat()
                         }, on_conflict='guild_id,item_id').execute()
 
-                    # Save inventory
+                    # Save inventory - normalize data format before saving
                     for user_id, user_inventory in inventory_data.items():
-                        for item_id, quantity in user_inventory.items():
+                        for item_id, inventory_value in user_inventory.items():
+                            # Handle both dict format (from DB load) and int format (from memory operations)
+                            if isinstance(inventory_value, dict):
+                                quantity = inventory_value.get('quantity', 0)
+                            elif isinstance(inventory_value, int):
+                                quantity = inventory_value
+                            else:
+                                quantity = 0
+
                             if quantity > 0:  # Only save positive quantities
                                 self.admin_client.table('inventory').upsert({
                                     'guild_id': guild_id_str,
