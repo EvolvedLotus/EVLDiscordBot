@@ -783,6 +783,228 @@ class BotAdmin(commands.Cog):
             logger.error(f"Error updating config: {e}")
             await interaction.followup.send("❌ Failed to update configuration.", ephemeral=True)
 
+    @app_commands.command(name="set_admin_roles", description="Add admin roles to server configuration")
+    @app_commands.describe(
+        role1="First admin role to add",
+        role2="Second admin role to add (optional)",
+        role3="Third admin role to add (optional)",
+        role4="Fourth admin role to add (optional)",
+        role5="Fifth admin role to add (optional)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_admin_roles(
+        self,
+        interaction: discord.Interaction,
+        role1: discord.Role,
+        role2: discord.Role = None,
+        role3: discord.Role = None,
+        role4: discord.Role = None,
+        role5: discord.Role = None
+    ):
+        """Add admin roles (roles that can perform admin actions)."""
+        await interaction.response.defer(ephemeral=True)
+
+        # Collect provided roles
+        roles = [role for role in [role1, role2, role3, role4, role5] if role is not None]
+        if not roles:
+            await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+
+            # Get current admin roles
+            current_admin_roles = set(config.get('admin_roles', []))
+            current_admin_role_ids = {str(role.id) for role in roles}
+
+            # Add new roles
+            current_admin_roles.update(current_admin_role_ids)
+            config['admin_roles'] = list(current_admin_roles)
+
+            self.data_manager.save_guild_data(guild_id, 'config', config)
+            self.data_manager.invalidate_cache(guild_id, 'config')
+
+            role_names = [role.name for role in roles]
+            await interaction.followup.send(f"✅ Added {len(roles)} admin role(s): {', '.join(role_names)}", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error setting admin roles: {e}")
+            await interaction.followup.send("❌ Failed to update admin roles.", ephemeral=True)
+
+    @app_commands.command(name="set_moderator_roles", description="Add moderator roles to server configuration")
+    @app_commands.describe(
+        roles="Roles to add as moderator roles (can select multiple)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_moderator_roles(
+        self,
+        interaction: discord.Interaction,
+        roles: discord.commands.Greedy[discord.Role]
+    ):
+        """Add moderator roles (roles that can perform moderation actions)."""
+        await interaction.response.defer(ephemeral=True)
+
+        if not roles:
+            await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+
+            # Get current moderator roles
+            current_moderator_roles = set(config.get('moderator_roles', []))
+            current_moderator_role_ids = {str(role.id) for role in roles}
+
+            # Add new roles
+            current_moderator_roles.update(current_moderator_role_ids)
+            config['moderator_roles'] = list(current_moderator_roles)
+
+            self.data_manager.save_guild_data(guild_id, 'config', config)
+            self.data_manager.invalidate_cache(guild_id, 'config')
+
+            role_names = [role.name for role in roles]
+            await interaction.followup.send(f"✅ Added {len(roles)} moderator role(s): {', '.join(role_names)}", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error setting moderator roles: {e}")
+            await interaction.followup.send("❌ Failed to update moderator roles.", ephemeral=True)
+
+    @app_commands.command(name="remove_admin_roles", description="Remove admin roles from server configuration")
+    @app_commands.describe(
+        roles="Roles to remove from admin roles (can select multiple)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def remove_admin_roles(
+        self,
+        interaction: discord.Interaction,
+        roles: discord.commands.Greedy[discord.Role]
+    ):
+        """Remove admin roles."""
+        await interaction.response.defer(ephemeral=True)
+
+        if not roles:
+            await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+
+            # Get current admin roles
+            current_admin_roles = set(config.get('admin_roles', []))
+            roles_to_remove = {str(role.id) for role in roles}
+
+            # Remove roles
+            current_admin_roles -= roles_to_remove
+            config['admin_roles'] = list(current_admin_roles)
+
+            self.data_manager.save_guild_data(guild_id, 'config', config)
+            self.data_manager.invalidate_cache(guild_id, 'config')
+
+            role_names = [role.name for role in roles]
+            await interaction.followup.send(f"✅ Removed {len(roles)} admin role(s): {', '.join(role_names)}", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error removing admin roles: {e}")
+            await interaction.followup.send("❌ Failed to remove admin roles.", ephemeral=True)
+
+    @app_commands.command(name="remove_moderator_roles", description="Remove moderator roles from server configuration")
+    @app_commands.describe(
+        roles="Roles to remove from moderator roles (can select multiple)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def remove_moderator_roles(
+        self,
+        interaction: discord.Interaction,
+        roles: discord.commands.Greedy[discord.Role]
+    ):
+        """Remove moderator roles."""
+        await interaction.response.defer(ephemeral=True)
+
+        if not roles:
+            await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+
+            # Get current moderator roles
+            current_moderator_roles = set(config.get('moderator_roles', []))
+            roles_to_remove = {str(role.id) for role in roles}
+
+            # Remove roles
+            current_moderator_roles -= roles_to_remove
+            config['moderator_roles'] = list(current_moderator_roles)
+
+            self.data_manager.save_guild_data(guild_id, 'config', config)
+            self.data_manager.invalidate_cache(guild_id, 'config')
+
+            role_names = [role.name for role in roles]
+            await interaction.followup.send(f"✅ Removed {len(roles)} moderator role(s): {', '.join(role_names)}", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error removing moderator roles: {e}")
+            await interaction.followup.send("❌ Failed to remove moderator roles.", ephemeral=True)
+
+    @app_commands.command(name="clear_roles", description="Clear all admin or moderator roles")
+    @app_commands.describe(
+        role_type="Type of roles to clear"
+    )
+    @app_commands.choices(role_type=[
+        app_commands.Choice(name="Admin Roles", value="admin"),
+        app_commands.Choice(name="Moderator Roles", value="moderator"),
+        app_commands.Choice(name="All Roles", value="all")
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def clear_roles(
+        self,
+        interaction: discord.Interaction,
+        role_type: str
+    ):
+        """Clear admin or moderator roles."""
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+
+            if role_type in ['admin', 'all']:
+                config['admin_roles'] = []
+                admin_cleared = True
+            else:
+                admin_cleared = False
+
+            if role_type in ['moderator', 'all']:
+                config['moderator_roles'] = []
+                moderator_cleared = True
+            else:
+                moderator_cleared = False
+
+            self.data_manager.save_guild_data(guild_id, 'config', config)
+            self.data_manager.invalidate_cache(guild_id, 'config')
+
+            message = ""
+            if admin_cleared and moderator_cleared:
+                message = "✅ Cleared all admin and moderator roles."
+            elif admin_cleared:
+                message = "✅ Cleared all admin roles."
+            elif moderator_cleared:
+                message = "✅ Cleared all moderator roles."
+
+            await interaction.followup.send(message, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error clearing roles: {e}")
+            await interaction.followup.send("❌ Failed to clear roles.", ephemeral=True)
+
     @app_commands.command(name="get_config", description="View current server configuration")
     async def get_config(self, interaction: discord.Interaction):
         """Display current server configuration."""

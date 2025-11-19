@@ -82,10 +82,13 @@ class TaskClaimView(discord.ui.View):
         task_id = str(self.task_id)
 
         try:
-            # Use data_manager's atomic_transaction method to save task data
-            if not data_manager:
+            # Get data_manager from the bot instance
+            tasks_cog = interaction.client.get_cog('Tasks')
+            if not tasks_cog or not tasks_cog.data_manager:
                 await interaction.followup.send("❌ Data management system not available.", ephemeral=True)
                 return
+
+            data_manager = tasks_cog.data_manager
 
             tasks_data = data_manager.load_guild_data(guild_id, 'tasks')
             if not tasks_data:
@@ -368,10 +371,19 @@ class Tasks(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        # Initialize managers
-        self.task_manager = TaskManager(data_manager, TransactionManager(data_manager))
-        self.task_manager.set_bot(bot)
+        self.data_manager = None
+        self.transaction_manager = None
+        # Initialize managers - will be set in set_managers
         # Don't start the loop here - it will be started in setup or after bot is ready
+
+    def set_managers(self, data_manager, transaction_manager):
+        """Set data and transaction managers"""
+        self.data_manager = data_manager
+        self.transaction_manager = transaction_manager
+        # Now that we have managers, initialize task_manager
+        from core.task_manager import TaskManager
+        self.task_manager = TaskManager(data_manager, transaction_manager)
+        self.task_manager.set_bot(self.bot)
 
     @app_commands.command(name="task_submit", description="Submit proof for a claimed task")
     @app_commands.describe(
@@ -1251,13 +1263,20 @@ class TaskListPaginator(discord.ui.View):
 
 async def setup(bot):
     """Setup the tasks cog."""
-    await bot.add_cog(Tasks(bot))
+    cog = Tasks(bot)
+    await bot.add_cog(cog)
+
+    # Set managers after cog is loaded
+    data_manager_instance = getattr(bot, 'data_manager', None)
+    transaction_manager_instance = getattr(bot, 'transaction_manager', None)
+    if data_manager_instance and transaction_manager_instance:
+        cog.set_managers(data_manager_instance, transaction_manager_instance)
 
     # Register persistent views for existing tasks
     for guild in bot.guilds:
         guild_id = str(guild.id)
         try:
-            tasks_data = data_manager.load_guild_data(guild_id, 'tasks')
+            tasks_data = cog.data_manager.load_guild_data(guild_id, 'tasks')
             for task_id, task in tasks_data.get('tasks', {}).items():
                 if task.get('message_id') and task['status'] == 'active':
                     view = TaskClaimView(int(task_id))
