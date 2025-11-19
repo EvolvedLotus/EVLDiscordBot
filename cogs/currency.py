@@ -191,7 +191,7 @@ class Currency(commands.Cog):
 
         try:
             # VALIDATION: Ensure user exists before balance queries
-            await self.data_manager.ensure_user_exists(str(guild_id), str(target.id))
+            self.data_manager.ensure_user_exists(str(guild_id), str(target.id))
 
             # Force fresh load from database (bypass cache for immediate updates)
             user_data = self.data_manager.load_user_data(guild_id, target.id)
