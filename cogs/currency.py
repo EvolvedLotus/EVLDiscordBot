@@ -264,8 +264,8 @@ class Currency(commands.Cog):
         now = datetime.now(timezone.utc)
 
         try:
-            # Get user data (execute() returns APIResponse, access .data directly)
-            user_data_result = await self.data_manager.supabase.table('users').select('balance, last_daily').eq('user_id', user_id).eq('guild_id', guild_id).execute()
+            # Get user data (execute() returns APIResponse synchronously)
+            user_data_result = self.data_manager.supabase.table('users').select('balance, last_daily').eq('user_id', user_id).eq('guild_id', guild_id).execute()
 
             if not user_data_result.data or len(user_data_result.data) == 0:
                 # Ensure user exists if not found
