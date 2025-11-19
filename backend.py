@@ -29,22 +29,60 @@ IS_PRODUCTION = (
     os.getenv('ENVIRONMENT') == 'production'
 )
 
-# CORS Configuration
-if IS_PRODUCTION:
-    ALLOWED_ORIGINS = [
-        'https://evolvedlotus.github.io',
-        'https://evldiscordbot-production.up.railway.app',
-    ]
-else:
-    ALLOWED_ORIGINS = [
-        'http://localhost:3000',
-        'http://localhost:5000',
-        'http://localhost:8000',
-        'http://127.0.0.1:3000',
-        'http://127.0.0.1:5000',
-        'http://127.0.0.1:8000',
-        'https://evolvedlotus.github.io',
-    ]
+# CORS Configuration - Environment-based
+def get_allowed_origins():
+    """Get allowed CORS origins from environment variables"""
+    # Check for ALLOWED_ORIGINS environment variable (comma-separated)
+    allowed_origins_env = os.getenv('ALLOWED_ORIGINS', '').strip()
+
+    if allowed_origins_env:
+        # Parse comma-separated origins
+        origins = [origin.strip() for origin in allowed_origins_env.split(',') if origin.strip()]
+        if origins:
+            logger.info(f"✅ CORS origins from ALLOWED_ORIGINS: {origins}")
+            return origins
+
+    # Check for ALLOWED_FRONTEND_DOMAINS (legacy support)
+    frontend_domains = os.getenv('ALLOWED_FRONTEND_DOMAINS', '').strip()
+    if frontend_domains:
+        origins = [domain.strip() for domain in frontend_domains.split(',') if domain.strip()]
+        if origins:
+            logger.info(f"✅ CORS origins from ALLOWED_FRONTEND_DOMAINS: {origins}")
+            return origins
+
+    # Fallback to hardcoded defaults based on environment
+    if IS_PRODUCTION:
+        # Production defaults
+        default_origins = [
+            'https://evolvedlotus.github.io',
+            'https://evolvedlotus.github.io/EVLDiscordBot',
+        ]
+
+        # Try to add Railway domain if available
+        railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
+        if railway_domain:
+            railway_url = f'https://{railway_domain}'
+            if railway_url not in default_origins:
+                default_origins.append(railway_url)
+                logger.info(f"✅ Added Railway domain to CORS: {railway_url}")
+
+        logger.info(f"✅ Using production CORS defaults: {default_origins}")
+        return default_origins
+    else:
+        # Development defaults
+        default_origins = [
+            'http://localhost:3000',
+            'http://localhost:5000',
+            'http://localhost:8000',
+            'http://127.0.0.1:3000',
+            'http://127.0.0.1:5000',
+            'http://127.0.0.1:8000',
+            'https://evolvedlotus.github.io',
+        ]
+        logger.info(f"✅ Using development CORS defaults: {default_origins}")
+        return default_origins
+
+ALLOWED_ORIGINS = get_allowed_origins()
 
 CORS(app,
      origins=ALLOWED_ORIGINS,
