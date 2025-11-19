@@ -20,10 +20,9 @@ class Currency(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.data_manager = bot.data_manager  # ✅ CRITICAL: Store data_manager reference
-        # Use global data_manager instead of self.bot.data_manager to avoid timing issues
-        from core import data_manager
-        self.transaction_manager = TransactionManager(data_manager)
-        self.shop_manager = ShopManager(data_manager, self.transaction_manager)
+        # Use bot's transaction manager instead of creating a new one
+        self.transaction_manager = bot.transaction_manager
+        self.shop_manager = bot.shop_manager
 
     def _get_currency_symbol(self, guild_id: int) -> str:
         """Get currency symbol for this guild"""

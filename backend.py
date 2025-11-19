@@ -29,51 +29,20 @@ IS_PRODUCTION = (
     os.getenv('ENVIRONMENT') == 'production'
 )
 
-# CORS Configuration - Simplified and reliable
-def get_allowed_origins():
-    """Get allowed CORS origins from environment variables"""
-    # Primary: ALLOWED_ORIGINS environment variable (comma-separated)
-    allowed_origins_env = os.getenv('ALLOWED_ORIGINS', '').strip()
-
-    if allowed_origins_env:
-        origins = [origin.strip() for origin in allowed_origins_env.split(',') if origin.strip()]
-        if origins:
-            logger.info(f"✅ CORS origins from ALLOWED_ORIGINS: {origins}")
-            return origins
-
-    # Fallback to hardcoded defaults based on environment
-    if IS_PRODUCTION:
-        # Production defaults
-        default_origins = [
-            'https://evolvedlotus.github.io',
-            'https://evolvedlotus.github.io/EVLDiscordBot',
-        ]
-
-        # Add Railway domain if available
-        railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
-        if railway_domain:
-            railway_url = f'https://{railway_domain}'
-            if railway_url not in default_origins:
-                default_origins.append(railway_url)
-                logger.info(f"✅ Added Railway domain to CORS: {railway_url}")
-
-        logger.info(f"✅ Using production CORS defaults: {default_origins}")
-        return default_origins
-    else:
-        # Development defaults
-        default_origins = [
-            'http://localhost:3000',
-            'http://localhost:5000',
-            'http://localhost:8000',
-            'http://127.0.0.1:3000',
-            'http://127.0.0.1:5000',
-            'http://127.0.0.1:8000',
-            'https://evolvedlotus.github.io',
-        ]
-        logger.info(f"✅ Using development CORS defaults: {default_origins}")
-        return default_origins
-
-ALLOWED_ORIGINS = get_allowed_origins()
+# Import centralized CORS configuration
+try:
+    from config import config as app_config
+    ALLOWED_ORIGINS = app_config.allowed_origins
+    logger.info(f"✅ CORS origins from centralized config: {ALLOWED_ORIGINS}")
+except ImportError:
+    # Fallback if config not available
+    ALLOWED_ORIGINS = [
+        'https://evolvedlotus.github.io',
+        'https://evolvedlotus.github.io/EVLDiscordBot',
+        'http://localhost:3000',
+        'http://localhost:5000',
+    ]
+    logger.warning("⚠️ Using fallback CORS origins - config not available")
 
 CORS(app,
      origins=ALLOWED_ORIGINS,

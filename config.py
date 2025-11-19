@@ -48,7 +48,11 @@ class Config:
         self.bot_webhook_port = int(os.getenv('BOT_WEBHOOK_PORT', '5001'))
         self.bot_webhook_host = os.getenv('BOT_WEBHOOK_HOST', 'localhost')
 
-        # CORS Configuration
+        # CORS Configuration - Centralized for Railway deployment
+        self.allowed_cors_origins = [
+            'https://evolvedlotus.github.io',
+            'https://evolvedlotus.github.io/EVLDiscordBot',
+        ]
         self.allowed_origins = self._parse_allowed_origins()
 
         # Feature Flags
