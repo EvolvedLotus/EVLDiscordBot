@@ -446,7 +446,7 @@ class TaskManager:
 
     def get_available_tasks(self, guild_id: int, user_id: int = None, channel_id: str = None) -> List[Dict]:
         """
-        Get available tasks for claiming from Supabase.
+        Get available tasks for claiming from data_manager.
 
         Args:
             guild_id: Guild ID
@@ -457,35 +457,48 @@ class TaskManager:
             List of available tasks
         """
         try:
-            # Get tasks from Supabase
-            tasks = self.data_manager.supabase.table('tasks').select('*').eq('guild_id', str(guild_id)).eq('status', 'active').execute()
+            # Get tasks from data_manager (same as /list_tasks does)
+            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
 
-            if not tasks.data:
+            if not tasks_data:
                 return []
 
+            tasks = tasks_data.get('tasks', {})
+            user_tasks = tasks_data.get('user_tasks', {})
+
             available_tasks = []
-            for task in tasks.data:
+
+            for task_id, task in tasks.items():
+                # Skip non-active tasks
+                if task['status'] != 'active':
+                    continue
+
                 # Convert string dates to datetime objects
                 if isinstance(task['expires_at'], str):
                     task['expires_at'] = datetime.fromisoformat(task['expires_at'].replace('Z', '+00:00'))
 
                 # Check expiry
                 if datetime.now(timezone.utc) > task['expires_at']:
-                    # Mark as expired in database
-                    self.data_manager.supabase.table('tasks').update({'status': 'expired'}).eq('id', task['id']).execute()
+                    # Auto-expire the task
+                    task['status'] = 'expired'
+                    self.data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
                     continue
 
                 # Check max claims
-                if task.get('max_claims') and task['max_claims'] != -1 and task.get('current_claims', 0) >= task['max_claims']:
+                if task.get('max_claims', -1) != -1 and task.get('current_claims', 0) >= task['max_claims']:
                     continue
 
-                # Check if user already claimed
+                # Check if user already claimed (for this user only)
                 if user_id:
-                    user_claim = self.data_manager.supabase.table('user_tasks').select('id').eq('guild_id', str(guild_id)).eq('user_id', str(user_id)).eq('task_id', str(task['task_id'])).execute()
-                    if user_claim.data:
+                    guild_user_tasks = user_tasks.get(str(user_id), {})
+                    if str(task_id) in guild_user_tasks:
                         continue
 
-                available_tasks.append(task)
+                # Add task_id to the task dict for compatibility
+                task_copy = task.copy()
+                task_copy['id'] = task_id  # For compatibility with existing code expecting 'id' field
+
+                available_tasks.append(task_copy)
 
             return available_tasks
 
