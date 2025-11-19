@@ -39,9 +39,10 @@ if os.getenv('ENVIRONMENT') != 'production':
 REQUIRED_ENV_VARS = {
     'DISCORD_TOKEN': 'Discord bot token',
     'SUPABASE_URL': 'Supabase project URL',
+    'SUPABASE_ANON_KEY': 'Supabase anon key',
     'SUPABASE_SERVICE_ROLE_KEY': 'Supabase service role key',
     'JWT_SECRET_KEY': 'JWT secret for authentication',
-    'GEMINI_API_KEY': 'Gemini AI API key',
+    'ADMIN_PASSWORD': 'Admin dashboard password',
     'PORT': 'Server port (Railway auto-assigns)',
 }
 

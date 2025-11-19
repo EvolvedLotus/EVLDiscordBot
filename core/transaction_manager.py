@@ -68,20 +68,18 @@ class TransactionManager:
         metadata: dict = None,
         idempotency_key: str = None
     ) -> dict:
+        """Log transaction using the atomic database function defined in schema.sql"""
+        import logging
+        logger = logging.getLogger(__name__)
+
         # Validate balance
         if balance_after != balance_before + amount:
             raise ValueError("Balance validation failed: balance_after != balance_before + amount")
 
-        # Check idempotency if provided
-        if idempotency_key:
-            existing = self._find_transaction_by_idempotency(guild_id, idempotency_key)
-            if existing:
-                return existing
-
         # Generate transaction ID
         timestamp_ms = int(datetime.utcnow().timestamp() * 1000)
-        short_uuid = uuid.uuid4().hex[:8]
-        txn_id = f"txn_{guild_id}_{timestamp_ms}_{short_uuid}"
+        short_uuid = str(uuid.uuid4())[:8]
+        txn_id = f"txn_{guild_id}_{user_id}_{timestamp_ms}_{short_uuid}"
 
         transaction = {
             "id": txn_id,
@@ -98,60 +96,46 @@ class TransactionManager:
         if idempotency_key:
             transaction["metadata"]["idempotency_key"] = idempotency_key
 
-        # Use atomic database transaction with proper error handling
+        # Use the atomic database function from schema.sql
         try:
-            # Insert transaction directly using Supabase client
-            result = self.data_manager.admin_client.table('transactions').insert({
-                'transaction_id': txn_id,
-                'user_id': str(user_id),
-                'guild_id': str(guild_id),
-                'amount': amount,
-                'balance_before': balance_before,
-                'balance_after': balance_after,
-                'transaction_type': transaction_type,
-                'description': description,
-                'metadata': transaction["metadata"]
-            }).execute()
+            result = self.data_manager.admin_client.rpc(
+                'log_transaction_atomic',
+                {
+                    'p_guild_id': str(guild_id),
+                    'p_user_id': str(user_id),
+                    'p_amount': amount,
+                    'p_balance_before': balance_before,
+                    'p_balance_after': balance_after,
+                    'p_transaction_type': transaction_type,
+                    'p_description': description,
+                    'p_transaction_id': txn_id,
+                    'p_metadata': transaction["metadata"]
+                }
+            ).execute()
 
-            if result.data and len(result.data) > 0:
-                # Transaction was logged successfully
-                transaction_record = result.data[0]
-                # Update our transaction object with database response
-                transaction.update({
-                    'id': transaction_record.get('transaction_id', txn_id),
-                    'timestamp': transaction_record.get('timestamp', transaction['timestamp'])
-                })
+            if result.data:
+                # Update transaction with database timestamp
+                db_txn = result.data[0] if isinstance(result.data, list) else result.data
+                transaction['timestamp'] = db_txn.get('timestamp', transaction['timestamp'])
+                logger.info(f"Transaction {txn_id} logged successfully")
             else:
-                raise Exception("Transaction insert returned no data")
+                raise Exception("Transaction logging returned no data")
 
         except Exception as e:
-            # Log error but don't fail the entire operation
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Database transaction logging failed: {e}")
+            # In production, this should trigger an alert for manual reconciliation
+            raise Exception(f"Critical: Transaction logging failed: {e}")
 
-            # For now, we'll continue without logging the transaction
-            # In production, you might want to implement a retry mechanism or queue
-            logger.warning(f"Transaction {txn_id} was not logged to database due to error")
-
-        # Broadcast SSE event
+        # Broadcast SSE event (only if transaction was logged successfully)
         try:
             from core.sse_manager import sse_manager
             sse_manager.broadcast_event('transaction', {
                 'guild_id': str(guild_id),
+                'user_id': str(user_id),
                 'transaction': transaction
             })
         except Exception as e:
             logger.warning(f"Failed to broadcast transaction event: {e}")
-
-        # Update user's updated_at timestamp to track activity
-        try:
-            self.data_manager.supabase.table('users').update({
-                'updated_at': datetime.utcnow().isoformat()
-            }).eq('guild_id', str(guild_id)).eq('user_id', str(user_id)).execute()
-        except Exception as e:
-            # Don't fail the transaction if timestamp update fails
-            pass
 
         # Invalidate cache
         with self.cache_lock:
@@ -359,51 +343,7 @@ class TransactionManager:
             'discrepancy': discrepancy
         }
 
-    def deduct_balance(
-        self,
-        guild_id: int,
-        user_id: int,
-        amount: int,
-        description: str = "",
-        transaction_type: str = "spend"
-    ) -> int:
-        """
-        Deduct balance and log transaction.
-        Returns new balance.
-        """
-        if amount <= 0:
-            raise ValueError("Amount must be positive")
 
-        # Load currency data
-        currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
-        users = currency_data.setdefault('users', {})
-        user_data = users.setdefault(str(user_id), {'balance': 0})
-
-        current_balance = user_data['balance']
-        if current_balance < amount:
-            raise ValueError("Insufficient balance")
-
-        new_balance = current_balance - amount
-        user_data['balance'] = new_balance
-
-        # Update total spent
-        user_data['total_spent'] = user_data.get('total_spent', 0) + amount
-
-        # Save
-        self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
-
-        # Log transaction
-        self.log_transaction(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=-amount,
-            balance_before=current_balance,
-            balance_after=new_balance,
-            transaction_type=transaction_type,
-            description=description
-        )
-
-        return new_balance
 
     def cleanup_old_transactions(
         self,

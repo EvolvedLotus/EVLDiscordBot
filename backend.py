@@ -26,7 +26,8 @@ app = Flask(__name__, static_folder='web', static_url_path='')
 # Environment detection
 IS_PRODUCTION = (
     os.getenv('RAILWAY_ENVIRONMENT') == 'production' or
-    os.getenv('ENVIRONMENT') == 'production'
+    os.getenv('ENVIRONMENT') == 'production' or
+    os.getenv('RAILWAY_PROJECT_ID') is not None  # Railway-specific detection
 )
 
 # Import centralized CORS configuration
