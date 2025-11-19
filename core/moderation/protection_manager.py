@@ -147,8 +147,36 @@ class ProtectionManager:
 
         return success
 
+    def is_exempt_from_link_protection(self, guild_id: int, member: discord.Member) -> bool:
+        """Determines if a user is exempt from link protection (admin/mod check)"""
+        # Check if user has Discord admin permission
+        if member.guild_permissions.administrator:
+            return True
+
+        # Check Discord moderator permissions
+        mod_permissions = [
+            'kick_members', 'ban_members', 'manage_messages',
+            'manage_channels', 'manage_roles'
+        ]
+        if any(getattr(member.guild_permissions, perm) for perm in mod_permissions):
+            return True
+
+        # Check custom admin/moderator roles from config
+        try:
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+            admin_roles = config.get("admin_roles", [])
+            moderator_roles = config.get("moderator_roles", [])
+
+            user_role_ids = [role.id for role in member.roles]
+            if any(role_id in (admin_roles + moderator_roles) for role_id in user_role_ids):
+                return True
+        except Exception:
+            pass
+
+        return False
+
     def is_exempt_from_protection(self, guild_id: int, user_id: int, channel_id: int, roles: List[discord.Role]) -> bool:
-        """Determines if a message author or channel is exempt"""
+        """Determines if a message author or channel is exempt from all protection"""
         config = self.load_protection_config(guild_id)
 
         # Check exempt roles

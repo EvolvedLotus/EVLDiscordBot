@@ -31,8 +31,8 @@ class ProtectionEnforcer:
             elif 'medium' in severities:
                 max_severity = 'medium'
 
-        # Check for unauthorized links
-        unauthorized_links = [link for link in links if link['is_blacklisted'] and not link['is_whitelisted']]
+        # Check for links (all links are violations when link filtering is enabled)
+        has_links = len(links) > 0
 
         # Decide action based on config and severity
         action_plan = {
@@ -78,7 +78,7 @@ class ProtectionEnforcer:
                 })
 
         # Link violation actions (override profanity if more severe)
-        if unauthorized_links:
+        if has_links and config.get('link_filter', True):
             action_plan.update({
                 'action': 'delete',
                 'reason': 'unauthorized_link',

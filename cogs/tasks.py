@@ -817,6 +817,86 @@ class TaskReviewView(discord.ui.View):
     async def before_check_expired_tasks(self):
         await self.bot.wait_until_ready()
 
+    @app_commands.command(name="view_tasks", description="View available tasks with interactive buttons")
+    async def view_tasks(
+        self,
+        interaction: discord.Interaction,
+        filter: str = "active"
+    ):
+        """Display interactive task cards with claim buttons."""
+        await interaction.response.defer()
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            # Get available tasks
+            available_tasks = self.task_manager.get_available_tasks(guild_id, str(interaction.user.id))
+
+            if not available_tasks:
+                await interaction.followup.send("📋 No active tasks available for claiming.", ephemeral=True)
+                return
+
+            # Filter tasks
+            if filter != 'all':
+                available_tasks = [task for task in available_tasks if task.get('status') == filter]
+
+            if not available_tasks:
+                await interaction.followup.send(
+                    f"📋 No {filter} tasks available.",
+                    ephemeral=True
+                )
+                return
+
+            # Create paginated task cards
+            pages = []
+            for i in range(0, len(available_tasks), 5):  # 5 tasks per page for better UX
+                page_tasks = available_tasks[i:i+5]
+                embed = discord.Embed(
+                    title="📋 Available Tasks",
+                    description="Click the buttons below to claim tasks",
+                    color=discord.Color.blue(),
+                    timestamp=datetime.now(timezone.utc)
+                )
+
+                view = TaskClaimPaginator(page_tasks, interaction.user.id)
+
+                for task_data in page_tasks:
+                    task = task_data.get('task_data', task_data)
+                    task_id = task_data.get('id', task.get('id'))
+
+                    embed.add_field(
+                        name=f"🆔 Task #{task_id}: {task['name']}",
+                        value=(
+                            f"**Description:** {task['description'][:100]}{'...' if len(task['description']) > 100 else ''}\n"
+                            f"**Reward:** 💰 {task['reward']} coins\n"
+                            f"**Duration:** ⏱️ {task['duration_hours']} hours\n"
+                            f"**Claims:** 👥 {task.get('current_claims', 0)}"
+                            f"{'/' + str(task['max_claims']) if task.get('max_claims', -1) != -1 else ''}\n"
+                            f"**Expires:** <t:{int(datetime.fromisoformat(task['expires_at']).timestamp())}:R>"
+                        ),
+                        inline=False
+                    )
+
+                embed.set_footer(text=f"Page {len(pages)+1} | {len(available_tasks)} total tasks")
+                pages.append((embed, view))
+
+            # Send first page
+            if len(pages) == 1:
+                embed, view = pages[0]
+                await interaction.followup.send(embed=embed, view=view)
+            else:
+                # For multiple pages, use pagination
+                paginator = MultiTaskPaginator(pages, interaction.user.id)
+                embed, view = pages[0]
+                await interaction.followup.send(embed=embed, view=paginator)
+
+        except Exception as e:
+            print(f"View tasks error: {e}")
+            await interaction.followup.send(
+                "❌ Error loading interactive task view.",
+                ephemeral=True
+            )
+
     @app_commands.command(name="tasks", description="View available tasks")
     @app_commands.describe(
         filter="Filter tasks by status",
@@ -1264,6 +1344,77 @@ class TaskReviewView(discord.ui.View):
             logger.warning(f"Task message {message_id} already deleted for task {task_id}")
         except Exception as e:
             logger.error(f"Error deleting task message: {e}", exc_info=True)
+
+class TaskClaimPaginator(discord.ui.View):
+    """View with individual claim buttons for multiple tasks."""
+
+    def __init__(self, tasks, user_id):
+        super().__init__(timeout=300)
+        self.tasks = tasks
+        self.user_id = user_id
+        self.button_count = 0
+
+        # Create buttons for up to 5 tasks
+        for i, task_data in enumerate(tasks[:5]):
+            task = task_data.get('task_data', task_data)
+            task_id = task_data.get('id', task.get('id'))
+
+            button = discord.ui.Button(
+                label=f"Claim #{task_id}",
+                style=discord.ButtonStyle.green,
+                custom_id=f"claim_task_{task_id}"
+            )
+            button.callback = self.create_claim_callback(task_id)
+            self.add_item(button)
+            self.button_count += 1
+
+    def create_claim_callback(self, task_id):
+        async def claim_callback(interaction: discord.Interaction):
+            if interaction.user.id != self.user_id:
+                await interaction.response.send_message("❌ This is not your menu.", ephemeral=True)
+                return
+
+            await TaskClaimView(task_id).handle_claim(interaction)
+
+        return claim_callback
+
+class MultiTaskPaginator(discord.ui.View):
+    """Pagination for multiple pages of task views."""
+
+    def __init__(self, pages, user_id):
+        super().__init__(timeout=300)
+        self.pages = pages  # List of (embed, view) tuples
+        self.current_page = 0
+        self.user_id = user_id
+        self.update_buttons()
+
+    def update_buttons(self):
+        self.previous_button.disabled = self.current_page == 0
+        self.next_button.disabled = self.current_page == len(self.pages) - 1
+
+    @discord.ui.button(label="◀", style=discord.ButtonStyle.gray)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ This is not your menu.", ephemeral=True)
+            return
+
+        self.current_page = max(0, self.current_page - 1)
+        self.update_buttons()
+
+        embed, view = self.pages[self.current_page]
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label="▶", style=discord.ButtonStyle.gray)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.user_id:
+            await interaction.response.send_message("❌ This is not your menu.", ephemeral=True)
+            return
+
+        self.current_page = min(len(self.pages) - 1, self.current_page + 1)
+        self.update_buttons()
+
+        embed, view = self.pages[self.current_page]
+        await interaction.response.edit_message(embed=embed, view=self)
 
 class TaskListPaginator(discord.ui.View):
     """Pagination for task lists."""

@@ -55,29 +55,33 @@ class Moderation(commands.Cog):
         if not config.get('enabled', True):
             return
 
-        # Check if user is exempt
+        # Check if user is generally exempt (exempt roles/channels)
         if self.protection_manager.is_exempt_from_protection(
             message.guild.id, message.author.id, message.channel.id, message.author.roles
         ):
             return
 
         try:
-            # Scan message for violations
+            # Scan message for profanity violations (always applies)
             profanity_matches = self.scanner.scan_message_for_profanity(message.guild.id, message.content)
-            link_violations = self.scanner.scan_message_for_links(message.guild.id, message.content)
-            attachment_violations = self.scanner.scan_attachments_and_embeds(message.guild.id, message)
 
-            # Combine all violations
-            all_matches = profanity_matches
-            all_links = link_violations + [v for v in attachment_violations if v['type'] in ['embed_url', 'embed_description']]
+            # Check if user is exempt from link protection (admin/mod check)
+            is_link_exempt = self.protection_manager.is_exempt_from_link_protection(message.guild.id, message.author)
+
+            # Scan for links only if user is not exempt from link protection
+            all_links = []
+            if not is_link_exempt:
+                link_violations = self.scanner.scan_message_for_links(message.guild.id, message.content)
+                attachment_violations = self.scanner.scan_attachments_and_embeds(message.guild.id, message)
+                all_links = link_violations + [v for v in attachment_violations if v['type'] in ['embed_url', 'embed_description']]
 
             # If no violations, return
-            if not all_matches and not all_links:
+            if not profanity_matches and not all_links:
                 return
 
             # Evaluate action plan
             action_plan = self.enforcer.evaluate_protection_action(
-                message.guild.id, message, all_matches, all_links
+                message.guild.id, message, profanity_matches, all_links
             )
 
             # Apply action
@@ -94,7 +98,7 @@ class Moderation(commands.Cog):
                     {
                         'reason': result['reason'],
                         'severity': action_plan.get('severity', 'low'),
-                        'profanity_matches': len(all_matches),
+                        'profanity_matches': len(profanity_matches),
                         'link_violations': len(all_links)
                     }
                 )
