@@ -69,12 +69,6 @@ class Currency(commands.Cog):
         Phase 2 (Commit): Log transaction first, then update balance
         Phase 3 (Rollback): If transaction logging fails, rollback any partial changes
         """
-        import os
-        import tempfile
-        import json
-
-        logger = logging.getLogger(__name__)
-
         try:
             # PHASE 1: Prepare - Load data and validate
             data = self.data_manager.load_guild_data(guild_id, "currency")
@@ -239,7 +233,6 @@ class Currency(commands.Cog):
                         inline=False
                     )
             except Exception as e:
-                logger = logging.getLogger(__name__)
                 logger.error(f"Failed to load recent transactions for balance display: {e}")
 
             embed.set_footer(text=f"Server: {interaction.guild.name} | Real-time balance")
@@ -247,7 +240,6 @@ class Currency(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
 
         except Exception as e:
-            logger = logging.getLogger(__name__)
             logger.error(f"Error in balance command: {e}")
             # Check if already responded
             if interaction.response.is_done():
