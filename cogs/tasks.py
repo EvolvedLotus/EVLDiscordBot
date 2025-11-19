@@ -57,6 +57,53 @@ async def discord_operation_with_retry(operation, max_retries=3, base_delay=1.0)
     # This should never be reached, but just in case
     raise last_exception
 
+class TaskListPaginator(discord.ui.View):
+    """Paginator view for task listings."""
+
+    def __init__(self, pages, user_id, timeout=300):
+        super().__init__(timeout=timeout)
+        self.pages = pages
+        self.current_page = 0
+        self.user_id = user_id
+        self.update_buttons()
+
+    def update_buttons(self):
+        """Update navigation button states."""
+        previous_button = self.previous_button
+        next_button = self.next_button
+
+        previous_button.disabled = self.current_page == 0
+        next_button.disabled = self.current_page == len(self.pages) - 1
+
+    @discord.ui.button(label="◀️ Previous", style=discord.ButtonStyle.secondary)
+    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to previous page."""
+        if str(interaction.user.id) != self.user_id:
+            await interaction.response.send_message("❌ You can't use this menu.", ephemeral=True)
+            return
+
+        if self.current_page > 0:
+            self.current_page -= 1
+            self.update_buttons()
+            await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+        else:
+            await interaction.response.send_message("❌ Already on first page.", ephemeral=True)
+
+    @discord.ui.button(label="Next ▶️", style=discord.ButtonStyle.secondary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Go to next page."""
+        if str(interaction.user.id) != self.user_id:
+            await interaction.response.send_message("❌ You can't use this menu.", ephemeral=True)
+            return
+
+        if self.current_page < len(self.pages) - 1:
+            self.current_page += 1
+            self.update_buttons()
+            await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+        else:
+            await interaction.response.send_message("❌ Already on last page.", ephemeral=True)
+
+
 class TaskClaimView(discord.ui.View):
     """Persistent view for task claim button."""
 
@@ -74,101 +121,56 @@ class TaskClaimView(discord.ui.View):
         await self.handle_claim(interaction)
 
     async def handle_claim(self, interaction: discord.Interaction):
-        """Handle task claim with atomic operations and race condition prevention."""
-        await interaction.response.defer(ephemeral=True)
-
-        guild_id = str(interaction.guild.id)
-        user_id = str(interaction.user.id)
-        task_id = str(self.task_id)
+        """Handle task claim using TaskManager with proper error handling."""
+        # Check if interaction already responded
+        if interaction.response.is_done():
+            # Try to send a follow-up message outside the original interaction
+            try:
+                await interaction.followup.send(
+                    "⚠️ This interaction has expired. Please try claiming the task again.",
+                    ephemeral=True
+                )
+            except Exception:
+                pass
+            return
 
         try:
-            # Get data_manager from the bot instance
+            # Defer the response immediately
+            await interaction.response.defer(ephemeral=True)
+
+            guild_id = interaction.guild.id
+            user_id = interaction.user.id
+
+            # Get tasks cog
             tasks_cog = interaction.client.get_cog('Tasks')
-            if not tasks_cog or not tasks_cog.data_manager:
-                await interaction.followup.send("❌ Data management system not available.", ephemeral=True)
+            if not tasks_cog or not tasks_cog.task_manager:
+                await interaction.followup.send("❌ Task management system not available.", ephemeral=True)
                 return
 
-            data_manager = tasks_cog.data_manager
+            # Use TaskManager to claim task (expects integers)
+            result = await tasks_cog.task_manager.claim_task(guild_id, user_id, self.task_id)
 
-            tasks_data = data_manager.load_guild_data(guild_id, 'tasks')
-            if not tasks_data:
-                tasks_data = {'tasks': {}, 'user_tasks': {}, 'settings': {'next_task_id': 1}}
-
-            task = tasks_data.get('tasks', {}).get(str(self.task_id))
-            if not task:
-                await interaction.followup.send("❌ Task not found.", ephemeral=True)
+            if not result['success']:
+                await interaction.followup.send(result['error'], ephemeral=True)
                 return
 
-            # Validation checks
-            if task['status'] != 'active':
-                await interaction.followup.send(f"❌ This task is no longer active (Status: {task['status']}).", ephemeral=True)
-                return
+            task_data = result['task']
+            deadline = result['deadline']
 
-            # Check expiry
-            if datetime.now(timezone.utc) > datetime.fromisoformat(task['expires_at']):
-                # Auto-expire task
-                task['status'] = 'expired'
-                tasks_data['metadata']['total_expired'] = tasks_data.get('metadata', {}).get('total_expired', 0) + 1
-                data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
-                await interaction.followup.send("❌ This task has expired.", ephemeral=True)
-                return
-
-            # Check max claims
-            if task['max_claims'] != -1 and task['current_claims'] >= task['max_claims']:
-                await interaction.followup.send("❌ This task has reached maximum claims.", ephemeral=True)
-                return
-
-            # Check if user already claimed
-            user_tasks = tasks_data.get('user_tasks', {}).get(user_id, {})
-            if str(self.task_id) in user_tasks:
-                status = user_tasks[str(self.task_id)]['status']
-                await interaction.followup.send(f"❌ You have already claimed this task (Status: {status}).", ephemeral=True)
-                return
-
-            # Check user task limit
-            settings = tasks_data.get('settings', {})
-            max_per_user = settings.get('max_tasks_per_user', 10)
-            active_count = sum(
-                1 for t in user_tasks.values()
-                if t['status'] in ['claimed', 'in_progress', 'submitted']
-            )
-            if active_count >= max_per_user:
-                await interaction.followup.send(f"❌ You have reached the maximum of {max_per_user} active tasks.", ephemeral=True)
-                return
-
-            # Claim task
-            claimed_at = datetime.now(timezone.utc)
-            deadline = claimed_at + timedelta(hours=task['duration_hours'])
-
-            tasks_data.setdefault('user_tasks', {}).setdefault(user_id, {})[str(self.task_id)] = {
-                'claimed_at': claimed_at.isoformat(),
-                'deadline': deadline.isoformat(),
-                'status': 'in_progress',
-                'proof_message_id': None,
-                'proof_attachments': [],
-                'proof_content': '',
-                'submitted_at': None,
-                'completed_at': None,
-                'notes': ''
+            # Update embed using task data
+            task_info = {
+                'name': task_data['name'],
+                'status': 'active',  # Still active since just claimed
+                'channel_id': task_data.get('channel_id', str(interaction.channel.id)),
+                'message_id': task_data.get('message_id'),
+                'task_id': task_data['task_id']
             }
-
-            # Update task claims
-            task['current_claims'] += 1
-            task['assigned_users'].append(user_id)
-
-            # Save data
-            success = data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
-            if not success:
-                await interaction.followup.send("❌ An error occurred while claiming the task. Please try again.", ephemeral=True)
-                return
-
-            # Update embed
-            await self.update_task_message(interaction.guild, guild_id, self.task_id, task)
+            await self.update_task_message(interaction.guild, str(guild_id), self.task_id, task_info)
 
             # Notify user
             embed = discord.Embed(
                 title="✅ Task Claimed Successfully!",
-                description=f"You have claimed **{task['name']}**",
+                description=f"You have claimed **{task_data['name']}**",
                 color=discord.Color.green()
             )
             embed.add_field(name="⏰ Deadline", value=f"<t:{int(deadline.timestamp())}:R>", inline=False)
@@ -182,10 +184,14 @@ class TaskClaimView(discord.ui.View):
 
         except Exception as e:
             print(f"Task claim error: {e}")
-            await interaction.followup.send(
-                "❌ An error occurred while claiming the task. Please try again.",
-                ephemeral=True
-            )
+            try:
+                await interaction.followup.send(
+                    "❌ An error occurred while claiming the task. Please try again.",
+                    ephemeral=True
+                )
+            except Exception:
+                # If followup also fails, ignore
+                pass
 
     async def atomic_task_claim(self, guild_id, user_id, task_id):
         """Atomically claim a task with database-level locking to prevent race conditions."""
@@ -320,7 +326,7 @@ def create_task_embed(task):
         title=f"📋 {task['name']}",
         description=task['description'],
         color=discord.Color.blue(),
-        timestamp=datetime.fromisoformat(task['created'])
+        timestamp=datetime.fromisoformat(task.get('created_at', task.get('created', datetime.now().isoformat())))
     )
 
     if task.get('url'):
@@ -823,72 +829,78 @@ class TaskReviewView(discord.ui.View):
         interaction: discord.Interaction,
         filter: str = "active"
     ):
-        """Display interactive task cards with claim buttons."""
+        """Display interactive task cards with claim buttons in table format like /list_tasks."""
         await interaction.response.defer()
 
         guild_id = str(interaction.guild.id)
 
         try:
-            # Get available tasks
+            # Use the TaskManager to get tasks from Supabase (same as list_tasks)
             available_tasks = self.task_manager.get_available_tasks(guild_id, str(interaction.user.id))
 
             if not available_tasks:
                 await interaction.followup.send("📋 No active tasks available for claiming.", ephemeral=True)
                 return
 
-            # Filter tasks
+            # Filter tasks (same logic as list_tasks)
+            tasks = available_tasks
             if filter != 'all':
-                available_tasks = [task for task in available_tasks if task.get('status') == filter]
+                tasks = [task for task in tasks if task.get('status') == filter]
 
-            if not available_tasks:
+            if not tasks:
                 await interaction.followup.send(
                     f"📋 No {filter} tasks available.",
                     ephemeral=True
                 )
                 return
 
-            # Create paginated task cards
+            # Create paginated embeds (10 tasks per page) - SAME FORMAT AS list_tasks
             pages = []
-            for i in range(0, len(available_tasks), 5):  # 5 tasks per page for better UX
-                page_tasks = available_tasks[i:i+5]
+            for i in range(0, len(tasks), 10):
                 embed = discord.Embed(
-                    title="📋 Available Tasks",
-                    description="Click the buttons below to claim tasks",
+                    title=f"📋 Available Tasks ({len(tasks)})",
+                    description="Tasks you can claim:",
                     color=discord.Color.blue(),
                     timestamp=datetime.now(timezone.utc)
                 )
 
-                view = TaskClaimPaginator(page_tasks, interaction.user.id)
+                page_tasks = tasks[i:i+10]
+                for task in page_tasks:
+                    status_emoji = {
+                        'active': '🟢',
+                        'pending': '🟡',
+                        'completed': '✅',
+                        'expired': '⏰',
+                        'cancelled': '❌'
+                    }
 
-                for task_data in page_tasks:
-                    task = task_data.get('task_data', task_data)
-                    task_id = task_data.get('id', task.get('id'))
+                    # Task info - SAME FORMAT AS list_tasks
+                    task_info = f"{status_emoji.get(task['status'], '⚪')} **{task['name']}**\n"
+                    task_info += f"💰 {task['reward']} coins | ⏱️ {task['duration_hours']}h\n"
+                    task_info += f"👥 {task['current_claims']}"
+                    if task['max_claims'] != -1:
+                        task_info += f"/{task['max_claims']}"
+                    task_info += " claims"
+
+                    # Add expiry info
+                    expires_timestamp = int(datetime.fromisoformat(str(task['expires_at'])).timestamp())
+                    task_info += f"\n⏰ Expires: <t:{expires_timestamp}:R>"
 
                     embed.add_field(
-                        name=f"🆔 Task #{task_id}: {task['name']}",
-                        value=(
-                            f"**Description:** {task['description'][:100]}{'...' if len(task['description']) > 100 else ''}\n"
-                            f"**Reward:** 💰 {task['reward']} coins\n"
-                            f"**Duration:** ⏱️ {task['duration_hours']} hours\n"
-                            f"**Claims:** 👥 {task.get('current_claims', 0)}"
-                            f"{'/' + str(task['max_claims']) if task.get('max_claims', -1) != -1 else ''}\n"
-                            f"**Expires:** <t:{int(datetime.fromisoformat(task['expires_at']).timestamp())}:R>"
-                        ),
+                        name=f"Task #{task['id']}",
+                        value=task_info,
                         inline=False
                     )
 
-                embed.set_footer(text=f"Page {len(pages)+1} | {len(available_tasks)} total tasks")
-                pages.append((embed, view))
+                embed.set_footer(text=f"Page {len(pages)+1} | Total: {len(tasks)} tasks")
+                pages.append(embed)
 
-            # Send first page
+            # Send with pagination if multiple pages
             if len(pages) == 1:
-                embed, view = pages[0]
-                await interaction.followup.send(embed=embed, view=view)
+                await interaction.followup.send(embed=pages[0])
             else:
-                # For multiple pages, use pagination
-                paginator = MultiTaskPaginator(pages, interaction.user.id)
-                embed, view = pages[0]
-                await interaction.followup.send(embed=embed, view=paginator)
+                view = TaskListPaginator(pages, interaction.user.id)
+                await interaction.followup.send(embed=pages[0], view=view)
 
         except Exception as e:
             print(f"View tasks error: {e}")
@@ -1345,247 +1357,29 @@ class TaskReviewView(discord.ui.View):
         except Exception as e:
             logger.error(f"Error deleting task message: {e}", exc_info=True)
 
-class TaskClaimPaginator(discord.ui.View):
-    """View with individual claim buttons for multiple tasks."""
-
-    def __init__(self, tasks, user_id):
-        super().__init__(timeout=300)
-        self.tasks = tasks
-        self.user_id = user_id
-        self.button_count = 0
-
-        # Create buttons for up to 5 tasks
-        for i, task_data in enumerate(tasks[:5]):
-            task = task_data.get('task_data', task_data)
-            task_id = task_data.get('id', task.get('id'))
-
-            button = discord.ui.Button(
-                label=f"Claim #{task_id}",
-                style=discord.ButtonStyle.green,
-                custom_id=f"claim_task_{task_id}"
-            )
-            button.callback = self.create_claim_callback(task_id)
-            self.add_item(button)
-            self.button_count += 1
-
-    def create_claim_callback(self, task_id):
-        async def claim_callback(interaction: discord.Interaction):
-            if interaction.user.id != self.user_id:
-                await interaction.response.send_message("❌ This is not your menu.", ephemeral=True)
-                return
-
-            await TaskClaimView(task_id).handle_claim(interaction)
-
-        return claim_callback
-
-class MultiTaskPaginator(discord.ui.View):
-    """Pagination for multiple pages of task views."""
-
-    def __init__(self, pages, user_id):
-        super().__init__(timeout=300)
-        self.pages = pages  # List of (embed, view) tuples
-        self.current_page = 0
-        self.user_id = user_id
-        self.update_buttons()
-
-    def update_buttons(self):
-        self.previous_button.disabled = self.current_page == 0
-        self.next_button.disabled = self.current_page == len(self.pages) - 1
-
-    @discord.ui.button(label="◀", style=discord.ButtonStyle.gray)
-    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ This is not your menu.", ephemeral=True)
-            return
-
-        self.current_page = max(0, self.current_page - 1)
-        self.update_buttons()
-
-        embed, view = self.pages[self.current_page]
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    @discord.ui.button(label="▶", style=discord.ButtonStyle.gray)
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ This is not your menu.", ephemeral=True)
-            return
-
-        self.current_page = min(len(self.pages) - 1, self.current_page + 1)
-        self.update_buttons()
-
-        embed, view = self.pages[self.current_page]
-        await interaction.response.edit_message(embed=embed, view=self)
-
-class TaskListPaginator(discord.ui.View):
-    """Pagination for task lists."""
-
-    def __init__(self, pages, user_id):
-        super().__init__(timeout=180)
-        self.pages = pages
-        self.current_page = 0
-        self.user_id = user_id
-        self.update_buttons()
-
-    def update_buttons(self):
-        self.previous_button.disabled = self.current_page == 0
-        self.next_button.disabled = self.current_page == len(self.pages) - 1
-
-    @discord.ui.button(label="◀", style=discord.ButtonStyle.gray)
-    async def previous_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ This is not your menu.", ephemeral=True)
-            return
-
-        self.current_page = max(0, self.current_page - 1)
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
-
-    @discord.ui.button(label="▶", style=discord.ButtonStyle.gray)
-    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.user_id:
-            await interaction.response.send_message("❌ This is not your menu.", ephemeral=True)
-            return
-
-        self.current_page = min(len(self.pages) - 1, self.current_page + 1)
-        self.update_buttons()
-        await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
 
 
-    @app_commands.command(name="task_create", description="Create a new task")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def create_task(
-        self,
-        interaction: discord.Interaction,
-        name: str,
-        description: str,
-        reward: int,
-        duration_hours: int,
-        max_claims: int = None
-    ):
-        """Create a new task for users to claim."""
-        await interaction.response.defer(ephemeral=True)
+async def setup(bot):
+    """Setup the tasks cog."""
+    cog = Tasks(bot)
+    await bot.add_cog(cog)
 
-        guild_id = str(interaction.guild.id)
+    # Set managers after cog is loaded
+    data_manager_instance = getattr(bot, 'data_manager', None)
+    transaction_manager_instance = getattr(bot, 'transaction_manager', None)
+    if data_manager_instance and transaction_manager_instance:
+        cog.set_managers(data_manager_instance, transaction_manager_instance)
 
+    # Register persistent views for existing tasks
+    for guild in bot.guilds:
+        guild_id = str(guild.id)
         try:
-            # Get task settings or initialize
-            task_settings = self.data_manager.supabase.table('task_settings').select('*').eq('guild_id', guild_id).execute()
+            # Get active tasks from database
+            active_tasks = cog.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('status', 'active').execute()
 
-            next_id = 1
-            if task_settings.data:
-                next_id = task_settings.data[0]['next_task_id']
-                # Update next ID
-                self.data_manager.supabase.table('task_settings').update({
-                    'next_task_id': next_id + 1
-                }).eq('guild_id', guild_id).execute()
-            else:
-                # Create task settings
-                self.data_manager.supabase.table('task_settings').insert({
-                    'guild_id': guild_id,
-                    'next_task_id': 2,
-                    'total_completed': 0,
-                    'total_expired': 0
-                }).execute()
-
-            expires_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
-
-            # Create task
-            task_data = {
-                'task_id': str(next_id),
-                'guild_id': guild_id,
-                'name': name,
-                'description': description,
-                'reward': reward,
-                'duration_hours': duration_hours,
-                'max_claims': max_claims or -1,
-                'current_claims': 0,
-                'status': 'active',
-                'expires_at': expires_at.isoformat(),
-                'created': datetime.now(timezone.utc).isoformat()
-            }
-
-            result = self.data_manager.supabase.table('tasks').insert(task_data).execute()
-
-            await interaction.followup.send(
-                f"✅ Task **{name}** created successfully!\nTask ID: `{next_id}`",
-                ephemeral=True
-            )
-
+            for task in active_tasks.data or []:
+                if task.get('message_id'):
+                    view = TaskClaimView(int(task['task_id']))
+                    bot.add_view(view, message_id=int(task['message_id']))
         except Exception as e:
-            print(f"Task creation error: {e}")
-            await interaction.followup.send(
-                "❌ Error creating task.",
-                ephemeral=True
-            )
-
-    @app_commands.command(name="set_admin_role", description="Set admin role for task reviews")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def set_admin_role(
-        self,
-        interaction: discord.Interaction,
-        role: discord.Role
-    ):
-        """Set an admin role that can review tasks."""
-        await interaction.response.defer(ephemeral=True)
-
-        guild_id = str(interaction.guild.id)
-        role_id = str(role.id)
-
-        try:
-            # Get or create config
-            config = self.data_manager.supabase.table('guilds').select('*').eq('guild_id', guild_id).execute()
-
-            admin_roles = [role_id]
-            if config.data:
-                current_roles = config.data[0].get('admin_roles', [])
-                if role_id not in current_roles:
-                    admin_roles = current_roles + [role_id]
-
-                self.data_manager.supabase.table('guilds').update({
-                    'admin_roles': admin_roles
-                }).eq('guild_id', guild_id).execute()
-            else:
-                # Create basic config
-                self.data_manager.supabase.table('guilds').insert({
-                    'guild_id': guild_id,
-                    'server_name': interaction.guild.name,
-                    'admin_roles': admin_roles,
-                    'is_active': True
-                }).execute()
-
-            await interaction.followup.send(
-                f"✅ Role **{role.name}** added to admin roles for task reviews.",
-                ephemeral=True
-            )
-
-        except Exception as e:
-            print(f"Set admin role error: {e}")
-            await interaction.followup.send(
-                "❌ Error setting admin role.",
-                ephemeral=True
-            )
-
-    async def setup(bot):
-        """Setup the tasks cog."""
-        cog = Tasks(bot)
-        await bot.add_cog(cog)
-
-        # Set managers after cog is loaded
-        data_manager_instance = getattr(bot, 'data_manager', None)
-        transaction_manager_instance = getattr(bot, 'transaction_manager', None)
-        if data_manager_instance and transaction_manager_instance:
-            cog.set_managers(data_manager_instance, transaction_manager_instance)
-
-        # Register persistent views for existing tasks
-        for guild in bot.guilds:
-            guild_id = str(guild.id)
-            try:
-                # Get active tasks from database
-                active_tasks = cog.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('status', 'active').execute()
-
-                for task in active_tasks.data or []:
-                    if task.get('message_id'):
-                        view = TaskClaimView(int(task['task_id']))
-                        bot.add_view(view, message_id=int(task['message_id']))
-            except Exception as e:
                 print(f"Error registering views for guild {guild_id}: {e}")
