@@ -634,6 +634,54 @@ def create_announcement(server_id):
     except Exception as e:
         return safe_error_response(e)
 
+# ========== EMBEDS ==========
+@app.route('/api/<server_id>/embeds', methods=['GET'])
+@require_guild_access
+def get_embeds(server_id):
+    try:
+        embeds = embed_builder.get_embeds(server_id)
+        return jsonify({'embeds': embeds}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/embeds', methods=['POST'])
+@require_guild_access
+def create_embed(server_id):
+    try:
+        data = request.get_json()
+        embed = embed_builder.create_embed(server_id, data)
+        return jsonify(embed), 201
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/embeds/<embed_id>', methods=['GET'])
+@require_guild_access
+def get_embed(server_id, embed_id):
+    try:
+        embed = embed_builder.get_embed(server_id, embed_id)
+        return jsonify(embed), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/embeds/<embed_id>', methods=['PUT'])
+@require_guild_access
+def update_embed(server_id, embed_id):
+    try:
+        data = request.get_json()
+        embed = embed_builder.update_embed(server_id, embed_id, data)
+        return jsonify(embed), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/embeds/<embed_id>', methods=['DELETE'])
+@require_guild_access
+def delete_embed(server_id, embed_id):
+    try:
+        embed_builder.delete_embed(server_id, embed_id)
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
 # ========== SERVER-SENT EVENTS (SSE) ==========
 @app.route('/api/sse/<guild_id>')
 @require_auth
