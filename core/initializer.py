@@ -119,15 +119,25 @@ class GuildInitializer:
     async def _initialize_tasks(self, guild: discord.Guild):
         """Initialize task system"""
         try:
-            # Ensure task_settings exists
-            settings = self.data_manager.load_guild_data(guild.id, "task_settings")
-            if not settings or not settings.get('next_task_id'):
+            # Load existing tasks data
+            tasks_data = self.data_manager.load_guild_data(guild.id, "tasks")
+
+            # Ensure settings exist within tasks data
+            settings = tasks_data.get('settings', {})
+            if not settings.get('next_task_id'):
                 settings = {
                     'allow_user_tasks': True,
                     'max_tasks_per_user': 10,
-                    'next_task_id': 1
+                    'auto_expire_enabled': True,
+                    'require_proof': True,
+                    'next_task_id': 1,
+                    'total_completed': 0,
+                    'total_expired': 0
                 }
-                self.data_manager.save_guild_data(guild.id, "task_settings", settings)
+
+                # Save updated tasks data with settings
+                tasks_data['settings'] = settings
+                self.data_manager.save_guild_data(guild.id, "tasks", tasks_data)
 
             logger.info(f"  ✓ Tasks initialized for {guild.name}")
         except Exception as e:

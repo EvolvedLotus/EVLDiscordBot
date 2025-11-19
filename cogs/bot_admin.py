@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.commands import Greedy
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -821,11 +822,6 @@ class BotAdmin(commands.Cog):
         """Add admin roles (roles that can perform admin actions)."""
         await interaction.response.defer(ephemeral=True)
 
-        # Collect provided roles
-        roles = [role for role in [role1, role2, role3, role4, role5] if role is not None]
-        if not roles:
-            await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
-            return
 
         guild_id = str(interaction.guild.id)
 
@@ -902,13 +898,21 @@ class BotAdmin(commands.Cog):
 
     @app_commands.command(name="remove_admin_roles", description="Remove admin roles from server configuration")
     @app_commands.describe(
-        roles="Roles to remove from admin roles (can select multiple)"
+        role1="First admin role to remove",
+        role2="Second admin role to remove (optional)",
+        role3="Third admin role to remove (optional)",
+        role4="Fourth admin role to remove (optional)",
+        role5="Fifth admin role to remove (optional)"
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def remove_admin_roles(
         self,
         interaction: discord.Interaction,
-        roles: commands.Greedy[discord.Role]
+        role1: discord.Role,
+        role2: discord.Role = None,
+        role3: discord.Role = None,
+        role4: discord.Role = None,
+        role5: discord.Role = None
     ):
         """Remove admin roles."""
         await interaction.response.defer(ephemeral=True)
@@ -942,18 +946,28 @@ class BotAdmin(commands.Cog):
 
     @app_commands.command(name="remove_moderator_roles", description="Remove moderator roles from server configuration")
     @app_commands.describe(
-        roles="Roles to remove from moderator roles (can select multiple)"
+        role1="First moderator role to remove",
+        role2="Second moderator role to remove (optional)",
+        role3="Third moderator role to remove (optional)",
+        role4="Fourth moderator role to remove (optional)",
+        role5="Fifth moderator role to remove (optional)"
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def remove_moderator_roles(
         self,
         interaction: discord.Interaction,
-        roles: commands.Greedy[discord.Role]
+        role1: discord.Role,
+        role2: discord.Role = None,
+        role3: discord.Role = None,
+        role4: discord.Role = None,
+        role5: discord.Role = None
     ):
         """Remove moderator roles."""
         await interaction.response.defer(ephemeral=True)
 
-        if not roles:
+        # Collect provided roles
+        collected_roles = [role for role in [role1, role2, role3, role4, role5] if role is not None]
+        if not collected_roles:
             await interaction.followup.send("❌ Please specify at least one role.", ephemeral=True)
             return
 
@@ -962,9 +976,9 @@ class BotAdmin(commands.Cog):
         try:
             config = self.data_manager.load_guild_data(guild_id, 'config')
 
-            # Get current moderator roles
-            current_moderator_roles = set(config.get('moderator_roles', []))
-            roles_to_remove = {str(role.id) for role in roles}
+            # Get current admin roles
+            current_admin_roles = set(config.get('admin_roles', []))
+            roles_to_remove = {str(role.id) for role in collected_roles}
 
             # Remove roles
             current_moderator_roles -= roles_to_remove
