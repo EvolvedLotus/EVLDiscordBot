@@ -609,8 +609,7 @@ class DataManager:
                             'current_claims': task.get('current_claims', 0),
                             'assigned_users': task.get('assigned_users', []),
                             'category': task.get('category', 'general'),
-                            'role_name': task.get('role_name'),
-                            'updated_at': datetime.now(timezone.utc).isoformat()
+                            'role_name': task.get('role_name')
                         }, on_conflict='guild_id,task_id').execute()
 
                     # Save user tasks

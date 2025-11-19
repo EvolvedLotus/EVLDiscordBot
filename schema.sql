@@ -166,6 +166,7 @@ message_id TEXT,
 
 -- Timestamps
 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 expires_at TIMESTAMP WITH TIME ZONE,
 
 UNIQUE(guild_id, task_id)
@@ -464,6 +465,16 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 DROP TRIGGER IF EXISTS update_inventory_updated_at ON inventory;
 CREATE TRIGGER update_inventory_updated_at
 BEFORE UPDATE ON inventory
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_tasks_updated_at ON tasks;
+CREATE TRIGGER update_tasks_updated_at
+BEFORE UPDATE ON tasks
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_user_tasks_updated_at ON user_tasks;
+CREATE TRIGGER update_user_tasks_updated_at
+BEFORE UPDATE ON user_tasks
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 DROP TRIGGER IF EXISTS update_task_settings_updated_at ON task_settings;

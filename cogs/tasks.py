@@ -14,7 +14,8 @@ try:
     from core.task_manager import TaskManager
     from core.embed_builder import EmbedBuilder
     from core.utils import create_embed
-except ImportError:
+except ImportError as e:
+    print(f"Import error in tasks.py: {e}")
     data_manager = None
     TransactionManager = None
     TaskManager = None
@@ -81,23 +82,93 @@ class TaskClaimView(discord.ui.View):
         task_id = str(self.task_id)
 
         try:
-            # Use atomic task claim operation with database-level locking
-            result = await self.atomic_task_claim(guild_id, user_id, task_id)
+            # Use data_manager's atomic_transaction method to save task data
+            if not data_manager:
+                await interaction.followup.send("❌ Data management system not available.", ephemeral=True)
+                return
 
-            if not result['success']:
-                await interaction.followup.send(result['error'], ephemeral=True)
+            tasks_data = data_manager.load_guild_data(guild_id, 'tasks')
+            if not tasks_data:
+                tasks_data = {'tasks': {}, 'user_tasks': {}, 'settings': {'next_task_id': 1}}
+
+            task = tasks_data.get('tasks', {}).get(str(self.task_id))
+            if not task:
+                await interaction.followup.send("❌ Task not found.", ephemeral=True)
+                return
+
+            # Validation checks
+            if task['status'] != 'active':
+                await interaction.followup.send(f"❌ This task is no longer active (Status: {task['status']}).", ephemeral=True)
+                return
+
+            # Check expiry
+            if datetime.now(timezone.utc) > datetime.fromisoformat(task['expires_at']):
+                # Auto-expire task
+                task['status'] = 'expired'
+                tasks_data['metadata']['total_expired'] = tasks_data.get('metadata', {}).get('total_expired', 0) + 1
+                data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
+                await interaction.followup.send("❌ This task has expired.", ephemeral=True)
+                return
+
+            # Check max claims
+            if task['max_claims'] != -1 and task['current_claims'] >= task['max_claims']:
+                await interaction.followup.send("❌ This task has reached maximum claims.", ephemeral=True)
+                return
+
+            # Check if user already claimed
+            user_tasks = tasks_data.get('user_tasks', {}).get(user_id, {})
+            if str(self.task_id) in user_tasks:
+                status = user_tasks[str(self.task_id)]['status']
+                await interaction.followup.send(f"❌ You have already claimed this task (Status: {status}).", ephemeral=True)
+                return
+
+            # Check user task limit
+            settings = tasks_data.get('settings', {})
+            max_per_user = settings.get('max_tasks_per_user', 10)
+            active_count = sum(
+                1 for t in user_tasks.values()
+                if t['status'] in ['claimed', 'in_progress', 'submitted']
+            )
+            if active_count >= max_per_user:
+                await interaction.followup.send(f"❌ You have reached the maximum of {max_per_user} active tasks.", ephemeral=True)
+                return
+
+            # Claim task
+            claimed_at = datetime.now(timezone.utc)
+            deadline = claimed_at + timedelta(hours=task['duration_hours'])
+
+            tasks_data.setdefault('user_tasks', {}).setdefault(user_id, {})[str(self.task_id)] = {
+                'claimed_at': claimed_at.isoformat(),
+                'deadline': deadline.isoformat(),
+                'status': 'in_progress',
+                'proof_message_id': None,
+                'proof_attachments': [],
+                'proof_content': '',
+                'submitted_at': None,
+                'completed_at': None,
+                'notes': ''
+            }
+
+            # Update task claims
+            task['current_claims'] += 1
+            task['assigned_users'].append(user_id)
+
+            # Save data
+            success = data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
+            if not success:
+                await interaction.followup.send("❌ An error occurred while claiming the task. Please try again.", ephemeral=True)
                 return
 
             # Update embed
-            await self.update_task_message(interaction.guild, guild_id, self.task_id, result['task'])
+            await self.update_task_message(interaction.guild, guild_id, self.task_id, task)
 
             # Notify user
             embed = discord.Embed(
                 title="✅ Task Claimed Successfully!",
-                description=f"You have claimed **{result['task']['name']}**",
+                description=f"You have claimed **{task['name']}**",
                 color=discord.Color.green()
             )
-            embed.add_field(name="⏰ Deadline", value=f"<t:{int(result['deadline'].timestamp())}:R>", inline=False)
+            embed.add_field(name="⏰ Deadline", value=f"<t:{int(deadline.timestamp())}:R>", inline=False)
             embed.add_field(
                 name="📝 Submit Proof",
                 value="Use `/task submit` command with proof of completion",

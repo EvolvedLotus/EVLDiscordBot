@@ -707,8 +707,8 @@ class BotAdmin(commands.Cog):
             embed.add_field(name="💸 Transactions", value=f"{len(transactions)}", inline=True)
 
             # Recent activity
-            if transactions:
-                recent_txns = transactions[-5:]  # Last 5 transactions
+            if transactions and 'transactions' in transactions:
+                recent_txns = transactions['transactions'][-5:]  # Last 5 transactions
                 activity_text = ""
                 for txn in reversed(recent_txns):
                     amount = txn.get('amount', 0)
