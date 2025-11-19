@@ -3,9 +3,25 @@ MINIMAL BACKEND.PY WITH CORS - Add this to the TOP of your backend.py file
 This will ensure CORS is configured BEFORE any routes or other setup
 """
 
-from flask import Flask, request, make_response, jsonify
+from flask import Flask, request, make_response, jsonify, send_from_directory, Response, stream_with_context, g
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager, jwt_required
 import os
+import json
+import logging
+import time
+import functools
+import secrets
+import hashlib
+import subprocess
+import threading
+import queue
+from datetime import datetime, timedelta, timezone
+from collections import defaultdict
+import asyncio
+import discord
+from discord.ui import View, Button
+import sys
 
 print("="*50)
 print("🚀 BACKEND.PY STARTING")
