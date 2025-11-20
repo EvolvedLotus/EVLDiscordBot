@@ -1126,22 +1126,74 @@ class BotAdmin(commands.Cog):
         """Set bot status message that persists across restarts."""
         await interaction.response.defer(ephemeral=True)
 
-        # Load guild record
-        guild_result = self.data_manager.supabase.table('guilds').select('bot_status_message, bot_status_type, server_name').eq('guild_id', str(interaction.guild.id)).execute()
-
-        if not guild_result.data or len(guild_result.data) == 0:
-            await interaction.followup.send("❌ Guild configuration not found.", ephemeral=True)
-            return
-
-        guild_data = guild_result.data[0]
-        server_name = guild_data.get('server_name', 'Unknown Server')
-
         # Allow empty message for specific use cases
         if message is None or message.strip() == "":
             # Reset to default based on guild count
             guild_count = len(interaction.client.guilds)
             message = f"{guild_count} servers"
             type = "watching"
+
+        try:
+            # First, try the database approach
+            guild_result = self.data_manager.supabase.table('guilds').select('bot_status_message, bot_status_type, server_name').eq('guild_id', str(interaction.guild.id)).execute()
+
+            guild_data = None
+            server_name = interaction.guild.name if interaction.guild else 'Unknown Server'
+
+            if not guild_result.data or len(guild_result.data) == 0:
+                await interaction.followup.send("❌ Guild configuration not found.", ephemeral=True)
+                return
+
+            guild_data = guild_result.data[0]
+
+        except Exception as db_error:
+            # Database columns don't exist yet
+            if 'bot_status_message does not exist' in str(db_error):
+                embed = discord.Embed(
+                    title="⚠️ Database Update Required",
+                    description="The bot status feature requires a database schema update.",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(
+                    name="Required SQL",
+                    value="```sql\nALTER TABLE guilds\nADD COLUMN IF NOT EXISTS bot_status_message TEXT,\nADD COLUMN IF NOT EXISTS bot_status_type TEXT DEFAULT 'watching';\n```",
+                    inline=False
+                )
+                embed.add_field(
+                    name="Instructions",
+                    value="Run this SQL in your Supabase SQL editor, then try the command again.",
+                    inline=False
+                )
+
+                # Still apply the status temporarily for testing
+                activity_type_map = {
+                    'watching': discord.ActivityType.watching,
+                    'playing': discord.ActivityType.playing,
+                    'listening': discord.ActivityType.listening,
+                    'streaming': discord.ActivityType.streaming
+                }
+
+                try:
+                    activity = discord.Activity(
+                        type=activity_type_map.get(type, discord.ActivityType.watching),
+                        name=message
+                    )
+                    await interaction.client.change_presence(activity=activity)
+
+                    embed.add_field(
+                        name="Status Set Temporarily",
+                        value=f"Type: **{type.title()}**\nMessage: **{message}**",
+                        inline=False
+                    )
+                except Exception as status_error:
+                    logger.error(f"Error setting temp status: {status_error}")
+
+                await interaction.followup.send(embed=embed, ephemeral=True)
+                return
+            else:
+                # Other database error
+                await interaction.followup.send("❌ Database connection error.", ephemeral=True)
+                return
 
         try:
             # Update database
@@ -1168,7 +1220,7 @@ class BotAdmin(commands.Cog):
 
             await interaction.client.change_presence(activity=activity)
 
-            await interaction.followup.send(f"✅ Bot status updated for **{server_name}**!\n🔸 Type: **{type.title()}**\n🔸 Message: **{message}**", ephemeral=True)
+            await interaction.followup.send(f"✅ Bot status updated!\n🔸 Type: **{type.title()}**\n🔸 Message: **{message}**", ephemeral=True)
 
         except Exception as e:
             logger.error(f"Error setting bot status: {e}")
@@ -1179,6 +1231,8 @@ class BotAdmin(commands.Cog):
         """View current bot status settings."""
         await interaction.response.defer(ephemeral=True)
 
+        server_name = interaction.guild.name if interaction.guild else 'Unknown Server'
+
         try:
             # Load current status from database
             guild_result = self.data_manager.supabase.table('guilds').select('bot_status_message, bot_status_type, server_name').eq('guild_id', str(interaction.guild.id)).execute()
@@ -1188,7 +1242,6 @@ class BotAdmin(commands.Cog):
                 return
 
             guild_data = guild_result.data[0]
-            server_name = guild_data.get('server_name', 'Unknown Server')
             current_message = guild_data.get('bot_status_message')
             current_type = guild_data.get('bot_status_type', 'watching')
 
@@ -1220,27 +1273,41 @@ class BotAdmin(commands.Cog):
                     value=f"{status_type}: {presence.name}",
                     inline=False
                 )
+            else:
+                embed.add_field(
+                    name="Current Live Status",
+                    value="None set",
+                    inline=False
+                )
 
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-        except Exception as e:
-            logger.error(f"Error getting bot status: {e}")
-            await interaction.followup.send("❌ Failed to load bot status.", ephemeral=True)
+        except Exception as db_error:
+            # Database columns don't exist yet
+            if 'bot_status_message does not exist' in str(db_error):
+                embed = discord.Embed(
+                    title="⚠️ Database Update Required",
+                    description="The bot status feature requires a database schema update.",
+                    color=discord.Color.orange()
+                )
+                embed.add_field(
+                    name="Required SQL",
+                    value="```sql\nALTER TABLE guilds\nADD COLUMN IF NOT EXISTS bot_status_message TEXT,\nADD COLUMN IF NOT EXISTS bot_status_type TEXT DEFAULT 'watching';\n```",
+                    inline=False
+                )
+                embed.add_field(
+                    name="Instructions",
+                    value="Run this SQL in your Supabase SQL editor to enable bot status management.",
+                    inline=False
+                )
 
+                # Show current status for information
+                presence = interaction.client.user.activity
+                if presence:
+                    status_type = str(presence.type).split('.')[1].title()
+                    embed.add_field(
+                        name="Current Live Status",
+                        value=f"{status_type}: {presence.name}",
+                        inline=False
+                    )
 
-async def setup(bot):
-    """Setup the bot admin cog."""
-    cog = BotAdmin(bot)
-
-    # Set managers (will be called after cog is loaded)
-    # This is a bit of a hack, but necessary for the circular dependency
-    await bot.add_cog(cog)
-
-    # Set managers after cog is loaded
-    data_manager = getattr(bot, 'data_manager', None)
-    transaction_manager = getattr(bot, 'transaction_manager', None)
-    print(f"Setting up BotAdmin: data_manager={data_manager is not None}, transaction_manager={transaction_manager is not None}")
-    if data_manager and transaction_manager:
-        cog.set_managers(data_manager, transaction_manager)
-    else:
-        print("Warning: BotAdmin managers not set properly")
