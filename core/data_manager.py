@@ -207,17 +207,6 @@ class DataManager:
                 listener(event_type, data)
             except Exception as e:
                 logger.error(f"Error in listener {listener.__name__}: {e}")
-
-    def broadcast_event(self, event_type: str, data: Dict):
-        """Broadcast event to all listeners (alias for _notify_listeners)"""
-        self._notify_listeners(event_type, data)
-
-    def load_guild_data(self, guild_id: int, data_type: str, force_reload: bool = False) -> Optional[Dict]:
-        """Load guild-specific data from Supabase with retry logic"""
-        cache_key = f"{guild_id}:{data_type}"
-
-        # Check cache with data-type-specific TTL
-        if not force_reload and cache_key in self._cache:
             cache_age = time.time() - self._cache_timestamps.get(cache_key, 0)
             # Use shorter TTL for balance-critical data
             ttl = self._balance_cache_ttl if data_type == 'currency' else self._cache_ttl

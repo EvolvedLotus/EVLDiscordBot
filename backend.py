@@ -531,6 +531,15 @@ def get_channels(server_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/<server_id>/roles', methods=['GET'])
+@require_guild_access
+def get_roles(server_id):
+    try:
+        roles = data_manager.get_guild_roles(server_id)
+        return jsonify(roles), 200
+    except Exception as e:
+        return safe_error_response(e)
+
 # ========== USER MANAGEMENT ==========
 @app.route('/api/<server_id>/users', methods=['GET'])
 @require_guild_access

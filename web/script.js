@@ -9,6 +9,9 @@ function getBackendUrl(endpoint) {
     return `http://localhost:5000${endpoint}`;
 }
 
+// Alias for compatibility
+const apiUrl = getBackendUrl;
+
 // SSE Connection Management
 let eventSource = null;
 let reconnectDelay = 1000;
@@ -50,7 +53,7 @@ function updatePageTitle(status) {
 }
 
 function getStatusText(status) {
-    switch(status) {
+    switch (status) {
         case 'connected': return '🟢 Connected';
         case 'connecting': return '🟡 Connecting...';
         case 'disconnected': return '🔴 Disconnected';
@@ -153,7 +156,7 @@ function initRealtimeUpdates() {
 function getEventFiltersForTab(currentTab) {
     const filters = ['guild_update'];
 
-    switch(currentTab) {
+    switch (currentTab) {
         case 'users':
             filters.push('balance_update', 'inventory_update', 'guild_update');
             break;
@@ -215,7 +218,7 @@ function handleDataUpdate(data) {
         window.refreshCurrentTab(data);
     } else {
         // Fallback refresh logic
-        switch(currentTab) {
+        switch (currentTab) {
             case 'users':
                 if (typeof loadUsers === 'function') loadUsers();
                 break;
@@ -249,7 +252,7 @@ function attemptReconnection() {
     const jitter = Math.random() * 1000;
     const delay = Math.min(reconnectDelay + jitter, 30000);
 
-    console.log(`Attempting SSE reconnection in ${Math.round(delay/1000)}s (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+    console.log(`Attempting SSE reconnection in ${Math.round(delay / 1000)}s (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
 
     setTimeout(() => {
         isReconnecting = false;
@@ -300,7 +303,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     console.log('SSE Module loaded, initializing connection...');
     initRealtimeUpdates();
 });
@@ -353,7 +356,7 @@ function showSuccess(message) {
 }
 
 // Global error handler for unhandled errors
-window.addEventListener('error', function(e) {
+window.addEventListener('error', function (e) {
     showError(`JavaScript Error: ${e.message}`, {
         filename: e.filename,
         lineno: e.lineno,
@@ -363,7 +366,7 @@ window.addEventListener('error', function(e) {
 });
 
 // Global error handler for unhandled promise rejections
-window.addEventListener('unhandledrejection', function(e) {
+window.addEventListener('unhandledrejection', function (e) {
     showError(`Unhandled Promise Rejection: ${e.reason}`, e.reason);
 });
 
@@ -686,7 +689,7 @@ function showTab(tabName) {
 
 // Load data for specific tabs
 async function loadTabData(tabName) {
-    switch(tabName) {
+    switch (tabName) {
         case 'overview':
             await loadOverviewData();
             break;
@@ -1623,7 +1626,7 @@ let currentServer = null;
 function initUsersList() {
     // Add click event listeners to user table rows after they are loaded
     document.querySelectorAll('#users-table-body tr').forEach(row => {
-        row.addEventListener('click', function(e) {
+        row.addEventListener('click', function (e) {
             const userId = this.dataset.userId;
             if (userId) {
                 selectUser(userId);
@@ -3137,10 +3140,10 @@ function viewUserDetails(userId) {
             'No items';
 
         alert(`${user.display_name} (${user.username}#${user.discriminator})\n\n` +
-              `Balance: $${user.balance || 0}\n` +
-              `Inventory:\n${inventoryText}\n\n` +
-              `Roles: ${user.roles?.join(', ') || 'None'}\n` +
-              `Joined: ${user.joined_at ? new Date(user.joined_at).toLocaleDateString() : 'Unknown'}`);
+            `Balance: $${user.balance || 0}\n` +
+            `Inventory:\n${inventoryText}\n\n` +
+            `Roles: ${user.roles?.join(', ') || 'None'}\n` +
+            `Joined: ${user.joined_at ? new Date(user.joined_at).toLocaleDateString() : 'Unknown'}`);
     }
 }
 
@@ -3148,7 +3151,7 @@ function viewUserDetails(userId) {
 function setupUserSearch() {
     const searchInput = document.getElementById('user-search');
     if (searchInput) {
-        searchInput.addEventListener('input', function() {
+        searchInput.addEventListener('input', function () {
             const searchTerm = this.value.toLowerCase();
             const filteredUsers = allUsers.filter(user =>
                 user.username.toLowerCase().includes(searchTerm) ||
@@ -3351,445 +3354,39 @@ function onServerChange() {
     }
 }
 
-// Global variables for SSE with enhanced reconnection
-let eventSource = null;
-let reconnectDelay = 1000;
-let reconnectAttempts = 0;
-let maxReconnectAttempts = 50; // Increased for better reliability
-let isReconnecting = false;
-let lastHeartbeat = Date.now();
-let heartbeatInterval = null;
-let connectionStatus = 'disconnected'; // 'connected', 'connecting', 'disconnected', 'error'
-let clientId = null; // Store client ID for reconnection
-let reconnectTimeout = null; // Store timeout ID for cleanup
-
-// SSE Connection Status Management
-function updateConnectionStatus(status, message = '') {
-    connectionStatus = status;
-    const statusElement = document.getElementById('sse-status');
-    if (statusElement) {
-        statusElement.className = `sse-status status-${status}`;
-        statusElement.textContent = message || getStatusText(status);
-    }
-
-    // Update connection indicator
-    const indicator = document.getElementById('connection-indicator');
-    if (indicator) {
-        indicator.className = `connection-indicator ${status}`;
-    }
-
-    console.log(`SSE Status: ${status}${message ? ' - ' + message : ''}`);
-
-    // Update page title to show connection status
-    updatePageTitle(status);
-}
-
-function updatePageTitle(status) {
-    const baseTitle = 'Task Bot Dashboard';
-    const statusIndicators = {
-        'connected': '🟢',
-        'connecting': '🟡',
-        'disconnected': '🔴',
-        'error': '❌'
-    };
-
-    document.title = `${statusIndicators[status] || '⚪'} ${baseTitle}`;
-}
-
-function getStatusText(status) {
-    switch(status) {
-        case 'connected': return '🟢 Connected';
-        case 'connecting': return '🟡 Connecting...';
-        case 'disconnected': return '🔴 Disconnected';
-        case 'error': return '❌ Connection Error';
-        default: return '⚪ Unknown';
-    }
-}
-
-// Initialize real-time updates with enhanced reconnection
-function initRealtimeUpdates() {
-    if (isReconnecting) {
-        console.log('Already attempting to reconnect, skipping...');
-        return;
-    }
-
-    if (eventSource) {
-        eventSource.close();
-        eventSource = null;
-    }
-
-    updateConnectionStatus('connecting', `Attempting to connect... (${reconnectAttempts + 1}/${maxReconnectAttempts})`);
-
-    // Build SSE URL with authentication and filters
-    let sseUrl = getBackendUrl('/api/stream');
-    const params = new URLSearchParams();
-
-    // Generate or use existing client ID
-    if (!clientId) {
-        clientId = 'web_' + Math.random().toString(36).substr(2, 9);
-    }
-    params.append('client_id', clientId);
-
-    // Add server filter if selected
-    if (currentServerId) {
-        params.append('guilds', currentServerId);
-    }
-
-    // Add event type filters based on current tab
-    const eventFilters = getEventFiltersForTab(currentTab);
-    if (eventFilters.length > 0) {
-        params.append('subscriptions', eventFilters.join(','));
-    }
-
-    if (params.toString()) {
-        sseUrl += '?' + params.toString();
-    }
-
+// Load servers for the selector
+async function loadServers() {
     try {
-        // Create EventSource with credentials for authentication
-        eventSource = new EventSource(sseUrl, { withCredentials: true });
+        console.log('Loading servers...');
+        const response = await fetch(apiUrl('/api/servers'));
+        const data = await response.json();
 
-        // Connection opened
-        eventSource.onopen = (event) => {
-            console.log('SSE connection opened');
-            updateConnectionStatus('connected');
-            reconnectAttempts = 0;
-            reconnectDelay = 1000;
-            isReconnecting = false;
+        const serverSelect = document.getElementById('server-select');
+        if (!serverSelect) return;
 
-            // Start heartbeat monitoring
-            startHeartbeatMonitoring();
-        };
+        // Keep the default option
+        serverSelect.innerHTML = '<option value="">-- Select Server --</option>';
 
-        // Message received
-        eventSource.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
+        if (data.servers && data.servers.length > 0) {
+            data.servers.forEach(server => {
+                const option = document.createElement('option');
+                option.value = server.id;
+                option.textContent = server.name;
+                serverSelect.appendChild(option);
+            });
 
-                // Handle keepalive
-                if (data.type === 'keepalive') {
-                    lastHeartbeat = Date.now();
-                    return;
-                }
-
-                // Handle connection info
-                if (data.type === 'connected') {
-                    console.log('SSE connected with client ID:', data.client_id);
-                    if (data.client_id) {
-                        clientId = data.client_id; // Update with server-assigned ID
-                    }
-                    return;
-                }
-
-                console.log('Received SSE update:', data);
-
-                // Handle different update types
-                handleSSEEvent(data);
-
-                // Reset reconnect delay on successful message
-                reconnectDelay = 1000;
-
-            } catch (error) {
-                console.error('Error parsing SSE event data:', error, 'Raw data:', event.data);
-                // Continue with other event handling even if this event failed
-            }
-        };
-
-        // Connection error
-        eventSource.onerror = (event) => {
-            console.error('SSE connection error:', event);
-            updateConnectionStatus('error', 'Connection failed');
-
-            // Stop heartbeat monitoring
-            stopHeartbeatMonitoring();
-
-            // Close current connection
-            if (eventSource) {
-                eventSource.close();
-                eventSource = null;
-            }
-
-            // Attempt reconnection
-            attemptReconnection();
-        };
-
-    } catch (error) {
-        console.error('Failed to create EventSource:', error);
-        updateConnectionStatus('error', 'Failed to initialize connection');
-        attemptReconnection();
-    }
-        case 'users':
-            filters.push('balance_update', 'inventory_update', 'guild_update');
-            break;
-        case 'shop':
-            filters.push('shop_update', 'inventory_update', 'guild_update');
-            break;
-        case 'transactions':
-            filters.push('balance_update', 'inventory_update', 'guild_update');
-            break;
-        default:
-            filters.push('guild_update');
-    }
-
-    return filters;
-}
-
-// Handle SSE events
-function handleSSEEvent(data) {
-    console.log('SSE Event:', data);
-
-    switch (data.type) {
-        case 'task_created':
-            handleTaskCreated(data);
-            break;
-        case 'task_updated':
-            handleTaskUpdated(data);
-            break;
-        case 'task_deleted':
-            handleTaskDeleted(data);
-            break;
-        case 'shop_item_created':
-            handleShopItemCreated(data);
-            break;
-        case 'shop_item_deleted':
-            handleShopItemDeleted(data);
-            break;
-        case 'user_updated':
-            handleUserUpdated(data);
-            break;
-        case 'embed_created':
-            handleEmbedCreated(data);
-            break;
-        case 'announcement_posted':
-            handleAnnouncementPosted(data);
-            break;
-        case 'guild_update':
-            if (currentServerId && data.guild_id === currentServerId) {
-                // Refresh appropriate tab based on data_type
-                if (data.data_type === 'currency' && currentTab === 'users') {
-                    loadUsers();
-                } else if (data.data_type === 'currency' && currentTab === 'shop') {
-                    loadShop();
-                } else if (data.data_type === 'tasks' && currentTab === 'tasks') {
-                    loadTasks();
-                } else if (data.data_type === 'transactions' && currentTab === 'transactions') {
-                    loadTransactions();
-                }
-            }
-            break;
-        case 'task_update':
-            // Handle task-specific updates
-            if (currentServerId && data.guild_id === currentServerId) {
-                handleTaskUpdate(data);
-            }
-            break;
-        case 'balance_update':
-            // Handle balance updates
-            if (currentServerId && data.guild_id === currentServerId) {
-                if (currentTab === 'users') {
-                    loadUsers();
-                }
-                if (currentTab === 'transactions') {
-                    loadTransactions();
-                }
-            }
-            break;
-        case 'shop_update':
-            if (currentServerId && data.guild_id === currentServerId && currentTab === 'shop') {
-                // Handle specific shop updates
-                if (data.action === 'item_added' || data.action === 'item_updated' || data.action === 'item_deleted') {
-                    console.log('Shop item changed, refreshing shop...');
-                    loadShop();
-                }
-            }
-            break;
-        case 'inventory_update':
-            if (currentServerId && data.guild_id === currentServerId) {
-                // Handle inventory updates
-                if (currentTab === 'users') {
-                    loadUsers(); // Refresh user balances
-                }
-                if (currentTab === 'transactions') {
-                    loadTransactions(); // Refresh transaction history
-                }
-            }
-            break;
-        case 'batch':
-            // Handle batched events
-            console.log(`Processing batch of ${data.events.length} events for ${data.event_type}`);
-            data.events.forEach(event => handleSSEEvent(event));
-            break;
-        default:
-            console.log('Unhandled SSE event:', data.type);
-    }
-}
-
-function handleTaskCreated(data) {
-    if (data.guild_id !== getCurrentServerId()) return;
-    // Add task to UI without full refresh
-    addTaskToList(data.task);
-}
-
-function handleTaskUpdated(data) {
-    if (data.guild_id !== getCurrentServerId()) return;
-    // Update task in UI without full refresh
-    updateTaskInList(data.task_id, data.task);
-}
-
-function handleTaskDeleted(data) {
-    if (data.guild_id !== getCurrentServerId()) return;
-    // Remove task from UI
-    removeTaskFromList(data.task_id);
-}
-
-function handleShopItemCreated(data) {
-    if (data.guild_id !== getCurrentServerId()) return;
-    // Add shop item to UI without full refresh
-    addShopItemToList(data.item);
-}
-
-function handleShopItemDeleted(data) {
-    if (data.guild_id !== getCurrentServerId()) return;
-    // Remove shop item from UI
-    removeShopItemFromList(data.item_id);
-}
-
-function handleUserUpdated(data) {
-    if (data.guild_id !== getCurrentServerId()) return;
-    // Update user in UI without full refresh
-    updateUserInList(data.user_id, data.user);
-}
-
-function handleEmbedCreated(data) {
-    if (data.guild_id !== getCurrentServerId()) return;
-    // Add embed to UI without full refresh
-    addEmbedToList(data.embed);
-}
-
-function handleAnnouncementPosted(data) {
-    if (data.guild_id !== getCurrentServerId()) return;
-    // Add announcement to UI without full refresh
-    addAnnouncementToList(data.announcement);
-}
-
-function getCurrentServerId() {
-    return currentServerId;
-}
-
-// Helper functions for UI updates (placeholders for now)
-function addTaskToList(task) {
-    console.log('Adding task to list:', task);
-    // TODO: Implement actual UI update
-}
-
-function updateTaskInList(taskId, task) {
-    console.log('Updating task in list:', taskId, task);
-    // TODO: Implement actual UI update
-}
-
-function removeTaskFromList(taskId) {
-    console.log('Removing task from list:', taskId);
-    // TODO: Implement actual UI update
-}
-
-function addShopItemToList(item) {
-    console.log('Adding shop item to list:', item);
-    // TODO: Implement actual UI update
-}
-
-function removeShopItemFromList(itemId) {
-    console.log('Removing shop item from list:', itemId);
-    // TODO: Implement actual UI update
-}
-
-function updateUserInList(userId, user) {
-    console.log('Updating user in list:', userId, user);
-    // TODO: Implement actual UI update
-}
-
-function addEmbedToList(embed) {
-    console.log('Adding embed to list:', embed);
-    // TODO: Implement actual UI update
-}
-
-function addAnnouncementToList(announcement) {
-    console.log('Adding announcement to list:', announcement);
-    // TODO: Implement actual UI update
-}
-
-// Attempt reconnection with exponential backoff
-function attemptReconnection() {
-    if (isReconnecting) return;
-
-    isReconnecting = true;
-    reconnectAttempts++;
-
-    if (reconnectAttempts >= maxReconnectAttempts) {
-        updateConnectionStatus('error', `Max reconnection attempts (${maxReconnectAttempts}) reached`);
-        showNotification('⚠️ Real-time updates unavailable. Please refresh the page.', 'warning');
-        isReconnecting = false;
-        return;
-    }
-
-    // Exponential backoff with jitter
-    const jitter = Math.random() * 1000;
-    const delay = Math.min(reconnectDelay + jitter, 30000);
-
-    console.log(`Attempting SSE reconnection in ${Math.round(delay/1000)}s (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
-
-    setTimeout(() => {
-        isReconnecting = false;
-        initRealtimeUpdates();
-    }, delay);
-
-    // Increase delay for next attempt
-    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
-}
-
-// Start heartbeat monitoring
-function startHeartbeatMonitoring() {
-    stopHeartbeatMonitoring(); // Clear any existing interval
-
-    heartbeatInterval = setInterval(() => {
-        const timeSinceLastHeartbeat = Date.now() - lastHeartbeat;
-
-        // If no heartbeat for 60 seconds, consider connection stale
-        if (timeSinceLastHeartbeat > 60000) {
-            console.warn('SSE heartbeat timeout, reconnecting...');
-            updateConnectionStatus('error', 'Heartbeat timeout');
-            if (eventSource) {
-                eventSource.close();
-            }
+            console.log(`Loaded ${data.servers.length} servers`);
+        } else {
+            console.log('No servers found');
         }
-    }, 30000); // Check every 30 seconds
-}
-
-// Stop heartbeat monitoring
-function stopHeartbeatMonitoring() {
-    if (heartbeatInterval) {
-        clearInterval(heartbeatInterval);
-        heartbeatInterval = null;
+    } catch (error) {
+        console.error('Error loading servers:', error);
+        showNotification('Failed to load servers', 'error');
     }
 }
-
-// Manual reconnection
-function reconnectSSE() {
-    console.log('Manual SSE reconnection requested');
-    reconnectAttempts = 0; // Reset attempt counter
-    reconnectDelay = 1000; // Reset delay
-    initRealtimeUpdates();
-}
-
-// Cleanup on page unload
-window.addEventListener('beforeunload', () => {
-    if (eventSource) {
-        eventSource.close();
-    }
-    stopHeartbeatMonitoring();
-});
 
 // Initialize the dashboard
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Initialize authentication first
     initAuth();
 
@@ -3807,25 +3404,42 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // Initialize dashboard after authentication
-function initializeDashboard() {
-    loadServers();
-    loadOverviewData();
+async function initializeDashboard() {
+    console.log('Initializing dashboard...');
 
-    // Set up server selector
-    const serverSelect = document.getElementById('server-select');
-    if (serverSelect) {
-        serverSelect.addEventListener('change', onServerChange);
-    }
+    try {
+        // Ensure dashboard is visible
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('main-dashboard').style.display = 'flex';
 
-    // Initialize real-time updates
-    initRealtimeUpdates();
+        // Load initial data
+        await loadServers();
+        await loadOverviewData();
 
-    // Auto-refresh overview every 30 seconds
-    setInterval(() => {
-        if (currentTab === 'overview') {
-            loadOverviewData();
+        // Set up server selector
+        const serverSelect = document.getElementById('server-select');
+        if (serverSelect) {
+            serverSelect.addEventListener('change', onServerChange);
         }
-    }, 30000);
+
+        // Initialize real-time updates
+        initRealtimeUpdates();
+
+        // Auto-refresh overview every 30 seconds
+        setInterval(() => {
+            if (currentTab === 'overview') {
+                loadOverviewData();
+            }
+        }, 30000);
+
+        console.log('Dashboard initialized successfully');
+    } catch (error) {
+        console.error('Error initializing dashboard:', error);
+        showNotification('Error loading dashboard data. Please refresh.', 'error');
+
+        // Ensure dashboard is still visible even if data load fails
+        document.getElementById('main-dashboard').style.display = 'flex';
+    }
 }
 
 // Command templates
@@ -3886,7 +3500,7 @@ function setupDurationSelector() {
     const durationValueInput = document.getElementById('task-duration-value');
 
     if (durationTypeSelect && durationValueInput) {
-        durationTypeSelect.addEventListener('change', function() {
+        durationTypeSelect.addEventListener('change', function () {
             if (this.value === 'forever') {
                 durationValueInput.disabled = true;
                 durationValueInput.value = '';
@@ -4212,12 +3826,12 @@ function viewUserDetails() {
             'No items';
 
         alert(`${user.display_name} (${user.username}#${user.discriminator})\n\n` +
-              `Balance: $${user.balance || 0}\n` +
-              `Total Earned: $${user.total_earned || 0}\n` +
-              `Total Spent: $${user.total_spent || 0}\n\n` +
-              `Inventory:\n${inventoryText}\n\n` +
-              `Roles: ${user.roles?.join(', ') || 'None'}\n` +
-              `Joined: ${user.joined_at ? new Date(user.joined_at).toLocaleDateString() : 'Unknown'}`);
+            `Balance: $${user.balance || 0}\n` +
+            `Total Earned: $${user.total_earned || 0}\n` +
+            `Total Spent: $${user.total_spent || 0}\n\n` +
+            `Inventory:\n${inventoryText}\n\n` +
+            `Roles: ${user.roles?.join(', ') || 'None'}\n` +
+            `Joined: ${user.joined_at ? new Date(user.joined_at).toLocaleDateString() : 'Unknown'}`);
     }
 }
 
@@ -4469,9 +4083,9 @@ async function loadAnnouncements() {
                     <div class="announcement-actions">
                         <button onclick="editAnnouncement('${ann.id}')" class="btn-small" title="Edit">✏️</button>
                         ${!ann.pinned
-                            ? `<button onclick="pinAnnouncement('${ann.id}')" class="btn-small" title="Pin">📌</button>`
-                            : `<button onclick="unpinAnnouncement('${ann.id}')" class="btn-small" title="Unpin">📍</button>`
-                        }
+                ? `<button onclick="pinAnnouncement('${ann.id}')" class="btn-small" title="Pin">📌</button>`
+                : `<button onclick="unpinAnnouncement('${ann.id}')" class="btn-small" title="Unpin">📍</button>`
+            }
                         <button onclick="deleteAnnouncement('${ann.id}')" class="btn-small btn-danger" title="Delete">🗑️</button>
                     </div>
                 </div>
@@ -4488,9 +4102,9 @@ async function loadAnnouncements() {
                 </div>
 
                 ${data.task_announcements && Object.values(data.task_announcements).find(ta => ta.announcement_id === ann.id)
-                    ? `<div class="task-link">🔗 Linked to Task ID: ${Object.keys(data.task_announcements).find(tid => data.task_announcements[tid].announcement_id === ann.id)}</div>`
-                    : ''
-                }
+                ? `<div class="task-link">🔗 Linked to Task ID: ${Object.keys(data.task_announcements).find(tid => data.task_announcements[tid].announcement_id === ann.id)}</div>`
+                : ''
+            }
             </div>
         `).join('');
 
@@ -4922,8 +4536,8 @@ async function saveChannelSetting(channelType) {
 
     try {
         const configKey = channelType === 'task' ? 'task_channel_id' :
-                         channelType === 'shop' ? 'shop_channel_id' :
-                         channelType === 'welcome' ? 'welcome_channel' : 'log_channel';
+            channelType === 'shop' ? 'shop_channel_id' :
+                channelType === 'welcome' ? 'welcome_channel' : 'log_channel';
 
         const response = await fetch(`/api/${currentServerId}/config`, {
             method: 'PUT',
@@ -5671,17 +5285,17 @@ function displayCommandPermissions(permissions) {
                 <td>
                     <div class="role-tags" id="allowed-roles-${cmd}">
                         ${(perm.allowed_roles || []).map(roleId => {
-                            const role = currentGuildRoles.find(r => r.role_id === roleId);
-                            return role ? `<span class="role-tag">${escapeHtml(role.role_name)}</span>` : '';
-                        }).join('')}
+            const role = currentGuildRoles.find(r => r.role_id === roleId);
+            return role ? `<span class="role-tag">${escapeHtml(role.role_name)}</span>` : '';
+        }).join('')}
                     </div>
                 </td>
                 <td>
                     <div class="role-tags" id="denied-roles-${cmd}">
                         ${(perm.denied_roles || []).map(roleId => {
-                            const role = currentGuildRoles.find(r => r.role_id === roleId);
-                            return role ? `<span class="role-tag denied">${escapeHtml(role.role_name)}</span>` : '';
-                        }).join('')}
+            const role = currentGuildRoles.find(r => r.role_id === roleId);
+            return role ? `<span class="role-tag denied">${escapeHtml(role.role_name)}</span>` : '';
+        }).join('')}
                     </div>
                 </td>
                 <td>
@@ -5729,8 +5343,8 @@ function editCommandPermissions(commandName) {
                 <label>Allowed Roles:</label>
                 <select id="allowed-roles-select" multiple class="form-input" style="height: 150px;">
                     ${currentGuildRoles.filter(r => r.role_name !== '@everyone').map(role =>
-                        `<option value="${role.role_id}">${escapeHtml(role.role_name)}</option>`
-                    ).join('')}
+        `<option value="${role.role_id}">${escapeHtml(role.role_name)}</option>`
+    ).join('')}
                 </select>
             </div>
 
@@ -5738,8 +5352,8 @@ function editCommandPermissions(commandName) {
                 <label>Denied Roles:</label>
                 <select id="denied-roles-select" multiple class="form-input" style="height: 150px;">
                     ${currentGuildRoles.filter(r => r.role_name !== '@everyone').map(role =>
-                        `<option value="${role.role_id}">${escapeHtml(role.role_name)}</option>`
-                    ).join('')}
+        `<option value="${role.role_id}">${escapeHtml(role.role_name)}</option>`
+    ).join('')}
                 </select>
             </div>
 
@@ -5938,8 +5552,8 @@ function displayUserRolesManager(userRoles) {
     container.innerHTML = `
         <div class="roles-checklist">
             ${currentGuildRoles.filter(r => r.role_name !== '@everyone' && !r.is_managed).map(role => {
-                const hasRole = userRoles.some(ur => ur.id === role.role_id);
-                return `
+        const hasRole = userRoles.some(ur => ur.id === role.role_id);
+        return `
                     <label class="role-checkbox">
                         <input type="checkbox"
                                value="${role.role_id}"
@@ -5948,7 +5562,7 @@ function displayUserRolesManager(userRoles) {
                         <span style="color: ${role.role_color}">${escapeHtml(role.role_name)}</span>
                     </label>
                 `;
-            }).join('')}
+    }).join('')}
         </div>
     `;
 }
@@ -6377,7 +5991,7 @@ function handleSSEMessage(event) {
 // ============= INITIALIZATION =============
 
 // Modify existing init function
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', async function () {
     // Existing initialization...
 
     // Check authentication
@@ -6448,7 +6062,7 @@ function initializeTabs() {
             const tabName = tab.dataset.tab;
 
             // Load appropriate content
-            switch(tabName) {
+            switch (tabName) {
                 case 'dashboard':
                     await loadDashboardTab();
                     break;
@@ -7182,17 +6796,17 @@ function setupEmbedPreview() {
     });
 
     // Color picker sync
-    document.getElementById('embed-color').addEventListener('input', function() {
+    document.getElementById('embed-color').addEventListener('input', function () {
         document.getElementById('embed-color-hex').value = this.value;
         updateEmbedPreview();
     });
 
     // Character counters
-    document.getElementById('embed-title').addEventListener('input', function() {
+    document.getElementById('embed-title').addEventListener('input', function () {
         document.getElementById('title-count').textContent = `${this.value.length}/256`;
     });
 
-    document.getElementById('embed-description').addEventListener('input', function() {
+    document.getElementById('embed-description').addEventListener('input', function () {
         document.getElementById('desc-count').textContent = `${this.value.length}/4096`;
     });
 
@@ -8001,7 +7615,7 @@ function initAnnouncementsTab() {
 
 // Add config to tab loading
 function loadTabData(tabName) {
-    switch(tabName) {
+    switch (tabName) {
         case 'dashboard':
             loadOverviewData();
             break;
@@ -8044,7 +7658,7 @@ function loadTabData(tabName) {
 // ============= INITIALIZATION =============
 
 // Modify existing init function
-document.addEventListener('DOMContentLoaded', async function() {
+document.addEventListener('DOMContentLoaded', async function () {
     // Check authentication first
     const isAuthenticated = await checkAuth();
     if (!isAuthenticated) {
@@ -8177,8 +7791,8 @@ async function saveChannelSetting(channelType) {
 
     try {
         const configKey = channelType === 'task' ? 'task_channel_id' :
-                         channelType === 'shop' ? 'shop_channel_id' :
-                         channelType === 'welcome' ? 'welcome_channel' : 'log_channel';
+            channelType === 'shop' ? 'shop_channel_id' :
+                channelType === 'welcome' ? 'welcome_channel' : 'log_channel';
 
         const response = await fetch(`/api/${currentServerId}/config`, {
             method: 'PUT',
