@@ -443,8 +443,23 @@ function loadTabData(tabName) {
         case 'server-settings':
             loadServerSettingsTab();
             break;
+        case 'config':
+            loadServerSettingsTab(); // Server Config uses same loader as Server Settings
+            break;
+        case 'settings':
+            loadGlobalSettings();
+            break;
         case 'permissions':
             loadPermissionsTab();
+            break;
+        case 'permissions-tab':
+            loadCommandPermissions();
+            break;
+        case 'roles-tab':
+            loadRolesTab();
+            break;
+        case 'moderation-tab':
+            loadModerationTab();
             break;
         case 'logs':
             loadLogs();
@@ -1053,4 +1068,56 @@ async function updateBotStatus() {
         console.error('Error updating bot status:', error);
         showNotification('Error updating bot status', 'error');
     }
+}
+
+// ========== MISSING TAB LOADERS ==========
+async function loadGlobalSettings() {
+    console.log('Loading global settings...');
+    const settingsContent = document.getElementById('settings-content');
+    if (!settingsContent) return;
+
+    settingsContent.innerHTML = '<div class="info-state">Global settings coming soon</div>';
+}
+
+async function loadCommandPermissions() {
+    console.log('Loading command permissions...');
+    const permissionsList = document.getElementById('permissions-list');
+    if (!permissionsList) return;
+
+    permissionsList.innerHTML = '<tr><td colspan="5" class="text-center">Command permissions coming soon</td></tr>';
+}
+
+async function loadRolesTab() {
+    console.log('Loading roles...');
+    try {
+        const data = await apiCall(`/api/${currentServerId}/roles`);
+        const rolesList = document.getElementById('roles-list');
+
+        if (!rolesList) return;
+
+        if (data && data.roles && data.roles.length > 0) {
+            let html = '<div class="roles-grid">';
+            data.roles.forEach(role => {
+                html += `
+                    <div class="role-card" style="border-left: 4px solid ${role.color || '#99AAB5'}">
+                        <h4>${role.name}</h4>
+                        <p>ID: ${role.id}</p>
+                        <p>Members: ${role.member_count || 0}</p>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            rolesList.innerHTML = html;
+        } else {
+            rolesList.innerHTML = '<p class="text-center">No roles found. Make sure the bot is running.</p>';
+        }
+    } catch (error) {
+        console.error('Failed to load roles:', error);
+        showNotification('Failed to load roles', 'error');
+    }
+}
+
+async function loadModerationTab() {
+    console.log('Moderation tab loaded - interactive forms already in HTML');
+    // The moderation tab has static forms, no data to load
 }

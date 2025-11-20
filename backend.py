@@ -555,7 +555,7 @@ def get_channels(server_id):
 def get_roles(server_id):
     try:
         roles = data_manager.get_guild_roles(server_id)
-        return jsonify(roles), 200
+        return jsonify({'roles': roles}), 200
     except Exception as e:
         return safe_error_response(e)
 
