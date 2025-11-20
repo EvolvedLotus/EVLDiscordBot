@@ -442,17 +442,7 @@ class ModerationCommands(commands.Cog):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="modlog", description="View recent moderation logs")
-    @moderator_only_interaction()
-    async def modlog(self, interaction: discord.Interaction, page: int = 1):
-        """View recent moderation action logs (duplicate of /moderation_logs)"""
-        await self.moderation_logs(interaction, page)
 
-    @app_commands.command(name="modstats", description="View moderation statistics")
-    @moderator_only_interaction()
-    async def modstats(self, interaction: discord.Interaction):
-        """View moderation statistics for the server (duplicate of /moderation_stats)"""
-        await self.moderation_stats(interaction)
 
     @app_commands.command(name="timeout", description="Timeout a user for a specified duration")
     @moderator_only_interaction()
