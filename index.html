@@ -734,6 +734,62 @@
         </div>
     </div>
 
+    <!-- Server Config Tab -->
+    <div id="config" class="tab-content">
+        <div class="section-header">
+            <h2>🔧 Server Configuration</h2>
+            <div class="header-actions">
+                <button onclick="loadServerSettings()" class="btn-primary">🔄 Refresh</button>
+                <button onclick="saveServerSettings()" class="btn-success">💾 Save Changes</button>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="settings-section">
+                <h3>🤖 Bot Status Configuration</h3>
+                
+                <div class="form-group">
+                    <label for="bot-status-type">Status Type:</label>
+                    <select id="bot-status-type" name="bot_status_type">
+                        <option value="playing">Playing</option>
+                        <option value="watching">Watching</option>
+                        <option value="listening">Listening to</option>
+                        <option value="competing">Competing in</option>
+                        <option value="streaming">Streaming</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="bot-status-message">Status Message:</label>
+                    <input type="text" id="bot-status-message" name="bot_status_message" maxlength="128"
+                        placeholder="Enter custom status message">
+                    <small>Max 128 characters. Example: "with the economy" or "your requests"</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="bot-presence">Bot Presence:</label>
+                    <select id="bot-presence" name="bot_presence">
+                        <option value="online">🟢 Online</option>
+                        <option value="idle">🟠 Idle</option>
+                        <option value="dnd">🔴 Do Not Disturb</option>
+                        <option value="invisible">⚫ Invisible</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="streaming-url-group" style="display: none;">
+                    <label for="streaming-url">Streaming URL:</label>
+                    <input type="url" id="streaming-url" name="streaming_url" placeholder="https://twitch.tv/yourname">
+                    <small>Required when Status Type is "Streaming"</small>
+                </div>
+
+                <button type="button" onclick="updateBotStatus()" class="btn-primary">Update Bot Status</button>
+                <div id="bot-status-preview" class="status-preview">
+                    <strong>Preview:</strong> <span id="status-preview-text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Logs Tab -->
     <div id="logs" class="tab-content">
         <div class="section-header">

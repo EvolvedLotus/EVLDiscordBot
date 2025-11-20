@@ -555,3 +555,31 @@ class TaskManager:
         except Exception as e:
             logger.error(f"Error getting task statistics for guild {guild_id}: {e}")
             return {}
+
+    def get_tasks(self, guild_id: int) -> List[Dict]:
+        """
+        Get all tasks for a guild (Admin view).
+        
+        Args:
+            guild_id: Guild ID
+            
+        Returns:
+            List of task dictionaries
+        """
+        try:
+            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
+            tasks = tasks_data.get('tasks', {})
+            
+            tasks_list = []
+            for task_id, task in tasks.items():
+                # Ensure task_id is in the dict
+                task['task_id'] = task_id
+                tasks_list.append(task)
+                
+            # Sort by creation date if available, or ID
+            tasks_list.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+            
+            return tasks_list
+        except Exception as e:
+            logger.error(f"Error getting tasks for guild {guild_id}: {e}")
+            return []
