@@ -1553,27 +1553,200 @@ class AtomicTransactionContext:
         except Exception as e:
             logger.error(f"Error exiting transaction context: {e}")
 
-    def execute(self, query: str, *args):
+    async def fetchrow(self, query: str, *args):
         """
-        Execute a query within the transaction context.
-        Note: This is a simplified version since Supabase handles transactions internally.
+        Fetch a single row from the database (PostgreSQL-compatible interface for Supabase).
+        This is used by task_manager for atomic operations.
         """
         if not self.in_transaction:
             raise RuntimeError("Not in transaction context")
 
         try:
-            # For Supabase, we execute directly since it handles transactions
-            if query.strip().upper().startswith('SELECT'):
-                result = self.client.table(query.split()[3]).select('*').execute()
+            # Parse the query to determine the table and operation
+            query_upper = query.strip().upper()
+            
+            if 'UPDATE task_settings' in query_upper and 'RETURNING' in query_upper:
+                # Handle: UPDATE task_settings SET next_task_id = next_task_id + 1 WHERE guild_id = $1 RETURNING next_task_id
+                guild_id = str(args[0])
+                result = self.client.table('task_settings').select('next_task_id').eq('guild_id', guild_id).execute()
+                
+                if result.data and len(result.data) > 0:
+                    current_id = result.data[0]['next_task_id']
+                    new_id = current_id + 1
+                    
+                    # Update with new ID
+                    self.client.table('task_settings').update({
+                        'next_task_id': new_id
+                    }).eq('guild_id', guild_id).execute()
+                    
+                    return {'next_task_id': new_id}
+                return None
+                
+            elif 'SELECT' in query_upper and 'FROM tasks' in query_upper:
+                # Handle: SELECT ... FROM tasks WHERE task_id = $1 AND guild_id = $2
+                task_id = str(args[0])
+                guild_id = str(args[1])
+                result = self.client.table('tasks').select('*').eq('task_id', task_id).eq('guild_id', guild_id).execute()
+                return result.data[0] if result.data else None
+                
+            elif 'SELECT' in query_upper and 'FROM user_tasks' in query_upper:
+                # Handle: SELECT ... FROM user_tasks WHERE user_id = $1 AND guild_id = $2 AND task_id = $3
+                user_id = str(args[0])
+                guild_id = str(args[1])
+                task_id = str(args[2])
+                result = self.client.table('user_tasks').select('*').eq('user_id', user_id).eq('guild_id', guild_id).eq('task_id', task_id).execute()
+                return result.data[0] if result.data else None
+                
+            elif 'SELECT' in query_upper and 'FROM users' in query_upper:
+                # Handle: SELECT balance FROM users WHERE user_id = $1 AND guild_id = $2
+                user_id = str(args[0])
+                guild_id = str(args[1])
+                result = self.client.table('users').select('*').eq('user_id', user_id).eq('guild_id', guild_id).execute()
+                return result.data[0] if result.data else None
+                
             else:
-                # This is a simplified implementation
-                # In a real scenario, you'd need proper query parsing
-                logger.warning("Complex queries in atomic_transaction need proper implementation")
-                result = None
-
-            return result
+                logger.warning(f"Unhandled fetchrow query: {query[:100]}")
+                return None
+                
         except Exception as e:
-            logger.error(f"Query execution failed in transaction: {e}")
+            logger.error(f"fetchrow failed: {e}")
+            raise
+
+    async def execute(self, query: str, *args):
+        """
+        Execute a query within the transaction context (PostgreSQL-compatible interface for Supabase).
+        This is used by task_manager for atomic operations.
+        """
+        if not self.in_transaction:
+            raise RuntimeError("Not in transaction context")
+
+        try:
+            query_upper = query.strip().upper()
+            
+            if 'INSERT INTO task_settings' in query_upper:
+                # Handle: INSERT INTO task_settings (guild_id, next_task_id) VALUES ($1, 1) ON CONFLICT DO NOTHING
+                guild_id = str(args[0])
+                self.client.table('task_settings').upsert({
+                    'guild_id': guild_id,
+                    'next_task_id': 1
+                }, on_conflict='guild_id').execute()
+                
+            elif 'INSERT INTO tasks' in query_upper:
+                # Handle: INSERT INTO tasks (task_id, guild_id, name, description, reward, duration_hours, max_claims, current_claims, status, expires_at)
+                task_id, guild_id, name, description, reward, duration_hours, max_claims, expires_at = args
+                self.client.table('tasks').insert({
+                    'task_id': int(task_id),
+                    'guild_id': str(guild_id),
+                    'name': name,
+                    'description': description,
+                    'reward': reward,
+                    'duration_hours': duration_hours,
+                    'max_claims': max_claims if max_claims is not None else -1,
+                    'current_claims': 0,
+                    'status': 'active',
+                    'expires_at': expires_at.isoformat() if hasattr(expires_at, 'isoformat') else expires_at
+                }).execute()
+                
+            elif 'DELETE FROM user_tasks' in query_upper:
+                # Handle: DELETE FROM user_tasks WHERE task_id = $1 AND guild_id = $2
+                task_id = str(args[0])
+                guild_id = str(args[1])
+                self.client.table('user_tasks').delete().eq('task_id', task_id).eq('guild_id', guild_id).execute()
+                
+            elif 'DELETE FROM tasks' in query_upper:
+                # Handle: DELETE FROM tasks WHERE task_id = $1 AND guild_id = $2
+                task_id = str(args[0])
+                guild_id = str(args[1])
+                self.client.table('tasks').delete().eq('task_id', task_id).eq('guild_id', guild_id).execute()
+                
+            elif 'INSERT INTO user_tasks' in query_upper:
+                # Handle: INSERT INTO user_tasks (user_id, guild_id, task_id, status, claimed_at, deadline)
+                user_id, guild_id, task_id, claimed_at, deadline = args
+                self.client.table('user_tasks').insert({
+                    'user_id': str(user_id),
+                    'guild_id': str(guild_id),
+                    'task_id': int(task_id),
+                    'status': 'in_progress',
+                    'claimed_at': claimed_at.isoformat() if hasattr(claimed_at, 'isoformat') else claimed_at,
+                    'deadline': deadline.isoformat() if hasattr(deadline, 'isoformat') else deadline
+                }).execute()
+                
+            elif 'UPDATE tasks SET current_claims' in query_upper:
+                # Handle: UPDATE tasks SET current_claims = current_claims + 1 WHERE task_id = $1 AND guild_id = $2
+                task_id = str(args[0])
+                guild_id = str(args[1])
+                
+                # Get current claims
+                result = self.client.table('tasks').select('current_claims').eq('task_id', task_id).eq('guild_id', guild_id).execute()
+                if result.data:
+                    current = result.data[0]['current_claims']
+                    self.client.table('tasks').update({
+                        'current_claims': current + 1
+                    }).eq('task_id', task_id).eq('guild_id', guild_id).execute()
+                    
+            elif 'UPDATE user_tasks' in query_upper and 'status' in query_upper:
+                # Handle various UPDATE user_tasks queries
+                if 'submitted' in query_upper.lower():
+                    # UPDATE user_tasks SET status = 'submitted', proof_content = $1, submitted_at = $2, proof_message_id = $3 WHERE id = $4
+                    proof, submitted_at, proof_message_id, user_task_id = args
+                    self.client.table('user_tasks').update({
+                        'status': 'submitted',
+                        'proof_content': proof,
+                        'submitted_at': submitted_at.isoformat() if hasattr(submitted_at, 'isoformat') else submitted_at,
+                        'proof_message_id': proof_message_id
+                    }).eq('id', user_task_id).execute()
+                elif 'accepted' in query_upper.lower():
+                    # UPDATE user_tasks SET status = 'accepted', completed_at = $1 WHERE id = $2
+                    completed_at, user_task_id = args
+                    self.client.table('user_tasks').update({
+                        'status': 'accepted',
+                        'completed_at': completed_at.isoformat() if hasattr(completed_at, 'isoformat') else completed_at
+                    }).eq('id', user_task_id).execute()
+                elif 'expired' in query_upper.lower():
+                    # UPDATE user_tasks SET status = 'expired' WHERE id = $1
+                    user_task_id = args[0]
+                    self.client.table('user_tasks').update({
+                        'status': 'expired'
+                    }).eq('id', user_task_id).execute()
+                    
+            elif 'UPDATE users SET balance' in query_upper:
+                # Handle: UPDATE users SET balance = $1 WHERE user_id = $2 AND guild_id = $3
+                new_balance, user_id, guild_id = args
+                self.client.table('users').update({
+                    'balance': new_balance
+                }).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).execute()
+                
+            elif 'UPDATE task_settings' in query_upper and 'total_completed' in query_upper:
+                # Handle: UPDATE task_settings SET total_completed = total_completed + 1 WHERE guild_id = $1
+                guild_id = str(args[0])
+                result = self.client.table('task_settings').select('total_completed').eq('guild_id', guild_id).execute()
+                if result.data:
+                    current = result.data[0]['total_completed']
+                    self.client.table('task_settings').update({
+                        'total_completed': current + 1
+                    }).eq('guild_id', guild_id).execute()
+                    
+            else:
+                logger.warning(f"Unhandled execute query: {query[:100]}")
+                
+        except Exception as e:
+            logger.error(f"execute failed: {e}")
+            raise
+
+    async def fetch(self, query: str, *args):
+        """
+        Fetch multiple rows from the database (PostgreSQL-compatible interface for Supabase).
+        """
+        if not self.in_transaction:
+            raise RuntimeError("Not in transaction context")
+
+        try:
+            # For now, return empty list for fetch operations
+            # This can be expanded as needed
+            logger.warning(f"fetch operation not fully implemented: {query[:100]}")
+            return []
+        except Exception as e:
+            logger.error(f"fetch failed: {e}")
             raise
 
     async def reconcile_user_balances(self, guild_id):
