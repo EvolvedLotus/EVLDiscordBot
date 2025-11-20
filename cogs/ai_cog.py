@@ -176,7 +176,7 @@ class AICog(commands.Cog):
         except Exception as e:
             logger.error(f"Error in AI chat command: {e}")
 
-            # Provide helpful error message
+            # Provide helpful errorr message
             error_embed = discord.Embed(
                 title="❌ AI Error",
                 description="Sorry, I encountered an error while processing your request. Please try again later.",
