@@ -23,18 +23,6 @@ class BotAdmin(commands.Cog):
 
     # ===== USER MANAGEMENT =====
 
-    @app_commands.command(name="addbalance", description="Add currency to a user's balance (Admin only)")
-    @app_commands.describe(
-        user="The user to add currency to",
-        amount="Amount of currency to add",
-        reason="Reason for adding currency (optional)"
-    )
-    @app_commands.checks.has_permissions(administrator=True)
-    async def addbalance(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str = "Admin adjustment"):
-        """Add currency to a user's balance"""
-        result = await self._modify_user_balance(interaction, user, amount, reason, "add")
-        await self._send_balance_result(interaction, result, "added to", user, amount)
-
     @app_commands.command(name="removebalance", description="Remove currency from a user's balance (Admin only)")
     @app_commands.describe(
         user="The user to remove currency from",
@@ -48,6 +36,7 @@ class BotAdmin(commands.Cog):
             amount = -amount  # Ensure positive for removal
         result = await self._modify_user_balance(interaction, user, -amount, reason, "subtract")
         await self._send_balance_result(interaction, result, "removed from", user, amount)
+
 
     @app_commands.command(name="setbalance", description="Set a user's balance to exact amount (Admin only)")
     @app_commands.describe(

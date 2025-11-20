@@ -1380,3 +1380,232 @@ class AtomicTransactionContext:
         except Exception as e:
             logger.exception(f"Balance reconciliation error: {e}")
             return []
+
+    def get_user_guilds(self, user_id: str) -> List[Dict]:
+        """
+        Get all guilds accessible by a user.
+        For admin users (like admin-env-user), returns all guilds.
+        For regular users, returns guilds where they have admin permissions.
+        """
+        try:
+            # For environment admin user, return all guilds
+            if user_id == 'admin-env-user':
+                result = self.admin_client.table('guilds').select('*').eq('is_active', True).execute()
+                return [{'guild_id': g['guild_id'], 'server_name': g['server_name']} for g in result.data]
+            
+            # For database users, check admin_users table
+            admin_result = self.admin_client.table('admin_users').select('guild_id').eq('user_id', user_id).execute()
+            
+            if not admin_result.data:
+                # User has no admin access to any guilds
+                return []
+            
+            guild_ids = [row['guild_id'] for row in admin_result.data]
+            
+            # Get guild details
+            guilds_result = self.admin_client.table('guilds').select('*').in_('guild_id', guild_ids).eq('is_active', True).execute()
+            
+            return [{'guild_id': g['guild_id'], 'server_name': g['server_name']} for g in guilds_result.data]
+            
+        except Exception as e:
+            logger.error(f"Error getting user guilds for {user_id}: {e}")
+            return []
+
+    def get_guild_users(self, guild_id: str, page: int = 1, limit: int = 50) -> Dict:
+        """
+        Get paginated list of users for a specific guild.
+        Returns dict with 'users' list and 'total' count.
+        """
+        try:
+            guild_id_str = str(guild_id)
+            
+            # Calculate offset for pagination
+            offset = (page - 1) * limit
+            
+            # Get total count
+            count_result = self.admin_client.table('users').select('user_id', count='exact').eq('guild_id', guild_id_str).execute()
+            total_count = count_result.count if hasattr(count_result, 'count') else len(count_result.data)
+            
+            # Get paginated users
+            users_result = self.admin_client.table('users').select('*').eq('guild_id', guild_id_str).range(offset, offset + limit - 1).execute()
+            
+            users = []
+            for user in users_result.data:
+                users.append({
+                    'user_id': user['user_id'],
+                    'username': user.get('username', 'Unknown'),
+                    'display_name': user.get('display_name', 'Unknown'),
+                    'balance': user.get('balance', 0),
+                    'total_earned': user.get('total_earned', 0),
+                    'total_spent': user.get('total_spent', 0),
+                    'last_daily': self._serialize_datetime_field(user.get('last_daily')),
+                    'is_active': user.get('is_active', True),
+                    'created_at': self._serialize_datetime_field(user.get('created_at')),
+                    'updated_at': self._serialize_datetime_field(user.get('updated_at'))
+                })
+            
+            return {
+                'users': users,
+                'total': total_count,
+                'page': page,
+                'limit': limit,
+                'pages': (total_count + limit - 1) // limit  # Ceiling division
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting guild users for {guild_id}: {e}")
+            return {
+                'users': [],
+                'total': 0,
+                'page': page,
+                'limit': limit,
+                'pages': 0
+            }
+
+    def get_guild_config(self, guild_id: str) -> Dict:
+        """Get guild configuration"""
+        try:
+            config_data = self.load_guild_data(int(guild_id), 'config')
+            return config_data if config_data else self._get_default_data('config')
+        except Exception as e:
+            logger.error(f"Error getting guild config for {guild_id}: {e}")
+            return self._get_default_data('config')
+
+    def update_guild_config(self, guild_id: str, config_data: Dict) -> bool:
+        """Update guild configuration"""
+        try:
+            # Load existing config
+            existing_config = self.load_guild_data(int(guild_id), 'config')
+            
+            # Merge with new data
+            existing_config.update(config_data)
+            
+            # Save back
+            return self.save_guild_data(int(guild_id), 'config', existing_config)
+        except Exception as e:
+            logger.error(f"Error updating guild config for {guild_id}: {e}")
+            return False
+
+    def get_guild_channels(self, guild_id: str) -> List[Dict]:
+        """Get list of channels for a guild from Discord bot"""
+        try:
+            if not self.bot_instance:
+                logger.warning("Bot instance not set, cannot get channels")
+                return []
+            
+            guild = self.bot_instance.get_guild(int(guild_id))
+            if not guild:
+                logger.warning(f"Guild {guild_id} not found in bot instance")
+                return []
+            
+            channels = []
+            for channel in guild.channels:
+                # Only include text channels and categories
+                if hasattr(channel, 'type'):
+                    channels.append({
+                        'id': str(channel.id),
+                        'name': channel.name,
+                        'type': str(channel.type),
+                        'position': channel.position if hasattr(channel, 'position') else 0
+                    })
+            
+            return sorted(channels, key=lambda x: x['position'])
+            
+        except Exception as e:
+            logger.error(f"Error getting guild channels for {guild_id}: {e}")
+            return []
+
+    def get_guild_roles(self, guild_id: str) -> List[Dict]:
+        """Get list of roles for a guild from Discord bot"""
+        try:
+            if not self.bot_instance:
+                logger.warning("Bot instance not set, cannot get roles")
+                return []
+            
+            guild = self.bot_instance.get_guild(int(guild_id))
+            if not guild:
+                logger.warning(f"Guild {guild_id} not found in bot instance")
+                return []
+            
+            roles = []
+            for role in guild.roles:
+                roles.append({
+                    'id': str(role.id),
+                    'name': role.name,
+                    'color': role.color.value if hasattr(role, 'color') else 0,
+                    'position': role.position,
+                    'permissions': role.permissions.value if hasattr(role, 'permissions') else 0,
+                    'mentionable': role.mentionable if hasattr(role, 'mentionable') else False
+                })
+            
+            return sorted(roles, key=lambda x: x['position'], reverse=True)
+            
+        except Exception as e:
+            logger.error(f"Error getting guild roles for {guild_id}: {e}")
+            return []
+
+    def get_user(self, guild_id: str, user_id: str) -> Dict:
+        """Get detailed information about a specific user in a guild"""
+        try:
+            guild_id_str = str(guild_id)
+            user_id_str = str(user_id)
+            
+            # Get user from database
+            user_result = self.admin_client.table('users').select('*').eq('guild_id', guild_id_str).eq('user_id', user_id_str).execute()
+            
+            if not user_result.data:
+                return {'error': 'User not found'}
+            
+            user = user_result.data[0]
+            
+            # Get user's inventory
+            inventory_result = self.admin_client.table('inventory').select('*').eq('guild_id', guild_id_str).eq('user_id', user_id_str).execute()
+            inventory = {}
+            for inv in inventory_result.data:
+                inventory[inv['item_id']] = {
+                    'quantity': inv['quantity'],
+                    'acquired_at': self._serialize_datetime_field(inv.get('acquired_at'))
+                }
+            
+            # Get user's tasks
+            user_tasks_result = self.admin_client.table('user_tasks').select('*').eq('guild_id', guild_id_str).eq('user_id', user_id_str).execute()
+            tasks = []
+            for ut in user_tasks_result.data:
+                tasks.append({
+                    'task_id': ut['task_id'],
+                    'status': ut['status'],
+                    'claimed_at': self._serialize_datetime_field(ut.get('claimed_at')),
+                    'completed_at': self._serialize_datetime_field(ut.get('completed_at'))
+                })
+            
+            # Get recent transactions
+            transactions_result = self.admin_client.table('transactions').select('*').eq('guild_id', guild_id_str).eq('user_id', user_id_str).order('timestamp', desc=True).limit(10).execute()
+            transactions = []
+            for txn in transactions_result.data:
+                transactions.append({
+                    'id': txn['transaction_id'],
+                    'amount': txn['amount'],
+                    'type': txn['transaction_type'],
+                    'description': txn['description'],
+                    'timestamp': self._serialize_datetime_field(txn.get('timestamp'))
+                })
+            
+            return {
+                'user_id': user['user_id'],
+                'username': user.get('username', 'Unknown'),
+                'display_name': user.get('display_name', 'Unknown'),
+                'balance': user.get('balance', 0),
+                'total_earned': user.get('total_earned', 0),
+                'total_spent': user.get('total_spent', 0),
+                'last_daily': self._serialize_datetime_field(user.get('last_daily')),
+                'is_active': user.get('is_active', True),
+                'created_at': self._serialize_datetime_field(user.get('created_at')),
+                'updated_at': self._serialize_datetime_field(user.get('updated_at')),
+                'inventory': inventory,
+                'tasks': tasks,
+                'recent_transactions': transactions
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting user {user_id} for guild {guild_id}: {e}")
+            return {'error': str(e)}

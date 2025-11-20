@@ -789,68 +789,7 @@ class General(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="announce_task", description="Announce a task to a specific channel")
-    @app_commands.describe(
-        task_id="ID of the task to announce",
-        channel="Channel to announce in"
-    )
-    @app_commands.guild_only()
-    async def announce_task_slash(self, interaction: discord.Interaction, task_id: str, channel: discord.TextChannel):
-        """Announce a task to a specific channel (Admin only)"""
-        from core.permissions import is_admin_interaction
-        if not is_admin_interaction(interaction):
-            await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        try:
-            # Load task data
-            tasks_data = self.bot.data_manager.load_guild_data(interaction.guild.id, "tasks")
-            task = tasks_data.get('tasks', {}).get(task_id)
-
-            if not task:
-                await interaction.followup.send(f"❌ Task '{task_id}' not found!", ephemeral=True)
-                return
-
-            # Get config for currency symbol
-            config = self.bot.data_manager.load_guild_data(interaction.guild.id, "config")
-            symbol = config.get("currency_symbol", "$")
-
-            # Create announcement embed
-            embed = discord.Embed(
-                title=f"📋 New Task Available: {task['name']}",
-                description=task.get('description', 'No description available'),
-                color=discord.Color.blue(),
-                timestamp=datetime.now()
-            )
-
-            embed.add_field(name="💰 Reward", value=f"{task['reward']} {symbol}", inline=True)
-            embed.add_field(name="⏱️ Duration", value=f"{task['duration_hours']} hours", inline=True)
-            embed.add_field(name="👥 Available", value=f"{task['max_claims'] - task['current_claims']} slots", inline=True)
-
-            embed.set_footer(text=f"Use /claim {task_id} to claim this task • Task ID: {task_id}")
-
-            # Post to specified channel
-            await channel.send(embed=embed)
-
-            # Confirmation
-            embed_confirm = discord.Embed(
-                title="✅ Task Announced",
-                description=f"Successfully announced task '{task['name']}' in {channel.mention}",
-                color=discord.Color.green()
-            )
-
-            await interaction.followup.send(embed=embed_confirm, ephemeral=True)
-
-        except Exception as e:
-            logger.error(f"Error announcing task: {e}")
-            embed = discord.Embed(
-                title="❌ Error",
-                description="An error occurred while announcing the task.",
-                color=discord.Color.red()
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(General(bot))
+

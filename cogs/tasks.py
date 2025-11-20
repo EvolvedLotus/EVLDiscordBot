@@ -498,20 +498,7 @@ class Tasks(commands.Cog):
                 ephemeral=True
             )
 
-    @app_commands.command(name="submittask", description="Submit proof for a claimed task")
-    @app_commands.describe(
-        task_id="The ID of the task to submit",
-        proof="Description or link to proof of completion"
-    )
-    async def submittask(
-        self,
-        interaction: discord.Interaction,
-        task_id: int,
-        proof: str,
-        attachment: discord.Attachment = None
-    ):
-        """Submit task completion proof (duplicate of /task_submit)."""
-        await self.submit_task(interaction, task_id, proof, attachment)
+
 
 class TaskReviewView(discord.ui.View):
     """View for task submission review."""

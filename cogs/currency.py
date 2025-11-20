@@ -1016,12 +1016,7 @@ class Currency(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name='claimtask', description='Claim a task to work on')
-    @app_commands.describe(task_id="The ID of the task to claim")
-    @app_commands.guild_only()
-    async def claimtask(self, interaction: discord.Interaction, task_id: str):
-        """Claim a task (duplicate of /claim)"""
-        await self.claim_task(interaction, task_id)
+
 
 
 
