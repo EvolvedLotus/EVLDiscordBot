@@ -247,20 +247,6 @@
                     <div class="header-actions">
                         <button onclick="showCreateEmbedModal()" class="btn-success">➕ Create Embed</button>
                         <button onclick="refreshEmbeds()" class="btn-primary">🔄 Refresh</button>
-                    </div>
-                </div>
-                <div id="embeds-list" class="content-area">
-                    <div class="loading">Loading embeds...</div>
-                </div>
-            </div>
-
-            <!-- Transactions Tab -->
-            <div id="transactions" class="tab-content">
-                <div class="section-header">
-                    <h2>💳 Transaction History</h2>
-                    <div class="header-actions">
-                        <button onclick="showTransactionFilters()" class="btn-secondary">🔍 Filters</button>
-                        <button onclick="archiveOldTransactions()" class="btn-warning">📦 Archive Old</button>
                         <button onclick="exportTransactions()" class="btn-secondary">📥 Export CSV</button>
                         <button onclick="loadTransactions()" class="btn-primary">🔄 Refresh</button>
                     </div>
@@ -332,233 +318,176 @@
                         </div>
                     </div>
                 </div>
-
-                <div id="transactions-list" class="content-area">
-                    <div class="loading">Loading transactions...</div>
-                </div>
             </div>
 
-            <!-- Server Config Tab -->
-            <div id="config" class="tab-content">
+            <!-- Server Settings Tab -->
+            <div id="server-settings" class="tab-content">
                 <div class="section-header">
-                    <h2>🔧 Server Configuration</h2>
-                    <div class="header-actions">
-                        <button onclick="loadServerSettings()" class="btn-primary">🔄 Refresh</button>
-                        <button onclick="saveServerSettings()" class="btn-success">💾 Save Changes</button>
-                    </div>
+                    <h2>🔧 Server Settings</h2>
+                    <button onclick="loadServerSettingsTab()" class="btn-primary">🔄 Refresh</button>
                 </div>
-                <option value="playing">Playing</option>
-                <option value="watching">Watching</option>
-                <option value="listening">Listening to</option>
-                <option value="competing">Competing in</option>
-                <option value="streaming">Streaming</option>
-                </select>
-            </div>
+                <div id="server-settings-content" class="content-area">
+                    <div class="settings-container">
+                        <!-- Channel Configuration Section -->
+                        <div class="settings-section">
+                            <h3>📢 Channel Configuration</h3>
 
-            <div class="form-group">
-                <label for="bot-status-message">Status Message:</label>
-                <input type="text" id="bot-status-message" name="bot_status_message" maxlength="128"
-                    placeholder="Enter custom status message">
-                <small>Max 128 characters. Example: "with the economy" or "your requests"</small>
-            </div>
+                            <div class="setting-item">
+                                <label for="welcome-channel">Welcome Channel:</label>
+                                <select id="welcome-channel" class="channel-dropdown">
+                                    <option value="">Loading channels...</option>
+                                </select>
+                                <button onclick="saveChannelSetting('welcome')" class="save-btn">
+                                    💾 Save Welcome Channel
+                                </button>
+                                <span id="welcome-channel-status" class="save-status"></span>
+                            </div>
 
-            <div class="form-group">
-                <label for="bot-presence">Bot Presence:</label>
-                <select id="bot-presence" name="bot_presence">
-                    <option value="online">🟢 Online</option>
-                    <option value="idle">🟠 Idle</option>
-                    <option value="dnd">🔴 Do Not Disturb</option>
-                    <option value="invisible">⚫ Invisible</option>
-                </select>
-            </div>
+                            <div class="setting-item">
+                                <label for="log-channel">Log Channel:</label>
+                                <select id="log-channel" class="channel-dropdown">
+                                    <option value="">Loading channels...</option>
+                                </select>
+                                <button onclick="saveChannelSetting('log')" class="save-btn">
+                                    💾 Save Log Channel
+                                </button>
+                                <span id="log-channel-status" class="save-status"></span>
+                            </div>
 
-            <div class="form-group" id="streaming-url-group" style="display: none;">
-                <label for="streaming-url">Streaming URL:</label>
-                <input type="url" id="streaming-url" name="streaming_url" placeholder="https://twitch.tv/yourname">
-                <small>Required when Status Type is "Streaming"</small>
-            </div>
+                            <div class="setting-item">
+                                <label for="task-channel">Task Announcement Channel:</label>
+                                <select id="task-channel" class="channel-dropdown">
+                                    <option value="">Loading channels...</option>
+                                </select>
+                                <button onclick="saveChannelSetting('task')" class="save-btn">
+                                    💾 Save Task Channel
+                                </button>
+                                <span id="task-channel-status" class="save-status"></span>
+                            </div>
 
-            <button type="button" onclick="updateBotStatus()" class="btn-primary">Update Bot Status</button>
-            <div id="bot-status-preview" class="status-preview">
-                <strong>Preview:</strong> <span id="status-preview-text"></span>
-            </div>
-    </div>
-    </div>
-    </div>
+                            <div class="setting-item">
+                                <label for="shop-channel">Shop Channel:</label>
+                                <select id="shop-channel" class="channel-dropdown">
+                                    <option value="">Loading channels...</option>
+                                </select>
+                                <button onclick="saveChannelSetting('shop')" class="save-btn">
+                                    💾 Save Shop Channel
+                                </button>
+                                <span id="shop-channel-status" class="save-status"></span>
+                            </div>
+                        </div>
+                    </div>
 
-    <!-- Settings Tab -->
-    <div id="settings" class="tab-content">
-        <div class="section-header">
-            <h2>⚙️ Global Settings</h2>
-            <button onclick="saveSettings()" class="btn-success">💾 Save Changes</button>
-        </div>
-        <div id="settings-content" class="content-area">
-            <div class="loading">Loading settings...</div>
-        </div>
-    </div>
+                    <!-- Currency Settings Section -->
+                    <div class="settings-section">
+                        <h3>💰 Currency Settings</h3>
 
-    <!-- Server Settings Tab -->
-    <div id="server-settings" class="tab-content">
-        <div class="section-header">
-            <h2>🔧 Server Settings</h2>
-            <button onclick="loadServerSettingsTab()" class="btn-primary">🔄 Refresh</button>
-        </div>
-        <div id="server-settings-content" class="content-area">
-            <div class="settings-container">
-                <!-- Channel Configuration Section -->
-                <div class="settings-section">
-                    <h3>📢 Channel Configuration</h3>
+                        <div class="setting-item">
+                            <label for="currency-name">Currency Name:</label>
+                            <input type="text" id="currency-name" placeholder="coins" maxlength="20">
+                        </div>
 
-                    <div class="setting-item">
-                        <label for="welcome-channel">Welcome Channel:</label>
-                        <select id="welcome-channel" class="channel-dropdown">
-                            <option value="">Loading channels...</option>
-                        </select>
-                        <button onclick="saveChannelSetting('welcome')" class="save-btn">
-                            💾 Save Welcome Channel
+                        <div class="setting-item">
+                            <label for="currency-symbol">Currency Symbol:</label>
+                            <input type="text" id="currency-symbol" placeholder="$" maxlength="3">
+                        </div>
+
+                        <div class="setting-item">
+                            <label for="starting-balance">Starting Balance:</label>
+                            <input type="number" id="starting-balance" value="0" min="0">
+                        </div>
+
+                        <button onclick="saveCurrencySettings()" class="save-btn primary">
+                            💾 Save Currency Settings
                         </button>
-                        <span id="welcome-channel-status" class="save-status"></span>
+                        <span id="currency-settings-status" class="save-status"></span>
                     </div>
 
-                    <div class="setting-item">
-                        <label for="log-channel">Log Channel:</label>
-                        <select id="log-channel" class="channel-dropdown">
-                            <option value="">Loading channels...</option>
-                        </select>
-                        <button onclick="saveChannelSetting('log')" class="save-btn">
-                            💾 Save Log Channel
+                    <!-- Feature Toggles Section -->
+                    <div class="settings-section">
+                        <h3>🎛️ Feature Toggles</h3>
+
+                        <div class="setting-item toggle-item">
+                            <label>
+                                <input type="checkbox" id="feature-currency" class="toggle-switch">
+                                <span>Currency System</span>
+                            </label>
+                            <button onclick="saveFeatureToggle('currency')" class="save-btn">💾
+                                Save</button>
+                            <span id="feature-currency-status" class="save-status"></span>
+                        </div>
+
+                        <div class="setting-item toggle-item">
+                            <label>
+                                <input type="checkbox" id="feature-tasks" class="toggle-switch">
+                                <span>Tasks System</span>
+                            </label>
+                            <button onclick="saveFeatureToggle('tasks')" class="save-btn">💾
+                                Save</button>
+                            <span id="feature-tasks-status" class="save-status"></span>
+                        </div>
+
+                        <div class="setting-item toggle-item">
+                            <label>
+                                <input type="checkbox" id="feature-shop" class="toggle-switch">
+                                <span>Shop System</span>
+                            </label>
+                            <button onclick="saveFeatureToggle('shop')" class="save-btn">💾
+                                Save</button>
+                            <span id="feature-shop-status" class="save-status"></span>
+                        </div>
+
+                        <div class="setting-item toggle-item">
+                            <label>
+                                <input type="checkbox" id="feature-announcements" class="toggle-switch">
+                                <span>Announcements</span>
+                            </label>
+                            <button onclick="saveFeatureToggle('announcements')" class="save-btn">💾
+                                Save</button>
+                            <span id="feature-announcements-status" class="save-status"></span>
+                        </div>
+
+                        <div class="setting-item toggle-item">
+                            <label>
+                                <input type="checkbox" id="feature-moderation" class="toggle-switch">
+                                <span>Moderation System</span>
+                            </label>
+                            <button onclick="saveFeatureToggle('moderation')" class="save-btn">💾
+                                Save</button>
+                            <span id="feature-moderation-status" class="save-status"></span>
+                        </div>
+                    </div>
+
+                    <!-- Bot Behavior Section -->
+                    <div class="settings-section">
+                        <h3>🤖 Bot Behavior</h3>
+
+                        <div class="setting-item">
+                            <label for="inactivity-days">Inactivity Threshold (days):</label>
+                            <input type="number" id="inactivity-days" value="30" min="1" max="365">
+                        </div>
+
+                        <div class="setting-item toggle-item">
+                            <label>
+                                <input type="checkbox" id="auto-expire-tasks" class="toggle-switch">
+                                <span>Auto-expire Tasks</span>
+                            </label>
+                        </div>
+
+                        <div class="setting-item toggle-item">
+                            <label>
+                                <input type="checkbox" id="require-task-proof" class="toggle-switch">
+                                <span>Require Task Proof</span>
+                            </label>
+                        </div>
+
+                        <button onclick="saveBotBehavior()" class="save-btn primary">
+                            💾 Save Bot Behavior
                         </button>
-                        <span id="log-channel-status" class="save-status"></span>
+                        <span id="bot-behavior-status" class="save-status"></span>
                     </div>
-
-                    <div class="setting-item">
-                        <label for="task-channel">Task Announcement Channel:</label>
-                        <select id="task-channel" class="channel-dropdown">
-                            <option value="">Loading channels...</option>
-                        </select>
-                        <button onclick="saveChannelSetting('task')" class="save-btn">
-                            💾 Save Task Channel
-                        </button>
-                        <span id="task-channel-status" class="save-status"></span>
-                    </div>
-
-                    <div class="setting-item">
-                        <label for="shop-channel">Shop Channel:</label>
-                        <select id="shop-channel" class="channel-dropdown">
-                            <option value="">Loading channels...</option>
-                        </select>
-                        <button onclick="saveChannelSetting('shop')" class="save-btn">
-                            💾 Save Shop Channel
-                        </button>
-                        <span id="shop-channel-status" class="save-status"></span>
-                    </div>
-                </div>
-
-                <!-- Currency Settings Section -->
-                <div class="settings-section">
-                    <h3>💰 Currency Settings</h3>
-
-                    <div class="setting-item">
-                        <label for="currency-name">Currency Name:</label>
-                        <input type="text" id="currency-name" placeholder="coins" maxlength="20">
-                    </div>
-
-                    <div class="setting-item">
-                        <label for="currency-symbol">Currency Symbol:</label>
-                        <input type="text" id="currency-symbol" placeholder="$" maxlength="3">
-                    </div>
-
-                    <div class="setting-item">
-                        <label for="starting-balance">Starting Balance:</label>
-                        <input type="number" id="starting-balance" value="0" min="0">
-                    </div>
-
-                    <button onclick="saveCurrencySettings()" class="save-btn primary">
-                        💾 Save Currency Settings
-                    </button>
-                    <span id="currency-settings-status" class="save-status"></span>
-                </div>
-
-                <!-- Feature Toggles Section -->
-                <div class="settings-section">
-                    <h3>🎛️ Feature Toggles</h3>
-
-                    <div class="setting-item toggle-item">
-                        <label>
-                            <input type="checkbox" id="feature-currency" class="toggle-switch">
-                            <span>Currency System</span>
-                        </label>
-                        <button onclick="saveFeatureToggle('currency')" class="save-btn">💾 Save</button>
-                        <span id="feature-currency-status" class="save-status"></span>
-                    </div>
-
-                    <div class="setting-item toggle-item">
-                        <label>
-                            <input type="checkbox" id="feature-tasks" class="toggle-switch">
-                            <span>Tasks System</span>
-                        </label>
-                        <button onclick="saveFeatureToggle('tasks')" class="save-btn">💾 Save</button>
-                        <span id="feature-tasks-status" class="save-status"></span>
-                    </div>
-
-                    <div class="setting-item toggle-item">
-                        <label>
-                            <input type="checkbox" id="feature-shop" class="toggle-switch">
-                            <span>Shop System</span>
-                        </label>
-                        <button onclick="saveFeatureToggle('shop')" class="save-btn">💾 Save</button>
-                        <span id="feature-shop-status" class="save-status"></span>
-                    </div>
-
-                    <div class="setting-item toggle-item">
-                        <label>
-                            <input type="checkbox" id="feature-announcements" class="toggle-switch">
-                            <span>Announcements</span>
-                        </label>
-                        <button onclick="saveFeatureToggle('announcements')" class="save-btn">💾 Save</button>
-                        <span id="feature-announcements-status" class="save-status"></span>
-                    </div>
-
-                    <div class="setting-item toggle-item">
-                        <label>
-                            <input type="checkbox" id="feature-moderation" class="toggle-switch">
-                            <span>Moderation System</span>
-                        </label>
-                        <button onclick="saveFeatureToggle('moderation')" class="save-btn">💾 Save</button>
-                        <span id="feature-moderation-status" class="save-status"></span>
-                    </div>
-                </div>
-
-                <!-- Bot Behavior Section -->
-                <div class="settings-section">
-                    <h3>🤖 Bot Behavior</h3>
-
-                    <div class="setting-item">
-                        <label for="inactivity-days">Inactivity Threshold (days):</label>
-                        <input type="number" id="inactivity-days" value="30" min="1" max="365">
-                    </div>
-
-                    <div class="setting-item toggle-item">
-                        <label>
-                            <input type="checkbox" id="auto-expire-tasks" class="toggle-switch">
-                            <span>Auto-expire Tasks</span>
-                        </label>
-                    </div>
-
-                    <div class="setting-item toggle-item">
-                        <label>
-                            <input type="checkbox" id="require-task-proof" class="toggle-switch">
-                            <span>Require Task Proof</span>
-                        </label>
-                    </div>
-
-                    <button onclick="saveBotBehavior()" class="save-btn primary">
-                        💾 Save Bot Behavior
-                    </button>
-                    <span id="bot-behavior-status" class="save-status"></span>
                 </div>
             </div>
-        </div>
     </div>
 
     <!-- Permissions Tab -->
@@ -573,7 +502,7 @@
                 <!-- Role Management Section -->
                 <div class="section-card">
                     <h3>👥 Role Management</h3>
-                    <div id="roles-list"></div>
+                    <div id="permissions-roles-list"></div>
                 </div>
 
                 <!-- Admin & Moderator Roles -->
@@ -585,7 +514,8 @@
                         <select id="admin-roles-dropdown" multiple class="role-multiselect">
                             <!-- Populated dynamically -->
                         </select>
-                        <button onclick="saveAdminRoles()" class="save-btn">💾 Save Admin Roles</button>
+                        <button onclick="saveAdminRoles()" class="save-btn">💾 Save Admin
+                            Roles</button>
                         <span id="admin-roles-status" class="save-status"></span>
                     </div>
 
@@ -594,7 +524,8 @@
                         <select id="mod-roles-dropdown" multiple class="role-multiselect">
                             <!-- Populated dynamically -->
                         </select>
-                        <button onclick="saveModRoles()" class="save-btn">💾 Save Moderator Roles</button>
+                        <button onclick="saveModRoles()" class="save-btn">💾 Save Moderator
+                            Roles</button>
                         <span id="mod-roles-status" class="save-status"></span>
                     </div>
                 </div>
@@ -612,8 +543,10 @@
                             <option value="">Select a role...</option>
                         </select>
 
-                        <button onclick="assignRoleToUser()" class="action-btn">➕ Assign Role</button>
-                        <button onclick="removeRoleFromUser()" class="action-btn danger">➖ Remove Role</button>
+                        <button onclick="assignRoleToUser()" class="action-btn">➕ Assign
+                            Role</button>
+                        <button onclick="removeRoleFromUser()" class="action-btn danger">➖ Remove
+                            Role</button>
                     </div>
                 </div>
 
@@ -636,9 +569,11 @@
                             <option value="">Select a user...</option>
                         </select>
 
-                        <button onclick="kickUser()" class="action-btn warning">👢 Kick User</button>
+                        <button onclick="kickUser()" class="action-btn warning">👢 Kick
+                            User</button>
                         <button onclick="banUser()" class="action-btn danger">🔨 Ban User</button>
-                        <button onclick="unbanUser()" class="action-btn success">✅ Unban User</button>
+                        <button onclick="unbanUser()" class="action-btn success">✅ Unban
+                            User</button>
                     </div>
 
                     <div class="moderation-reason">
@@ -692,7 +627,7 @@
                 </button>
             </div>
 
-            <div id="roles-list" class="roles-grid">
+            <div id="server-roles-list" class="roles-grid">
                 <p class="text-center">Loading roles...</p>
             </div>
         </div>
@@ -747,7 +682,7 @@
         <div class="content-area">
             <div class="settings-section">
                 <h3>🤖 Bot Status Configuration</h3>
-                
+
                 <div class="form-group">
                     <label for="bot-status-type">Status Type:</label>
                     <select id="bot-status-type" name="bot_status_type">
@@ -763,7 +698,8 @@
                     <label for="bot-status-message">Status Message:</label>
                     <input type="text" id="bot-status-message" name="bot_status_message" maxlength="128"
                         placeholder="Enter custom status message">
-                    <small>Max 128 characters. Example: "with the economy" or "your requests"</small>
+                    <small>Max 128 characters. Example: "with the economy" or "your
+                        requests"</small>
                 </div>
 
                 <div class="form-group">
@@ -782,7 +718,8 @@
                     <small>Required when Status Type is "Streaming"</small>
                 </div>
 
-                <button type="button" onclick="updateBotStatus()" class="btn-primary">Update Bot Status</button>
+                <button type="button" onclick="updateBotStatus()" class="btn-primary">Update Bot
+                    Status</button>
                 <div id="bot-status-preview" class="status-preview">
                     <strong>Preview:</strong> <span id="status-preview-text"></span>
                 </div>

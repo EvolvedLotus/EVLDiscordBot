@@ -179,7 +179,7 @@ class Announcements(commands.Cog):
             announcements_data = self.bot.data_manager.load_guild_data(guild_id, 'announcements') or {'scheduled': []}
 
             # Add to scheduled list
-            if 'scheduled' not in announcements_data:
+            if 'scheduled' not in announcements_data or not isinstance(announcements_data['scheduled'], list):
                 announcements_data['scheduled'] = []
             announcements_data['scheduled'].append(schedule_data)
 

@@ -918,19 +918,35 @@ class Currency(commands.Cog):
                     description=f"Successfully created **{name}**",
                     color=discord.Color.green()
                 )
-                embed.add_field(name="💰 Price", value=f"{price} coins", inline=True)
-                embed.add_field(name="📦 Stock", value="Unlimited" if stock == -1 else str(stock), inline=True)
-                embed.add_field(name="📂 Category", value=category, inline=True)
-                embed.add_field(name="🎨 Emoji", value=emoji, inline=True)
-                embed.add_field(name="📝 Description", value=description[:500] + "..." if len(description) > 500 else description, inline=False)
-
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
-                await interaction.followup.send("❌ Failed to create shop item.", ephemeral=True)
+                await interaction.followup.send("❌ Failed to create item.", ephemeral=True)
 
         except Exception as e:
-            logger.exception(f"Shop item creation error: {e}")
-            await interaction.followup.send("❌ Error creating shop item.", ephemeral=True)
+            logger.error(f"Error creating shop item: {e}")
+            await interaction.followup.send(f"❌ Error: {str(e)}", ephemeral=True)
+
+    @app_commands.command(name="shop_delete", description="Delete a shop item (Admin only)")
+    @app_commands.describe(item_id="ID of the item to delete")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def delete_shop_item_cmd(self, interaction: discord.Interaction, item_id: str):
+        """Delete a shop item."""
+        await interaction.response.defer(ephemeral=True)
+        
+        guild_id = interaction.guild.id
+        
+        try:
+            # Use ShopManager to delete item
+            success = self.shop_manager.delete_item(guild_id, item_id)
+            
+            if success:
+                await interaction.followup.send(f"✅ Shop item `{item_id}` deleted successfully.", ephemeral=True)
+            else:
+                await interaction.followup.send(f"❌ Failed to delete item `{item_id}`. Item not found.", ephemeral=True)
+                
+        except Exception as e:
+            logger.error(f"Error deleting shop item: {e}")
+            await interaction.followup.send(f"❌ An error occurred: {str(e)}", ephemeral=True)
 
     @app_commands.command(name="shop_edit", description="Edit a shop item (Admin only)")
     @app_commands.describe(

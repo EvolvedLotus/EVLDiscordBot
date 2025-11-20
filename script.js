@@ -729,7 +729,7 @@ async function loadRolesTab() {
     console.log('Loading roles...');
     try {
         const data = await apiCall(`/api/${currentServerId}/roles`);
-        const rolesList = document.getElementById('roles-list');
+        const rolesList = document.getElementById('server-roles-list');
 
         if (!rolesList) return;
 

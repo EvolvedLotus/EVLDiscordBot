@@ -606,6 +606,20 @@ Commands are organized by category and permission level.
         - channel (optional): Channel to send in
     Permissions: Moderator
 
+/delete_task <task_id>
+    Description: Delete a task and all associated data
+    Usage: /delete_task task_123
+    Parameters:
+        - task_id (required): ID of the task to delete
+    Permissions: Administrator
+
+/shop_delete <item_id>
+    Description: Delete a shop item
+    Usage: /shop_delete item_123
+    Parameters:
+        - item_id (required): ID of the item to delete
+    Permissions: Administrator
+
 ═══════════════════════════════════════════════════════════════════
                         AI COMMANDS
 ═══════════════════════════════════════════════════════════════════
