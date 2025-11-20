@@ -7,11 +7,14 @@ from discord import app_commands
 from discord.ext import commands
 from datetime import datetime, timedelta
 import asyncio
+import logging
 from core.permissions import admin_only, admin_only_interaction, feature_enabled, is_moderator, is_moderator_interaction
 from core.utils import create_embed, add_embed_footer
 from core.validator import DataValidator, Validator
 from core.initializer import GuildInitializer
 from core.shop_manager import ShopManager
+
+logger = logging.getLogger(__name__)
 
 class Admin(commands.Cog):
     """Server administration commands"""
@@ -606,10 +609,16 @@ class Admin(commands.Cog):
         name="Display name of the item",
         price="Price in currency",
         description="Item description",
-        category="Item category (general, consumable, role, collectible)",
+        category="Item category",
         stock="Stock quantity (-1 for unlimited)",
-        emoji="Emoji to display with item"
+        emoji="Emoji to display with item",
+        role="Role to assign (for role items)",
+        duration_minutes="Duration in minutes (for role items)"
     )
+    @app_commands.choices(category=[
+        app_commands.Choice(name="Role Item", value="role"),
+        app_commands.Choice(name="Misc Item", value="misc")
+    ])
     @app_commands.guild_only()
     @admin_only_interaction()
     async def add_item(
@@ -619,9 +628,11 @@ class Admin(commands.Cog):
         name: str,
         price: int,
         description: str = "No description",
-        category: str = "general",
+        category: str = "misc",
         stock: int = -1,
-        emoji: str = "🛍️"
+        emoji: str = "🛍️",
+        role: discord.Role = None,
+        duration_minutes: int = 60
     ):
         """Add new shop item"""
         try:
@@ -630,9 +641,28 @@ class Admin(commands.Cog):
             name = Validator.validate_string(name, "Name", max_length=100)
             price = Validator.validate_positive_integer(price, "Price", max_value=1000000)
             description = Validator.validate_string(description, "Description", max_length=500)
-            category = Validator.validate_enum(category, "Category", ["general", "consumable", "role", "collectible"])
+            category = Validator.validate_enum(category, "Category", ["role", "misc"])
             stock = Validator.validate_non_negative_integer(stock, "Stock") if stock != -1 else stock
             emoji = Validator.validate_string(emoji, "Emoji", max_length=10)
+
+            # Validation for role-specific fields
+            metadata = {}
+            if category == "role":
+                if not role:
+                    await interaction.response.send_message("❌ Role must be specified for role items!", ephemeral=True)
+                    return
+                if duration_minutes <= 0:
+                    await interaction.response.send_message("❌ Duration must be positive!", ephemeral=True)
+                    return
+                # Check if bot can manage the role
+                if interaction.guild.me.top_role.position <= role.position and interaction.guild.owner_id != interaction.guild.me.id:
+                    await interaction.response.send_message("❌ I cannot assign this role (it's above my highest role)!", ephemeral=True)
+                    return
+
+                metadata = {
+                    'role_id': str(role.id),
+                    'duration_minutes': duration_minutes
+                }
 
             # Sanitize for SQL injection
             item_id = Validator.sanitize_sql_input(item_id)
@@ -646,7 +676,8 @@ class Admin(commands.Cog):
                 price,
                 category=category,
                 stock=stock,
-                emoji=emoji
+                emoji=emoji,
+                metadata=metadata
             )
 
             # Sync Discord message
@@ -1236,12 +1267,47 @@ class DeleteConfirmView(discord.ui.View):
             await interaction.response.edit_message(embed=embed, view=None)
             self.stop()
 
+        except discord.NotFound as e:
+            # Handle expired interactions (10062: Unknown interaction)
+            if "10062" in str(e) or "Unknown interaction" in str(e):
+                try:
+                    # Send a new message since the interaction expired
+                    embed = discord.Embed(
+                        title="✅ Item Deleted",
+                        description=f"**{self._get_item_emoji(self.item)} {self.item['name']}** has been {'archived' if self.archive else 'permanently deleted'}",
+                        color=discord.Color.red()
+                    )
+                    embed.add_field(name="Item ID", value=f"`{self.item_id}`", inline=True)
+                    embed.add_field(name="Action", value="Archived" if self.archive else "Deleted", inline=True)
+                    embed.add_field(name="Note", value="⚠️ This confirmation took longer than expected", inline=False)
+
+                    # Try to send to the interaction user directly
+                    await interaction.user.send(embed=embed)
+                except discord.Forbidden:
+                    # Can't DM user, try to send in channel if possible
+                    try:
+                        await interaction.followup.send(embed=embed, ephemeral=True)
+                    except:
+                        pass  # Last resort - just log the success
+                self.bot.data_manager.logger.info(f"Shop item '{self.item_id}' deleted successfully (interaction expired)")
+            else:
+                # Re-raise if it's a different NotFound error
+                raise
         except Exception as e:
-            await interaction.response.edit_message(
-                content=f"❌ Error: {str(e)}",
-                embed=None,
-                view=None
+            # Handle other exceptions
+            error_embed = discord.Embed(
+                title="❌ Error",
+                description=f"An error occurred: {str(e)}",
+                color=discord.Color.red()
             )
+            try:
+                await interaction.response.edit_message(embed=error_embed, view=None)
+            except discord.NotFound:
+                # If interaction is expired, send followup
+                try:
+                    await interaction.followup.send(embed=error_embed, ephemeral=True)
+                except:
+                    pass
             self.stop()
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.secondary)

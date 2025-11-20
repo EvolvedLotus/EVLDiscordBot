@@ -100,9 +100,13 @@ guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
 name TEXT NOT NULL,
 description TEXT,
 price INTEGER NOT NULL CHECK (price > 0),
-category TEXT DEFAULT 'general',
+category TEXT DEFAULT 'misc',
 stock INTEGER DEFAULT -1,
 emoji TEXT,
+
+-- Role-specific fields (for category='role')
+role_id TEXT,  -- Discord role ID to assign
+duration_minutes INTEGER DEFAULT 60,  -- Duration in minutes (for role items)
 
 -- Discord integration
 channel_id TEXT,
@@ -112,7 +116,7 @@ message_id TEXT,
 is_active BOOLEAN DEFAULT true,
 
 -- Metadata
-metadata JSONB DEFAULT '{"sales_count": 0}',
+metadata JSONB DEFAULT '{}',
 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 

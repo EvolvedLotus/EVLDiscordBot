@@ -158,6 +158,12 @@ class ShopManager:
             'metadata': metadata or {}
         }
 
+        # For role items, store role_id and duration in metadata
+        if category == 'role' and metadata:
+            if 'role_id' in metadata and 'duration_minutes' in metadata:
+                item_data['role_id'] = metadata['role_id']
+                item_data['duration_minutes'] = metadata['duration_minutes']
+
         shop_items[item_id] = item_data
 
         # Save and trigger events
@@ -682,21 +688,23 @@ class ShopManager:
 
         return success
 
-    def use_item(
+    async def redeem_item(
         self,
         guild_id: int,
         user_id: int,
         item_id: str,
-        quantity: int = 1
+        quantity: int = 1,
+        interaction = None
     ) -> dict:
-        """Use consumable item from inventory"""
-        # Check if item exists and is consumable
+        """Redeem shop item from inventory"""
+        # Check if item exists
         item = self.get_item(guild_id, item_id)
         if not item:
             return {'success': False, 'error': 'Item not found'}
 
-        if item.get('category') != 'consumable':
-            return {'success': False, 'error': 'Item is not consumable'}
+        category = item.get('category', 'misc')
+        if category not in ['role', 'misc']:
+            return {'success': False, 'error': 'Item is not redeemable'}
 
         # Check inventory
         inventory = self.get_inventory(guild_id, user_id, include_item_details=False)
@@ -705,29 +713,170 @@ class ShopManager:
         if current_quantity < quantity:
             return {'success': False, 'error': f'Insufficient quantity. Have {current_quantity}, need {quantity}'}
 
-        # Remove from inventory
-        success = self.remove_from_inventory(guild_id, user_id, item_id, quantity)
-        if not success:
-            return {'success': False, 'error': 'Failed to remove item from inventory'}
+        # Handle different categories
+        try:
+            if category == 'role':
+                result = await self._redeem_role_item(guild_id, user_id, item, quantity, interaction)
+            elif category == 'misc':
+                result = await self._redeem_misc_item(guild_id, user_id, item, quantity, interaction)
+            else:
+                result = {'success': False, 'error': f'Unknown category: {category}'}
 
-        # Log usage
-        currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
-        usage_log = currency_data.setdefault('item_usage_log', [])
-        usage_log.append({
+            if result['success']:
+                # Remove from inventory only after successful redemption
+                success = self.remove_from_inventory(guild_id, user_id, item_id, quantity)
+                if not success:
+                    # This should not happen, but handle rollback if possible
+                    logger.error(f"Failed to remove item from inventory after successful redemption: user {user_id}, item {item_id}")
+                    return {'success': False, 'error': 'Redemption succeeded but inventory update failed'}
+
+                # Log redemption
+                currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
+                redemption_log = currency_data.setdefault('item_redemption_log', [])
+                redemption_log.append({
+                    'user_id': user_id,
+                    'item_id': item_id,
+                    'quantity': quantity,
+                    'category': category,
+                    'timestamp': datetime.now().isoformat()
+                })
+                self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
+
+                self._broadcast_event('item_redeemed', {
+                    'guild_id': guild_id,
+                    'user_id': user_id,
+                    'item_id': item_id,
+                    'quantity': quantity,
+                    'category': category
+                })
+
+                return result
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error redeeming item {item_id} for user {user_id}: {e}")
+            return {'success': False, 'error': str(e)}
+
+    async def _redeem_role_item(self, guild_id: int, user_id: int, item: dict, quantity: int, interaction) -> dict:
+        """Redeem role item - assign role for duration"""
+        if not interaction:
+            return {'success': False, 'error': 'Interaction required for role assignment'}
+
+        role_id = item.get('role_id')
+        duration_minutes = item.get('duration_minutes', 60)
+
+        if not role_id:
+            return {'success': False, 'error': 'Role ID not configured for this item'}
+
+        # Get the role
+        role = interaction.guild.get_role(int(role_id))
+        if not role:
+            return {'success': False, 'error': 'Configured role not found in server'}
+
+        # Check bot permissions
+        if not interaction.guild.me.guild_permissions.manage_roles:
+            return {'success': False, 'error': 'Bot lacks permission to manage roles'}
+
+        # Check role hierarchy
+        if interaction.guild.me.top_role.position <= role.position:
+            return {'success': False, 'error': 'Bot cannot assign this role (role is too high)'}
+
+        # Add role to user
+        member = interaction.guild.get_member(user_id)
+        if not member:
+            return {'success': False, 'error': 'User not found in server'}
+
+        try:
+            await member.add_roles(role, reason=f"Item redemption: {item['name']}")
+        except discord.Forbidden:
+            return {'success': False, 'error': 'Bot cannot assign this role'}
+        except Exception as e:
+            return {'success': False, 'error': f'Failed to assign role: {str(e)}'}
+
+        # Schedule role removal using scheduled_jobs table
+        from datetime import timedelta
+        execute_at = datetime.now() + timedelta(minutes=duration_minutes)
+
+        job_data = {
             'user_id': user_id,
-            'item_id': item_id,
-            'quantity': quantity,
-            'timestamp': datetime.now().isoformat()
-        })
+            'role_id': role_id,
+            'item_name': item['name'],
+            'reason': 'item_redemption_expiry'
+        }
 
-        self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
+        try:
+            # Insert scheduled job for role removal
+            import uuid
+            job_id = f"role_remove_{uuid.uuid4()}"
+            scheduled_job = {
+                'job_id': job_id,
+                'guild_id': guild_id,
+                'user_id': user_id,
+                'job_type': 'remove_role',
+                'execute_at': execute_at,
+                'job_data': job_data,
+                'is_executed': False
+            }
 
-        # For now, just return success. Future: implement item effects
+            # Insert into scheduled_jobs table
+            self.data_manager.supabase.table('scheduled_jobs').insert(scheduled_job).execute()
+
+        except Exception as e:
+            logger.warning(f"Failed to schedule role removal job: {e}")
+            # Don't fail the redemption if job scheduling fails, just log it
+
         return {
             'success': True,
-            'item': item,
-            'quantity_used': quantity,
-            'effect': 'consumed'  # Placeholder for future effects
+            'effect': 'role_assigned',
+            'role_name': role.name,
+            'duration_minutes': duration_minutes
+        }
+
+    async def _redeem_misc_item(self, guild_id: int, user_id: int, item: dict, quantity: int, interaction) -> dict:
+        """Redeem misc item - send log message"""
+        if not interaction:
+            return {'success': False, 'error': 'Interaction required for log message'}
+
+        # Get user
+        member = interaction.guild.get_member(user_id)
+        username = member.display_name if member else f"User {user_id}"
+
+        # Get log channel from config
+        config = self.data_manager.load_guild_data(guild_id, 'config')
+        log_channel_id = config.get('log_channel') or config.get('logs_channel')
+
+        if not log_channel_id:
+            return {'success': False, 'error': 'Log channel not configured'}
+
+        log_channel = interaction.guild.get_channel(int(log_channel_id))
+        if not log_channel:
+            return {'success': False, 'error': 'Log channel not found'}
+
+        # Check permissions
+        if not log_channel.permissions_for(interaction.guild.me).send_messages:
+            return {'success': False, 'error': 'Bot cannot send messages to log channel'}
+
+        try:
+            embed = discord.Embed(
+                title="🎁 Item Redeemed",
+                description=f"User **{username}** redeemed **{item['name']}**",
+                color=discord.Color.blue(),
+                timestamp=datetime.now()
+            )
+            embed.add_field(name="Item ID", value=f"`{item.get('item_id', 'unknown')}`", inline=True)
+            embed.add_field(name="Category", value="Misc", inline=True)
+            embed.add_field(name="Quantity", value=quantity, inline=True)
+
+            await log_channel.send(embed=embed)
+
+        except Exception as e:
+            return {'success': False, 'error': f'Failed to send log message: {str(e)}'}
+
+        return {
+            'success': True,
+            'effect': 'log_message_sent',
+            'log_channel': log_channel.name
         }
 
     def get_shop_statistics(self, guild_id: int, period: str = 'all') -> dict:

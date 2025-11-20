@@ -181,3 +181,107 @@ class ModerationScheduler:
         """Execute strike expiration job"""
         # Mark strike as expired (would need database integration)
         logger.info(f"Executed strike expiration for strike {job.get('strike_id', 'unknown')}")
+
+    async def execute_database_jobs(self, data_manager, bot):
+        """Execute pending scheduled jobs from database"""
+        try:
+            now = datetime.now()
+
+            # Get pending jobs from database
+            pending_jobs_result = data_manager.supabase.table('scheduled_jobs').select('*').eq('is_executed', False).lte('execute_at', now.isoformat()).execute()
+
+            if not pending_jobs_result.data:
+                return  # No pending jobs
+
+            pending_jobs = pending_jobs_result.data
+
+            for job in pending_jobs:
+                try:
+                    job_id = job['job_id']
+
+                    # Execute job based on type
+                    if job['job_type'] == 'unmute':
+                        await self._execute_database_unmute(job, bot)
+                    elif job['job_type'] == 'unban':
+                        await self._execute_database_unban(job, bot)
+                    elif job['job_type'] == 'remove_role':
+                        await self._execute_remove_role(job, bot)
+                    else:
+                        logger.warning(f"Unknown job type: {job['job_type']} for job {job_id}")
+                        continue
+
+                    # Mark job as executed
+                    data_manager.supabase.table('scheduled_jobs').update({
+                        'is_executed': True,
+                        'executed_at': now.isoformat()
+                    }).eq('job_id', job_id).execute()
+
+                    logger.info(f"Executed database scheduled job: {job_id} ({job['job_type']})")
+
+                except Exception as e:
+                    logger.exception(f"Failed to execute database job {job['job_id']}: {e}")
+                    # Don't mark failed jobs as executed so they can be retried
+
+        except Exception as e:
+            logger.exception(f"Error executing database scheduled jobs: {e}")
+
+    async def _execute_database_unmute(self, job, bot):
+        """Execute database-based unmute job"""
+        guild = bot.get_guild(job['guild_id'])
+        if not guild:
+            return
+
+        member = guild.get_member(job['user_id'])
+        if not member:
+            return
+
+        # Remove timeout
+        await member.timeout(None, reason="Scheduled unmute")
+
+        logger.info(f"Executed database unmute for user {job['user_id']} in guild {job['guild_id']}")
+
+    async def _execute_database_unban(self, job, bot):
+        """Execute database-based unban job"""
+        guild = bot.get_guild(job['guild_id'])
+        if not guild:
+            return
+
+        try:
+            user = await bot.fetch_user(job['user_id'])
+            await guild.unban(user, reason="Scheduled unban")
+            logger.info(f"Executed database unban for user {job['user_id']} in guild {job['guild_id']}")
+        except discord.NotFound:
+            logger.warning(f"User {job['user_id']} not found for unban in guild {job['guild_id']}")
+
+    async def _execute_remove_role(self, job, bot):
+        """Execute role removal job for redeemed items"""
+        guild = bot.get_guild(job['guild_id'])
+        if not guild:
+            return
+
+        member = guild.get_member(job['user_id'])
+        if not member:
+            logger.warning(f"Member {job['user_id']} not found in guild {job['guild_id']} for role removal")
+            return
+
+        role_id = job['job_data'].get('role_id')
+        if not role_id:
+            logger.warning(f"No role_id in job data for job {job['job_id']}")
+            return
+
+        role = guild.get_role(int(role_id))
+        if not role:
+            logger.warning(f"Role {role_id} not found in guild {job['guild_id']}")
+            return
+
+        # Check if member still has the role
+        if role in member.roles:
+            try:
+                await member.remove_roles(role, reason=f"Item redemption expired: {job['job_data'].get('item_name', 'Unknown item')}")
+                logger.info(f"Removed expired role {role.name} from user {job['user_id']} in guild {job['guild_id']}")
+            except discord.Forbidden:
+                logger.warning(f"Cannot remove role {role.name} from user {job['user_id']} - insufficient permissions")
+            except Exception as e:
+                logger.error(f"Failed to remove role {role.name} from user {job['user_id']}: {e}")
+        else:
+            logger.debug(f"User {job['user_id']} no longer has role {role.name} - already removed")

@@ -1067,6 +1067,33 @@ async def run_bot():
         async def check_inactive_users_error(error):
             logger.exception(f"Inactive user check job failed: {error}")
 
+        @tasks.loop(minutes=5)
+        async def execute_scheduled_database_jobs():
+            """Execute pending scheduled jobs from database (every 5 minutes)"""
+            try:
+                # Get the moderation scheduler
+                moderation_cog = bot.get_cog('Moderation')
+                if moderation_cog and hasattr(moderation_cog, 'scheduler'):
+                    scheduler = moderation_cog.scheduler
+
+                    # Execute database jobs
+                    await scheduler.execute_database_jobs(data_manager, bot)
+
+            except Exception as e:
+                logger.error(f"Error executing scheduled database jobs: {e}")
+
+        @execute_scheduled_database_jobs.before_loop
+        async def before_execute_scheduled_database_jobs():
+            await bot.wait_until_ready()
+            logger.info("Scheduled database jobs executor initialized")
+
+        # Start the scheduled database jobs executor
+        execute_scheduled_database_jobs.start()
+
+        @execute_scheduled_database_jobs.error
+        async def execute_scheduled_database_jobs_error(error):
+            logger.exception(f"Scheduled database jobs executor failed: {error}")
+
         @bot.event
         async def on_command_error(ctx, error):
             """Global error handler"""
