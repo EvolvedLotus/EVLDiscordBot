@@ -43,7 +43,6 @@ REQUIRED_ENV_VARS = {
     'SUPABASE_ANON_KEY': 'Supabase anon key',
     'SUPABASE_SERVICE_ROLE_KEY': 'Supabase service role key',
     'JWT_SECRET_KEY': 'JWT secret for authentication',
-    'ADMIN_PASSWORD': 'Admin dashboard password',
     'PORT': 'Server port (Railway auto-assigns)',
 }
 

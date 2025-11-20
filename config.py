@@ -21,6 +21,12 @@ class Config:
 
     def _load_environment(self):
         """Load all environment variables"""
+        # Try to load from .env file for local development
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass  # dotenv might not be installed in production
 
         # Discord Configuration
         self.discord_token = os.getenv('DISCORD_TOKEN')

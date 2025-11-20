@@ -90,10 +90,10 @@ def require_auth(f):
             return jsonify({'success': False, 'error': 'Invalid or expired session'}), 401
 
         # Check if session needs refresh (expires in < 1 hour)
-        if user['session_expires'] - datetime.now(timezone.utc) < timedelta(hours=1):
+        # if user['session_expires'] - datetime.now(timezone.utc) < timedelta(hours=1):
             # Refresh session
-            new_expires = datetime.now(timezone.utc) + timedelta(hours=24)
-            auth_manager.refresh_session(session_token, new_expires)
+            # new_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+            # auth_manager.refresh_session(session_token, new_expires)
 
         # Add user to request context
         request.user = user

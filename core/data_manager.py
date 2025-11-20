@@ -1289,7 +1289,7 @@ class DataManager:
         try:
             # For environment admin user, return all guilds
             if user_id == 'admin-env-user':
-                result = self.admin_client.table('guilds').select('*').eq('is_active', True).execute()
+                result = self.admin_client.table('guilds').select('guild_id, server_name').eq('is_active', True).execute()
                 return [{'guild_id': g['guild_id'], 'server_name': g['server_name']} for g in result.data]
             
             # For database users, check admin_users table

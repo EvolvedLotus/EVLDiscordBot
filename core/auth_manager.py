@@ -45,6 +45,7 @@ class AuthManager:
             admin_users = self._load_admin_users()
 
             if username not in admin_users:
+                logger.warning(f"Authentication failed: User '{username}' not found in admin_users table")
                 self._record_failed_attempt(username)
                 return None
 
@@ -65,13 +66,19 @@ class AuthManager:
                 # Update last login
                 self._update_last_login(username)
 
+                # Calculate session expiry
+                session_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+
                 return {
+                    'id': user_data.get('id'),
                     'username': username,
                     'role': 'superadmin' if user_data.get('is_superadmin') else 'admin',
-                    'user_id': user_data.get('id'),
-                    'permissions': self._get_user_permissions(user_data)
+                    'is_superadmin': user_data.get('is_superadmin', False),
+                    'permissions': self._get_user_permissions(user_data),
+                    'session_expires': session_expires
                 }
             else:
+                logger.warning(f"Authentication failed: Password mismatch for user '{username}'")
                 self._record_failed_attempt(username)
                 return None
 
