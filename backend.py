@@ -486,7 +486,19 @@ def validate_session():
 @require_auth
 def get_servers():
     try:
-        servers = data_manager.get_all_guilds()
+        # Fetch all guilds with details from database
+        result = data_manager.admin_client.table('guilds').select('*').execute()
+        
+        servers = []
+        for guild in result.data:
+            servers.append({
+                'id': guild['guild_id'],
+                'name': guild['server_name'],
+                'member_count': guild['member_count'],
+                'icon_url': guild.get('icon_url'),
+                'is_active': guild.get('is_active', True)
+            })
+            
         return jsonify({'servers': servers}), 200
     except Exception as e:
         return safe_error_response(e)
