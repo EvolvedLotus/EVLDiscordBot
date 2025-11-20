@@ -74,6 +74,55 @@ class TaskManager:
 
         return task_id
 
+    async def delete_task(self, guild_id: int, task_id: int) -> Dict:
+        """Delete task and associated user tasks"""
+        guild_id = str(guild_id)
+        task_id = str(task_id)
+
+        try:
+            async with self.data_manager.atomic_transaction() as conn:
+                # Verify task exists
+                task_data = await conn.fetchrow(
+                    """SELECT task_id FROM tasks
+                       WHERE task_id = $1 AND guild_id = $2""",
+                    task_id, guild_id
+                )
+
+                if not task_data:
+                    return {'success': False, 'error': "Task not found."}
+
+                # Delete associated user_tasks first (cascade would handle this but being explicit)
+                await conn.execute(
+                    """DELETE FROM user_tasks
+                       WHERE task_id = $1 AND guild_id = $2""",
+                    task_id, guild_id
+                )
+
+                # Delete the main task
+                await conn.execute(
+                    """DELETE FROM tasks
+                       WHERE task_id = $1 AND guild_id = $2""",
+                    task_id, guild_id
+                )
+
+            # Invalidate cache safely
+            if self.cache_manager:
+                self.cache_manager.invalidate(f"tasks:{guild_id}")
+                self.cache_manager.invalidate(f"user_tasks:{guild_id}*")  # Invalidate all user task caches
+
+            # Emit SSE event safely
+            if self.sse_manager:
+                await self.sse_manager.broadcast_event(guild_id, {
+                    'type': 'task_deleted',
+                    'task_id': task_id
+                })
+
+            return {'success': True}
+
+        except Exception as e:
+            logger.exception(f"Delete task error: {e}")
+            return {'success': False, 'error': "Failed to delete task."}
+
     async def claim_task(self, guild_id: int, user_id: int, task_id: int) -> Dict:
         """Claim task with PREVENT OVER-CLAIMING - atomic validation"""
         user_id = str(user_id)

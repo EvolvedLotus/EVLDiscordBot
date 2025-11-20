@@ -937,7 +937,7 @@ CREATE POLICY "Service role full access" ON moderation_actions FOR ALL USING (tr
 -- =====================================================
 
 -- Function to atomically log transaction and update user balance
-DROP FUNCTION IF EXISTS log_transaction_atomic(text,text,integer,integer,integer,text,text,text,jsonb);
+DROP FUNCTION IF EXISTS log_transaction_atomic;
 
 CREATE FUNCTION log_transaction_atomic(
     p_guild_id TEXT,
