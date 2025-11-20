@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link rel="stylesheet" href="./styles.css">
     <script src="./config.js"></script>
 </head>
+
 <body>
     <!-- Login Screen -->
     <div id="login-screen" class="login-screen">
@@ -37,8 +39,8 @@
     <script>
         // API Configuration - Uses environment variable from Netlify
         const API_BASE_URL = window.location.hostname === 'localhost'
-            ? 'http://localhost:3000'  // Local development
-            : (window.API_BASE_URL || process.env.API_BASE_URL || 'https://your-railway-app.railway.app'); // Production
+            ? 'http://localhost:8080'  // Local development
+            : (window.API_BASE_URL || 'https://evldiscordbot-production.up.railway.app'); // Production
 
         // Helper function to build API URLs
         function apiUrl(endpoint) {
@@ -78,7 +80,7 @@
         }
 
         // Login functionality
-        document.getElementById('login-form').addEventListener('submit', async function(event) {
+        document.getElementById('login-form').addEventListener('submit', async function (event) {
             event.preventDefault();
 
             const username = document.getElementById('username').value.trim();
@@ -132,4 +134,5 @@
         }
     </script>
 </body>
+
 </html>
