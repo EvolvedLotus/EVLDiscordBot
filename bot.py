@@ -161,6 +161,12 @@ async def run_bot():
             logger.error(f"✗ Failed to load bot admin cog: {e}")
 
         try:
+            await bot.load_extension('cogs.embeds')
+            logger.info("✓ Embeds cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load embeds cog: {e}")
+
+        try:
             await bot.load_extension('cogs.ai_cog')
             logger.info("✓ AI cog loaded")
         except Exception as e:
