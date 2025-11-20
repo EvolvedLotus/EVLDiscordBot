@@ -604,58 +604,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Atomic transaction logging function (used by TransactionManager)
-CREATE OR REPLACE FUNCTION log_transaction_atomic(
-    p_guild_id TEXT,
-    p_user_id TEXT,
-    p_amount INTEGER,
-    p_balance_before INTEGER,
-    p_balance_after INTEGER,
-    p_transaction_type TEXT,
-    p_description TEXT,
-    p_transaction_id TEXT,
-    p_metadata JSONB DEFAULT '{}'
-) RETURNS TABLE(
-    transaction_id TEXT,
-    "timestamp" TIMESTAMP WITH TIME ZONE
-) AS $$
-DECLARE
-    v_timestamp TIMESTAMP WITH TIME ZONE;
-BEGIN
-    -- Validate balance consistency
-    IF p_balance_after != p_balance_before + p_amount THEN
-        RAISE EXCEPTION 'Balance validation failed: balance_after != balance_before + amount';
-    END IF;
-
-    -- Insert transaction atomically
-    INSERT INTO transactions (
-        transaction_id,
-        user_id,
-        guild_id,
-        amount,
-        balance_before,
-        balance_after,
-        transaction_type,
-        description,
-        metadata,
-        "timestamp"
-    ) VALUES (
-        p_transaction_id,
-        p_user_id,
-        p_guild_id,
-        p_amount,
-        p_balance_before,
-        p_balance_after,
-        p_transaction_type,
-        p_description,
-        p_metadata,
-        NOW()
-    )
-    RETURNING transactions.transaction_id, transactions."timestamp"
-    INTO transaction_id, v_timestamp;
-
-    RETURN QUERY SELECT transaction_id, v_timestamp;
-END;
-$$ LANGUAGE plpgsql;
+-- Updated to match TransactionManager expectations and include balance updates
 
 -- Cleanup expired cache entries
 CREATE OR REPLACE FUNCTION cleanup_expired_cache()

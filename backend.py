@@ -623,9 +623,11 @@ def update_task(server_id, task_id):
 
 @app.route('/api/<server_id>/tasks/<task_id>', methods=['DELETE'])
 @require_guild_access
-def delete_task(server_id, task_id):
+async def delete_task(server_id, task_id):
     try:
-        task_manager.delete_task(server_id, task_id)
+        result = await task_manager.delete_task(server_id, task_id)
+        if not result.get('success', False):
+            return jsonify({'error': result.get('error', 'Failed to delete task')}), 400
         return jsonify({'success': True}), 200
     except Exception as e:
         return safe_error_response(e)
@@ -755,17 +757,17 @@ def update_bot_status(server_id):
         # Validate data
         status_message = data.get('message')
         status_type = data.get('type', 'playing')
-        
+
         # Load current config
         current_config = data_manager.load_guild_data(server_id, 'config')
-        
+
         # Update fields
         current_config['bot_status_message'] = status_message
         current_config['bot_status_type'] = status_type
-        
+
         # Save config
         data_manager.save_guild_data(server_id, 'config', current_config)
-        
+
         # If bot is running, update presence immediately
         if _bot_instance and _bot_instance.is_ready():
             try:
@@ -802,6 +804,199 @@ def update_bot_status(server_id):
 
 
         return jsonify({'success': True, 'message': 'Bot status updated'}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+# ========== MODERATION ENDPOINTS ==========
+@app.route('/api/<server_id>/admin/cache/clear', methods=['POST'])
+@require_guild_access
+def clear_cache(server_id):
+    """Clear all caches for the guild"""
+    try:
+        # Clear the data manager cache
+        data_manager.invalidate_cache(server_id)
+        
+        # If cache manager exists, clear its caches too
+        if 'cache_manager' in globals():
+            cache_manager.clear_guild_cache(server_id)
+        
+        logger.info(f"Cache cleared for guild {server_id}")
+        return jsonify({'success': True, 'message': 'Cache cleared successfully'}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/admin/sync', methods=['POST'])
+@require_guild_access
+def sync_data(server_id):
+    """Sync guild data with Discord"""
+    try:
+        # Trigger sync operations
+        if sync_manager:
+            result = sync_manager.sync_guild_data(server_id)
+            return jsonify(result), 200
+        else:
+            # Fallback manual sync
+            config = data_manager.load_guild_data(server_id, 'config', force_reload=True)
+            currency = data_manager.load_guild_data(server_id, 'currency', force_reload=True)
+            tasks = data_manager.load_guild_data(server_id, 'tasks', force_reload=True)
+            
+            return jsonify({
+                'success': True, 
+                'message': 'Data synced manually',
+                'data_reloaded': ['config', 'currency', 'tasks']
+            }), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/admin/validate', methods=['POST'])
+@require_guild_access
+def validate_integrity(server_id):
+    """Validate guild data integrity"""
+    try:
+        issues = []
+        
+        # Check currency data integrity
+        try:
+            currency_data = data_manager.load_guild_data(server_id, 'currency')
+            total_balance = sum(user.get('balance', 0) for user in currency_data.get('users', {}).values())
+            
+            # Check balance matches metadata
+            metadata_total = currency_data.get('metadata', {}).get('total_currency', 0)
+            if abs(total_balance - metadata_total) > 0.01:  # Small tolerance for floating point
+                issues.append({
+                    'issue': 'Balance mismatch',
+                    'details': f'Calculated total: {total_balance}, Stored total: {metadata_total}',
+                    'severity': 'medium'
+                })
+        except Exception as e:
+            issues.append({
+                'issue': 'Currency data error',
+                'details': str(e),
+                'severity': 'high'
+            })
+        
+        # Check for orphaned user tasks (tasks claimed by users that don't exist)
+        try:
+            currency_data = data_manager.load_guild_data(server_id, 'currency')
+            tasks_data = data_manager.load_guild_data(server_id, 'tasks')
+            
+            existing_user_ids = set(currency_data.get('users', {}).keys())
+            task_user_ids = set()
+            
+            for task_id, task in tasks_data.get('user_tasks', {}).items():
+                task_user_ids.update(task.keys())
+            
+            orphaned_users = task_user_ids - existing_user_ids
+            if orphaned_users:
+                issues.append({
+                    'issue': 'Orphaned user tasks',
+                    'details': f'Tasks claimed by {len(orphaned_users)} non-existent users',
+                    'severity': 'low'
+                })
+        except Exception as e:
+            issues.append({
+                'issue': 'Task validation error',
+                'details': str(e),
+                'severity': 'medium'
+            })
+        
+        severity_counts = {'low': 0, 'medium': 0, 'high': 0}
+        for issue in issues:
+            severity_counts[issue['severity']] += 1
+        
+        return jsonify({
+            'success': True,
+            'validation_complete': True,
+            'issues_found': len(issues),
+            'severity_breakdown': severity_counts,
+            'issues': issues,
+            'recommendations': [
+                'Regular validation helps catch data inconsistencies early',
+                'Consider cleaning orphaned records periodically'
+            ] if issues else []
+        }), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/admin/moderation/strikes', methods=['GET'])
+@require_guild_access
+def get_strikes(server_id):
+    """Get user strike/warning data"""
+    try:
+        # For now, return placeholder data since we don't have a strikes system implemented
+        # This could be extended to store strikes in the database
+        
+        return jsonify({
+            'success': True,
+            'strikes': [],
+            'message': 'Strike system not yet implemented',
+            'note': 'This would track user violations and automated actions'
+        }), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/admin/moderation/jobs', methods=['GET'])
+@require_guild_access
+def get_scheduled_jobs(server_id):
+    """Get scheduled moderation jobs"""
+    try:
+        # For now, return placeholder data since we don't have scheduled jobs implemented
+        # This could be extended to support automated moderation tasks
+        
+        return jsonify({
+            'success': True,
+            'jobs': [
+                {
+                    'id': 'temp_ban_cleanup',
+                    'name': 'Temporary Ban Cleanup',
+                    'description': 'Remove expired temporary bans',
+                    'enabled': True,
+                    'schedule': 'Every 5 minutes',
+                    'last_run': None,
+                    'next_run': 'Now',
+                    'status': 'ready'
+                },
+                {
+                    'id': 'inactive_channel_cleanup',
+                    'name': 'Inactive Channel Cleanup', 
+                    'description': 'Archive channels without recent activity',
+                    'enabled': False,
+                    'schedule': 'Daily at 3 AM',
+                    'last_run': None,
+                    'next_run': '2025-11-21 03:00:00',
+                    'status': 'disabled'
+                }
+            ],
+            'message': 'Scheduled jobs system ready for implementation'
+        }), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/admin/permissions/channels', methods=['POST'])
+@require_guild_access
+def configure_channel_permissions(server_id):
+    """Configure bot permissions for specific channels"""
+    try:
+        data = request.get_json()
+        channel_configs = data.get('channel_configs', {})
+        
+        # Load current config
+        config = data_manager.load_guild_data(server_id, 'config')
+        
+        # Update channel permissions
+        if 'channel_permissions' not in config:
+            config['channel_permissions'] = {}
+            
+        config['channel_permissions'].update(channel_configs)
+        
+        # Save config
+        data_manager.save_guild_data(server_id, 'config', config)
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Updated permissions for {len(channel_configs)} channels'
+        }), 200
     except Exception as e:
         return safe_error_response(e)
 

@@ -411,10 +411,20 @@ tr.selected {
     gap: 12px;
 }
 
+.user-avatar-small {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border-color);
+}
+
 .user-avatar {
     width: 40px;
     height: 40px;
     border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border-color);
 }
 
 .user-details {
@@ -425,6 +435,21 @@ tr.selected {
 .user-name {
     font-weight: 600;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.user-username {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.user-roles {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 2px;
 }
 
 .user-id {

@@ -866,6 +866,156 @@ class Currency(commands.Cog):
             logger.exception(f"Transfer command error: {e}")
             await interaction.response.send_message("Failed to transfer coins. Please try again.", ephemeral=True)
 
+    @app_commands.command(name="create_item", description="Create a shop item (Admin only)")
+    @app_commands.describe(
+        name="Item name",
+        description="Item description",
+        price="Item price in coins",
+        stock="Stock quantity (-1 for unlimited)",
+        category="Item category",
+        emoji="Item emoji/icon"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def create_shop_item_cmd(
+        self,
+        interaction: discord.Interaction,
+        name: str,
+        description: str,
+        price: int,
+        stock: int = -1,
+        category: str = "general",
+        emoji: str = "🛍️"
+    ):
+        """Create a new shop item."""
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = interaction.guild.id
+
+        try:
+            # Validate inputs
+            if price <= 0:
+                await interaction.followup.send("❌ Price must be positive.", ephemeral=True)
+                return
+
+            # Create item data
+            item_data = {
+                'name': name,
+                'description': description,
+                'price': price,
+                'stock': stock,
+                'category': category,
+                'emoji': emoji,
+                'is_active': True,
+                'created_at': datetime.now(timezone.utc).isoformat()
+            }
+
+            # Use ShopManager to create item
+            item = self.shop_manager.create_item(guild_id, item_data)
+
+            if item:
+                embed = discord.Embed(
+                    title="✅ Shop Item Created",
+                    description=f"Successfully created **{name}**",
+                    color=discord.Color.green()
+                )
+                embed.add_field(name="💰 Price", value=f"{price} coins", inline=True)
+                embed.add_field(name="📦 Stock", value="Unlimited" if stock == -1 else str(stock), inline=True)
+                embed.add_field(name="📂 Category", value=category, inline=True)
+                embed.add_field(name="🎨 Emoji", value=emoji, inline=True)
+                embed.add_field(name="📝 Description", value=description[:500] + "..." if len(description) > 500 else description, inline=False)
+
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await interaction.followup.send("❌ Failed to create shop item.", ephemeral=True)
+
+        except Exception as e:
+            logger.exception(f"Shop item creation error: {e}")
+            await interaction.followup.send("❌ Error creating shop item.", ephemeral=True)
+
+    @app_commands.command(name="edit_item", description="Edit a shop item (Admin only)")
+    @app_commands.describe(
+        item_id="ID of item to edit",
+        name="New name (optional)",
+        description="New description (optional)",
+        price="New price (optional)",
+        stock="New stock (optional)",
+        category="New category (optional)",
+        emoji="New emoji (optional)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def edit_shop_item_cmd(
+        self,
+        interaction: discord.Interaction,
+        item_id: str,
+        name: str = None,
+        description: str = None,
+        price: int = None,
+        stock: int = None,
+        category: str = None,
+        emoji: str = None
+    ):
+        """Edit an existing shop item."""
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = interaction.guild.id
+
+        try:
+            # Check if item exists
+            items = self.shop_manager.get_shop_items(guild_id, active_only=False)
+            if item_id not in items:
+                await interaction.followup.send("❌ Item not found.", ephemeral=True)
+                return
+
+            item = items[item_id]
+
+            # Build updates
+            updates = {}
+            if name is not None:
+                updates['name'] = name
+            if description is not None:
+                updates['description'] = description
+            if price is not None:
+                if price <= 0:
+                    await interaction.followup.send("❌ Price must be positive.", ephemeral=True)
+                    return
+                updates['price'] = price
+            if stock is not None:
+                updates['stock'] = stock
+            if category is not None:
+                updates['category'] = category
+            if emoji is not None:
+                updates['emoji'] = emoji
+
+            if not updates:
+                await interaction.followup.send("❌ No changes specified.", ephemeral=True)
+                return
+
+            # Update item
+            success = self.shop_manager.update_item(guild_id, item_id, updates)
+
+            if success:
+                embed = discord.Embed(
+                    title="✅ Shop Item Updated",
+                    description=f"Successfully updated **{item['name']}**",
+                    color=discord.Color.blue()
+                )
+
+                # Show changes
+                for field, value in updates.items():
+                    if field == 'stock':
+                        value = "Unlimited" if value == -1 else str(value)
+                    embed.add_field(name=field.title(), value=str(value), inline=True)
+
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await interaction.followup.send("❌ Failed to update shop item.", ephemeral=True)
+
+        except Exception as e:
+            logger.exception(f"Shop item edit error: {e}")
+            await interaction.followup.send("❌ Error updating shop item.", ephemeral=True)
+
+
+
 
 
     @app_commands.command(name="view_tasks", description="View available tasks")
