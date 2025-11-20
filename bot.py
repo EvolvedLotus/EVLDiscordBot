@@ -154,11 +154,12 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load tasks cog: {e}")
 
-        try:
-            await bot.load_extension('cogs.bot_admin')
-            logger.info("✓ Bot Admin cog loaded")
-        except Exception as e:
-            logger.error(f"✗ Failed to load bot admin cog: {e}")
+        # Skip bot_admin cog - conflicts with currency cog (duplicate create_item command)
+        # try:
+        #     await bot.load_extension('cogs.bot_admin')
+        #     logger.info("✓ Bot Admin cog loaded")
+        # except Exception as e:
+        #     logger.error(f"✗ Failed to load bot admin cog: {e}")
 
         try:
             await bot.load_extension('cogs.embeds')
@@ -166,11 +167,12 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load embeds cog: {e}")
 
-        try:
-            await bot.load_extension('cogs.ai_cog')
-            logger.info("✓ AI cog loaded")
-        except Exception as e:
-            logger.error(f"✗ Failed to load AI cog: {e}")
+        # Skip AI cog - not needed and causing command conflicts
+        # try:
+        #     await bot.load_extension('cogs.ai_cog')
+        #     logger.info("✓ AI cog loaded")
+        # except Exception as e:
+        #     logger.error(f"✗ Failed to load AI cog: {e}")
 
         try:
             await bot.load_extension('cogs.moderation')
