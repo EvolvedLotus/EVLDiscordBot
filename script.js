@@ -372,3 +372,313 @@ function showNotification(message, type = 'info', duration = 5000) {
         }
     }, duration);
 }
+
+// ========== TAB NAVIGATION ==========
+function showTab(tabName) {
+    console.log('Switching to tab:', tabName);
+
+    // Hide all tab contents
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabContents.forEach(tab => {
+        tab.classList.remove('active');
+        tab.style.display = 'none';
+    });
+
+    // Remove active class from all tab buttons
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    // Show selected tab
+    const selectedTab = document.getElementById(tabName);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+        selectedTab.style.display = 'block';
+    }
+
+    // Add active class to clicked button
+    const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
+
+    // Load tab-specific data
+    loadTabData(tabName);
+}
+
+function loadTabData(tabName) {
+    if (!currentServerId) {
+        console.warn('No server selected');
+        return;
+    }
+
+    switch (tabName) {
+        case 'dashboard':
+            loadDashboard();
+            break;
+        case 'users':
+            loadUsersTab();
+            break;
+        case 'shop':
+            loadShop();
+            break;
+        case 'tasks':
+            loadTasks();
+            break;
+        case 'announcements':
+            loadAnnouncements();
+            break;
+        case 'transactions':
+            loadTransactions();
+            break;
+        case 'server-settings':
+            loadServerSettingsTab();
+            break;
+        case 'permissions':
+            loadPermissionsTab();
+            break;
+        case 'logs':
+            loadLogs();
+            break;
+    }
+}
+
+// ========== TAB LOADING FUNCTIONS ==========
+async function loadDashboard() {
+    try {
+        await loadDashboardStats();
+    } catch (error) {
+        console.error('Failed to load dashboard:', error);
+    }
+}
+
+async function loadUsersTab() {
+    const usersList = document.getElementById('users-list');
+    if (!usersList) return;
+
+    try {
+        usersList.innerHTML = '<div class="loading">Loading users...</div>';
+        const data = await apiCall(`/api/${currentServerId}/users?page=1&limit=100`);
+
+        if (data && data.users && data.users.length > 0) {
+            let html = '<div class="table-container"><table><thead><tr>';
+            html += '<th>User</th><th>Balance</th><th>Level</th><th>XP</th><th>Actions</th>';
+            html += '</tr></thead><tbody>';
+
+            data.users.forEach(user => {
+                html += `<tr>
+                    <td>
+                        <div class="user-info">
+                            <div class="user-details">
+                                <div class="user-name">${user.username || 'Unknown'}</div>
+                                <div class="user-id">${user.user_id}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td class="balance-amount">$${(user.balance || 0).toLocaleString()}</td>
+                    <td>${user.level || 0}</td>
+                    <td>${user.xp || 0}</td>
+                    <td>
+                        <button class="btn-small btn-primary" onclick="editUser('${user.user_id}')">Edit</button>
+                    </td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+            usersList.innerHTML = html;
+        } else {
+            usersList.innerHTML = '<div class="empty-state">No users found</div>';
+        }
+    } catch (error) {
+        console.error('Failed to load users:', error);
+        usersList.innerHTML = '<div class="error-state">Failed to load users</div>';
+    }
+}
+
+async function loadShop() {
+    const shopList = document.getElementById('shop-list');
+    if (!shopList) return;
+
+    shopList.innerHTML = '<div class="loading">Shop management coming soon...</div>';
+}
+
+async function loadTasks() {
+    const tasksList = document.getElementById('tasks-list');
+    if (!tasksList) return;
+
+    tasksList.innerHTML = '<div class="loading">Task management coming soon...</div>';
+}
+
+async function loadAnnouncements() {
+    const announcementsContent = document.getElementById('tab-content');
+    if (!announcementsContent) return;
+
+    announcementsContent.innerHTML = '<div class="loading">Announcements coming soon...</div>';
+}
+
+async function loadTransactions() {
+    const transactionsList = document.getElementById('transactions-list');
+    if (!transactionsList) return;
+
+    transactionsList.innerHTML = '<div class="loading">Transactions coming soon...</div>';
+}
+
+async function loadServerSettingsTab() {
+    const settingsContent = document.getElementById('server-settings-content');
+    if (!settingsContent) return;
+
+    settingsContent.innerHTML = '<div class="loading">Server settings loaded. Configure your server here.</div>';
+}
+
+async function loadPermissionsTab() {
+    const permissionsContent = document.getElementById('permissions-content');
+    if (!permissionsContent) return;
+
+    permissionsContent.innerHTML = '<div class="loading">Permissions management coming soon...</div>';
+}
+
+async function loadLogs() {
+    const logsContent = document.getElementById('logs-content');
+    if (!logsContent) return;
+
+    logsContent.innerHTML = '<div class="loading">Logs coming soon...</div>';
+}
+
+// ========== USER MANAGEMENT ==========
+function editUser(userId) {
+    showNotification(`Edit user ${userId} - Feature coming soon`, 'info');
+}
+
+// ========== PLACEHOLDER FUNCTIONS ==========
+function restartBot() {
+    showNotification('Restart bot feature coming soon', 'info');
+}
+
+function showAddItemModal() {
+    showNotification('Add shop item - Feature coming soon', 'info');
+}
+
+function viewShopStatistics() {
+    showNotification('Shop statistics - Feature coming soon', 'info');
+}
+
+function validateShopIntegrity() {
+    showNotification('Shop validation - Feature coming soon', 'info');
+}
+
+function filterShopItems() {
+    console.log('Filtering shop items...');
+}
+
+function showCreateTaskModal() {
+    showNotification('Create task - Feature coming soon', 'info');
+}
+
+function showCreateEmbedModal() {
+    showNotification('Create embed - Feature coming soon', 'info');
+}
+
+function refreshEmbeds() {
+    showNotification('Refresh embeds - Feature coming soon', 'info');
+}
+
+function showTransactionFilters() {
+    const filters = document.getElementById('transaction-filters');
+    if (filters) {
+        filters.style.display = filters.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+function hideTransactionFilters() {
+    const filters = document.getElementById('transaction-filters');
+    if (filters) filters.style.display = 'none';
+}
+
+function archiveOldTransactions() {
+    showNotification('Archive transactions - Feature coming soon', 'info');
+}
+
+function exportTransactions() {
+    showNotification('Export transactions - Feature coming soon', 'info');
+}
+
+function applyFilters() {
+    showNotification('Applying filters...', 'info');
+}
+
+function clearFilters() {
+    showNotification('Filters cleared', 'info');
+}
+
+function saveServerSettings() {
+    showNotification('Save server settings - Feature coming soon', 'info');
+}
+
+function saveSettings() {
+    showNotification('Save settings - Feature coming soon', 'info');
+}
+
+function updateBotStatus() {
+    showNotification('Update bot status - Feature coming soon', 'info');
+}
+
+function saveChannelSetting(type) {
+    showNotification(`Save ${type} channel - Feature coming soon`, 'info');
+}
+
+function saveCurrencySettings() {
+    showNotification('Save currency settings - Feature coming soon', 'info');
+}
+
+function saveFeatureToggle(feature) {
+    showNotification(`Save ${feature} toggle - Feature coming soon`, 'info');
+}
+
+function saveBotBehavior() {
+    showNotification('Save bot behavior - Feature coming soon', 'info');
+}
+
+function saveAdminRoles() {
+    showNotification('Save admin roles - Feature coming soon', 'info');
+}
+
+function saveModRoles() {
+    showNotification('Save moderator roles - Feature coming soon', 'info');
+}
+
+function assignRoleToUser() {
+    showNotification('Assign role - Feature coming soon', 'info');
+}
+
+function removeRoleFromUser() {
+    showNotification('Remove role - Feature coming soon', 'info');
+}
+
+function kickUser() {
+    showNotification('Kick user - Feature coming soon', 'info');
+}
+
+function banUser() {
+    showNotification('Ban user - Feature coming soon', 'info');
+}
+
+function unbanUser() {
+    showNotification('Unban user - Feature coming soon', 'info');
+}
+
+function timeoutUser() {
+    showNotification('Timeout user - Feature coming soon', 'info');
+}
+
+function loadCommandPermissions() {
+    showNotification('Load command permissions - Feature coming soon', 'info');
+}
+
+function syncRoles() {
+    showNotification('Sync roles - Feature coming soon', 'info');
+}
+
+function clearLogs() {
+    showNotification('Clear logs - Feature coming soon', 'info');
+}

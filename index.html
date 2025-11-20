@@ -1,6 +1,7 @@
 <!-- index.html - Complete with proper user management -->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,6 +9,7 @@
     <link rel="stylesheet" href="./styles.css">
     <script src="./config.js"></script>
 </head>
+
 <body>
     <!-- Login Screen -->
     <div id="login-screen" class="login-screen">
@@ -96,7 +98,8 @@
             </nav>
 
             <div class="sidebar-footer">
-                <button onclick="restartBot()" class="btn-danger btn-small" id="restart-btn" style="display: none;">🔄 Restart Bot</button>
+                <button onclick="restartBot()" class="btn-danger btn-small" id="restart-btn" style="display: none;">🔄
+                    Restart Bot</button>
                 <div class="bot-status" id="bot-status">
                     <span class="status-indicator"></span>
                     <span class="status-text">Checking...</span>
@@ -183,7 +186,8 @@
                             </label>
                         </div>
                         <div class="filter-group">
-                            <input type="text" id="shop-search" placeholder="Search items..." onkeyup="filterShopItems()">
+                            <input type="text" id="shop-search" placeholder="Search items..."
+                                onkeyup="filterShopItems()">
                         </div>
                     </div>
                 </div>
@@ -365,13 +369,8 @@
 
                         <div class="form-group">
                             <label for="bot-status-message">Status Message:</label>
-                            <input
-                                type="text"
-                                id="bot-status-message"
-                                name="bot_status_message"
-                                maxlength="128"
-                                placeholder="Enter custom status message"
-                            >
+                            <input type="text" id="bot-status-message" name="bot_status_message" maxlength="128"
+                                placeholder="Enter custom status message">
                             <small>Max 128 characters. Example: "with the economy" or "your requests"</small>
                         </div>
 
@@ -387,12 +386,8 @@
 
                         <div class="form-group" id="streaming-url-group" style="display: none;">
                             <label for="streaming-url">Streaming URL:</label>
-                            <input
-                                type="url"
-                                id="streaming-url"
-                                name="streaming_url"
-                                placeholder="https://twitch.tv/yourname"
-                            >
+                            <input type="url" id="streaming-url" name="streaming_url"
+                                placeholder="https://twitch.tv/yourname">
                             <small>Required when Status Type is "Streaming"</small>
                         </div>
 
@@ -661,7 +656,8 @@
 
                             <div class="moderation-reason">
                                 <label>Reason:</label>
-                                <input type="text" id="mod-reason" placeholder="Enter moderation reason..." maxlength="200">
+                                <input type="text" id="mod-reason" placeholder="Enter moderation reason..."
+                                    maxlength="200">
                             </div>
                         </div>
 
@@ -734,7 +730,8 @@
                         <div class="card">
                             <h3>Ban User</h3>
                             <input type="text" id="ban-user-id" placeholder="User ID" class="form-input">
-                            <input type="number" id="ban-delete-days" placeholder="Delete message days (0-7)" class="form-input" min="0" max="7" value="0">
+                            <input type="number" id="ban-delete-days" placeholder="Delete message days (0-7)"
+                                class="form-input" min="0" max="7" value="0">
                             <textarea id="ban-reason" placeholder="Reason" class="form-input"></textarea>
                             <button onclick="banUser()" class="btn btn-danger">Ban User</button>
                         </div>
@@ -742,7 +739,8 @@
                         <div class="card">
                             <h3>Timeout User</h3>
                             <input type="text" id="timeout-user-id" placeholder="User ID" class="form-input">
-                            <input type="number" id="timeout-duration" placeholder="Duration (minutes)" class="form-input" min="1" value="60">
+                            <input type="number" id="timeout-duration" placeholder="Duration (minutes)"
+                                class="form-input" min="1" value="60">
                             <textarea id="timeout-reason" placeholder="Reason" class="form-input"></textarea>
                             <button onclick="timeoutUser()" class="btn btn-warning">Timeout User</button>
                         </div>
@@ -860,6 +858,7 @@
 
     <!-- Modals (dynamically created by JavaScript) -->
 
-    <script src="./script.js?v=2"></script>
+    <script src="./script.js?v=4"></script>
 </body>
+
 </html>
