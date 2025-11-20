@@ -287,6 +287,11 @@ def set_bot_instance(bot):
     _bot_instance = bot
     logger.info("Bot instance linked to backend")
 
+    # Link bot instance to data_manager for Discord sync
+    if data_manager:
+        data_manager.set_bot_instance(bot)
+        logger.info("Bot instance linked to data manager")
+
     # Also set bot instance on managers that need it
     if 'announcement_manager' in globals():
         announcement_manager.set_bot(bot)
