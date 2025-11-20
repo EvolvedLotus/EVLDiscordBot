@@ -129,7 +129,7 @@ async function login(event) {
 
         // Hide login screen, show dashboard
         document.getElementById('login-screen').style.display = 'none';
-        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('main-dashboard').style.display = 'flex';
 
         // Load initial data
         await loadDashboardData();
@@ -142,7 +142,7 @@ async function login(event) {
 }
 
 // ========== DOM READY INITIALIZATION ==========
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     console.log('📄 DOM Content Loaded');
 
     // Attach login form handler
@@ -152,7 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loginForm.removeEventListener('submit', login);
 
         // Add new listener
-        loginForm.addEventListener('submit', async function(e) {
+        loginForm.addEventListener('submit', async function (e) {
             e.preventDefault();
             e.stopPropagation();
             await login(e);
@@ -166,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Also attach to button as backup
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) {
-        loginBtn.addEventListener('click', async function(e) {
+        loginBtn.addEventListener('click', async function (e) {
             e.preventDefault();
             e.stopPropagation();
             await login(e);
@@ -348,7 +348,7 @@ function updateUserCount(count) {
 function showLoginScreen() {
     isAuthenticated = false;
     document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('dashboard').style.display = 'none';
+    document.getElementById('main-dashboard').style.display = 'none';
 }
 
 // Utility functions
