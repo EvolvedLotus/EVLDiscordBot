@@ -92,6 +92,8 @@ async function apiCall(endpoint, options = {}) {
 }
 
 let isAuthenticated = false;
+let currentServerId = null;
+let userData = null;
 
 // ========== LOGIN FUNCTION ==========
 async function login(event) {
@@ -176,9 +178,6 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 // ========== DASHBOARD DATA LOADING ==========
-let currentServerId = null;
-let userData = null;
-
 // Load initial dashboard data after login
 async function loadDashboardData() {
     try {
@@ -254,6 +253,12 @@ function onServerChange() {
 async function selectServer(serverId) {
     currentServerId = serverId;
     console.log('Selected server:', serverId);
+
+    // Update selector
+    const selector = document.getElementById('server-select');
+    if (selector) {
+        selector.value = serverId;
+    }
 
     // Load server-specific data
     await loadServerData(serverId);
@@ -432,6 +437,9 @@ function loadTabData(tabName) {
         case 'transactions':
             loadTransactions();
             break;
+        case 'embeds':
+            loadEmbeds();
+            break;
         case 'server-settings':
             loadServerSettingsTab();
             break;
@@ -463,10 +471,11 @@ async function loadUsersTab() {
 
         if (data && data.users && data.users.length > 0) {
             let html = '<div class="table-container"><table><thead><tr>';
-            html += '<th>User</th><th>Balance</th><th>Level</th><th>XP</th><th>Actions</th>';
+            html += '<th>User</th><th>Balance</th><th>Total Earned</th><th>Total Spent</th><th>Last Daily</th><th>Actions</th>';
             html += '</tr></thead><tbody>';
 
             data.users.forEach(user => {
+                const lastDaily = user.last_daily ? new Date(user.last_daily).toLocaleDateString() : 'Never';
                 html += `<tr>
                     <td>
                         <div class="user-info">
@@ -477,15 +486,22 @@ async function loadUsersTab() {
                         </div>
                     </td>
                     <td class="balance-amount">$${(user.balance || 0).toLocaleString()}</td>
-                    <td>${user.level || 0}</td>
-                    <td>${user.xp || 0}</td>
+                    <td>$${(user.total_earned || 0).toLocaleString()}</td>
+                    <td>$${(user.total_spent || 0).toLocaleString()}</td>
+                    <td>${lastDaily}</td>
                     <td>
-                        <button class="btn-small btn-primary" onclick="editUser('${user.user_id}')">Edit</button>
+                        <button class="btn-small btn-primary" onclick="editUserBalance('${user.user_id}', ${user.balance})">Edit Balance</button>
                     </td>
                 </tr>`;
             });
 
             html += '</tbody></table></div>';
+
+            // Add pagination info
+            if (data.pages > 1) {
+                html += `<div class="pagination-info">Page ${data.page} of ${data.pages} (${data.total} total users)</div>`;
+            }
+
             usersList.innerHTML = html;
         } else {
             usersList.innerHTML = '<div class="empty-state">No users found</div>';
@@ -500,54 +516,367 @@ async function loadShop() {
     const shopList = document.getElementById('shop-list');
     if (!shopList) return;
 
-    shopList.innerHTML = '<div class="loading">Shop management coming soon...</div>';
+    try {
+        shopList.innerHTML = '<div class="loading">Loading shop items...</div>';
+        const data = await apiCall(`/api/${currentServerId}/shop`);
+
+        if (data && data.items && data.items.length > 0) {
+            let html = '<div class="table-container"><table><thead><tr>';
+            html += '<th>Item</th><th>Price</th><th>Category</th><th>Stock</th><th>Status</th><th>Actions</th>';
+            html += '</tr></thead><tbody>';
+
+            data.items.forEach(item => {
+                const stockDisplay = item.stock === -1 ? '∞ Unlimited' : item.stock;
+                const statusBadge = item.is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-secondary">Inactive</span>';
+
+                html += `<tr>
+                    <td>
+                        <div>${item.emoji || '📦'} ${item.name}</div>
+                        <div class="item-description">${item.description || ''}</div>
+                    </td>
+                    <td class="balance-amount">$${item.price.toLocaleString()}</td>
+                    <td>${item.category}</td>
+                    <td>${stockDisplay}</td>
+                    <td>${statusBadge}</td>
+                    <td>
+                        <button class="btn-small btn-primary" onclick="editShopItem('${item.item_id}')">Edit</button>
+                        <button class="btn-small btn-danger" onclick="deleteShopItem('${item.item_id}')">Delete</button>
+                    </td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+            shopList.innerHTML = html;
+        } else {
+            shopList.innerHTML = '<div class="empty-state">No shop items found. Click "Add Item" to create one.</div>';
+        }
+    } catch (error) {
+        console.error('Failed to load shop:', error);
+        shopList.innerHTML = '<div class="error-state">Failed to load shop items</div>';
+    }
 }
 
 async function loadTasks() {
     const tasksList = document.getElementById('tasks-list');
     if (!tasksList) return;
 
-    tasksList.innerHTML = '<div class="loading">Task management coming soon...</div>';
+    try {
+        tasksList.innerHTML = '<div class="loading">Loading tasks...</div>';
+        const data = await apiCall(`/api/${currentServerId}/tasks`);
+
+        if (data && data.tasks && data.tasks.length > 0) {
+            let html = '<div class="table-container"><table><thead><tr>';
+            html += '<th>Task</th><th>Reward</th><th>Duration</th><th>Claims</th><th>Status</th><th>Expires</th><th>Actions</th>';
+            html += '</tr></thead><tbody>';
+
+            data.tasks.forEach(task => {
+                const expiresAt = task.expires_at ? new Date(task.expires_at).toLocaleString() : 'No expiration';
+                const claimsDisplay = task.max_claims === -1 ? `${task.current_claims} / ∞` : `${task.current_claims} / ${task.max_claims}`;
+                const statusBadge = task.status === 'active' ? '<span class="badge badge-success">Active</span>' :
+                    task.status === 'completed' ? '<span class="badge badge-primary">Completed</span>' :
+                        task.status === 'expired' ? '<span class="badge badge-warning">Expired</span>' :
+                            '<span class="badge badge-secondary">Cancelled</span>';
+
+                html += `<tr>
+                    <td>
+                        <div><strong>${task.name}</strong></div>
+                        <div class="task-description">${task.description || ''}</div>
+                    </td>
+                    <td class="balance-amount">$${task.reward.toLocaleString()}</td>
+                    <td>${task.duration_hours}h</td>
+                    <td>${claimsDisplay}</td>
+                    <td>${statusBadge}</td>
+                    <td>${expiresAt}</td>
+                    <td>
+                        <button class="btn-small btn-primary" onclick="editTask(${task.task_id})">Edit</button>
+                        <button class="btn-small btn-danger" onclick="deleteTask(${task.task_id})">Delete</button>
+                    </td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+            tasksList.innerHTML = html;
+        } else {
+            tasksList.innerHTML = '<div class="empty-state">No tasks found. Click "Add Task" to create one.</div>';
+        }
+    } catch (error) {
+        console.error('Failed to load tasks:', error);
+        tasksList.innerHTML = '<div class="error-state">Failed to load tasks</div>';
+    }
 }
 
 async function loadAnnouncements() {
     const announcementsContent = document.getElementById('tab-content');
     if (!announcementsContent) return;
 
-    announcementsContent.innerHTML = '<div class="loading">Announcements coming soon...</div>';
+    try {
+        announcementsContent.innerHTML = '<div class="loading">Loading announcements...</div>';
+        const data = await apiCall(`/api/${currentServerId}/announcements`);
+
+        if (data && data.announcements && data.announcements.length > 0) {
+            let html = '<div class="announcements-list">';
+
+            data.announcements.forEach(announcement => {
+                const createdAt = new Date(announcement.created_at).toLocaleString();
+                const pinnedBadge = announcement.is_pinned ? '<span class="pinned-badge">📌 Pinned</span>' : '';
+
+                html += `<div class="announcement-card">
+                    <div class="announcement-header">
+                        <div class="announcement-title">
+                            <h3>${announcement.title || 'Announcement'}</h3>
+                            ${pinnedBadge}
+                        </div>
+                        <div class="announcement-actions">
+                            <button class="btn-small" onclick="editAnnouncement('${announcement.announcement_id}')">Edit</button>
+                            <button class="btn-small btn-danger" onclick="deleteAnnouncement('${announcement.announcement_id}')">Delete</button>
+                        </div>
+                    </div>
+                    <div class="announcement-content">
+                        <p>${announcement.content}</p>
+                    </div>
+                    <div class="announcement-meta">
+                        <span>Created: ${createdAt}</span>
+                        <span>By: ${announcement.created_by || 'Unknown'}</span>
+                    </div>
+                </div>`;
+            });
+
+            html += '</div>';
+            announcementsContent.innerHTML = html;
+        } else {
+            announcementsContent.innerHTML = '<div class="empty-state">No announcements found.</div>';
+        }
+    } catch (error) {
+        console.error('Failed to load announcements:', error);
+        announcementsContent.innerHTML = '<div class="error-state">Failed to load announcements</div>';
+    }
 }
 
 async function loadTransactions() {
     const transactionsList = document.getElementById('transactions-list');
     if (!transactionsList) return;
 
-    transactionsList.innerHTML = '<div class="loading">Transactions coming soon...</div>';
+    try {
+        transactionsList.innerHTML = '<div class="loading">Loading transactions...</div>';
+        const data = await apiCall(`/api/${currentServerId}/transactions`);
+
+        if (data && data.transactions && data.transactions.length > 0) {
+            let html = '<div class="table-container"><table><thead><tr>';
+            html += '<th>Date</th><th>User</th><th>Type</th><th>Amount</th><th>Balance After</th><th>Description</th>';
+            html += '</tr></thead><tbody>';
+
+            data.transactions.forEach(txn => {
+                const timestamp = new Date(txn.timestamp).toLocaleString();
+                const amountClass = txn.amount >= 0 ? 'positive' : 'negative';
+                const amountSign = txn.amount >= 0 ? '+' : '';
+
+                html += `<tr>
+                    <td>${timestamp}</td>
+                    <td>${txn.user_id}</td>
+                    <td>${txn.transaction_type}</td>
+                    <td class="${amountClass}">${amountSign}$${Math.abs(txn.amount).toLocaleString()}</td>
+                    <td>$${txn.balance_after.toLocaleString()}</td>
+                    <td>${txn.description || ''}</td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+            transactionsList.innerHTML = html;
+        } else {
+            transactionsList.innerHTML = '<div class="empty-state">No transactions found</div>';
+        }
+    } catch (error) {
+        console.error('Failed to load transactions:', error);
+        transactionsList.innerHTML = '<div class="error-state">Failed to load transactions</div>';
+    }
+}
+
+async function loadEmbeds() {
+    const embedsList = document.getElementById('embeds-list');
+    if (!embedsList) return;
+
+    try {
+        embedsList.innerHTML = '<div class="loading">Loading embeds...</div>';
+        const data = await apiCall(`/api/${currentServerId}/embeds`);
+
+        if (data && data.embeds && data.embeds.length > 0) {
+            let html = '<div class="embeds-grid">';
+
+            data.embeds.forEach(embed => {
+                html += `<div class="embed-card">
+                    <div class="embed-preview" style="border-left: 4px solid ${embed.color || '#5865F2'}">
+                        <h4>${embed.title || 'Untitled Embed'}</h4>
+                        <p>${embed.description || ''}</p>
+                    </div>
+                    <div class="embed-actions">
+                        <button class="btn-small btn-primary" onclick="editEmbed('${embed.embed_id}')">Edit</button>
+                        <button class="btn-small btn-danger" onclick="deleteEmbed('${embed.embed_id}')">Delete</button>
+                    </div>
+                </div>`;
+            });
+
+            html += '</div>';
+            embedsList.innerHTML = html;
+        } else {
+            embedsList.innerHTML = '<div class="empty-state">No embeds found. Click "Create Embed" to make one.</div>';
+        }
+    } catch (error) {
+        console.error('Failed to load embeds:', error);
+        embedsList.innerHTML = '<div class="error-state">Failed to load embeds</div>';
+    }
 }
 
 async function loadServerSettingsTab() {
     const settingsContent = document.getElementById('server-settings-content');
     if (!settingsContent) return;
 
-    settingsContent.innerHTML = '<div class="loading">Server settings loaded. Configure your server here.</div>';
+    try {
+        const config = await apiCall(`/api/${currentServerId}/config`);
+        console.log('Server config loaded:', config);
+
+        // Settings are already in HTML, just populate the values
+        document.getElementById('currency-name').value = config.currency_name || 'coins';
+        document.getElementById('currency-symbol').value = config.currency_symbol || '$';
+        document.getElementById('starting-balance').value = config.starting_balance || 0;
+
+        // Feature toggles
+        document.getElementById('feature-currency').checked = config.feature_currency !== false;
+        document.getElementById('feature-tasks').checked = config.feature_tasks !== false;
+        document.getElementById('feature-shop').checked = config.feature_shop !== false;
+        document.getElementById('feature-announcements').checked = config.feature_announcements !== false;
+        document.getElementById('feature-moderation').checked = config.feature_moderation !== false;
+
+        showNotification('Server settings loaded', 'success');
+    } catch (error) {
+        console.error('Failed to load server settings:', error);
+        showNotification('Failed to load server settings', 'error');
+    }
 }
 
 async function loadPermissionsTab() {
     const permissionsContent = document.getElementById('permissions-content');
     if (!permissionsContent) return;
 
-    permissionsContent.innerHTML = '<div class="loading">Permissions management coming soon...</div>';
+    try {
+        const roles = await apiCall(`/api/${currentServerId}/roles`);
+        console.log('Roles loaded:', roles);
+
+        showNotification('Permissions loaded', 'success');
+    } catch (error) {
+        console.error('Failed to load permissions:', error);
+        showNotification('Failed to load permissions', 'error');
+    }
 }
 
 async function loadLogs() {
     const logsContent = document.getElementById('logs-content');
     if (!logsContent) return;
 
-    logsContent.innerHTML = '<div class="loading">Logs coming soon...</div>';
+    logsContent.innerHTML = '<div class="loading">Logs feature coming soon...</div>';
 }
 
 // ========== USER MANAGEMENT ==========
-function editUser(userId) {
-    showNotification(`Edit user ${userId} - Feature coming soon`, 'info');
+function editUserBalance(userId, currentBalance) {
+    const amount = prompt(`Edit balance for user ${userId}\nCurrent balance: $${currentBalance}\n\nEnter amount to ADD (use negative to subtract):`);
+
+    if (amount === null) return;
+
+    const parsedAmount = parseInt(amount);
+    if (isNaN(parsedAmount)) {
+        showNotification('Invalid amount', 'error');
+        return;
+    }
+
+    updateUserBalance(userId, parsedAmount);
+}
+
+async function updateUserBalance(userId, amount) {
+    try {
+        await apiCall(`/api/${currentServerId}/users/${userId}/balance`, {
+            method: 'PUT',
+            body: JSON.stringify({ amount })
+        });
+
+        showNotification(`Balance updated for user ${userId}`, 'success');
+        loadUsersTab(); // Reload users
+    } catch (error) {
+        console.error('Failed to update balance:', error);
+        showNotification('Failed to update balance', 'error');
+    }
+}
+
+// ========== SHOP MANAGEMENT ==========
+function editShopItem(itemId) {
+    showNotification(`Edit shop item ${itemId} - Feature coming soon`, 'info');
+}
+
+async function deleteShopItem(itemId) {
+    if (!confirm(`Are you sure you want to delete this shop item?`)) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+            method: 'DELETE'
+        });
+
+        showNotification('Shop item deleted', 'success');
+        loadShop(); // Reload shop
+    } catch (error) {
+        console.error('Failed to delete shop item:', error);
+        showNotification('Failed to delete shop item', 'error');
+    }
+}
+
+// ========== TASK MANAGEMENT ==========
+function editTask(taskId) {
+    showNotification(`Edit task ${taskId} - Feature coming soon`, 'info');
+}
+
+async function deleteTask(taskId) {
+    if (!confirm(`Are you sure you want to delete this task?`)) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+            method: 'DELETE'
+        });
+
+        showNotification('Task deleted', 'success');
+        loadTasks(); // Reload tasks
+    } catch (error) {
+        console.error('Failed to delete task:', error);
+        showNotification('Failed to delete task', 'error');
+    }
+}
+
+// ========== ANNOUNCEMENT MANAGEMENT ==========
+function editAnnouncement(announcementId) {
+    showNotification(`Edit announcement ${announcementId} - Feature coming soon`, 'info');
+}
+
+async function deleteAnnouncement(announcementId) {
+    if (!confirm(`Are you sure you want to delete this announcement?`)) return;
+
+    showNotification('Delete announcement - Feature coming soon', 'info');
+}
+
+// ========== EMBED MANAGEMENT ==========
+function editEmbed(embedId) {
+    showNotification(`Edit embed ${embedId} - Feature coming soon`, 'info');
+}
+
+async function deleteEmbed(embedId) {
+    if (!confirm(`Are you sure you want to delete this embed?`)) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+            method: 'DELETE'
+        });
+
+        showNotification('Embed deleted', 'success');
+        loadEmbeds(); // Reload embeds
+    } catch (error) {
+        console.error('Failed to delete embed:', error);
+        showNotification('Failed to delete embed', 'error');
+    }
 }
 
 // ========== PLACEHOLDER FUNCTIONS ==========
@@ -580,7 +909,7 @@ function showCreateEmbedModal() {
 }
 
 function refreshEmbeds() {
-    showNotification('Refresh embeds - Feature coming soon', 'info');
+    loadEmbeds();
 }
 
 function showTransactionFilters() {
