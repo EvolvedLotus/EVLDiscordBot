@@ -61,6 +61,152 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
+// ========== USER MANAGEMENT ==========
+
+let currentManagingUserId = null;
+
+async function manageUser(userId) {
+    currentManagingUserId = userId;
+    const modal = document.getElementById('user-management-modal');
+    const userNameSpan = document.getElementById('manage-user-name');
+    const rolesContainer = document.getElementById('user-roles-container');
+
+    if (!modal) return;
+
+    // Set user name
+    const user = discordDataCache.users[userId];
+    userNameSpan.textContent = user ? (user.username || user.display_name) : userId;
+
+    // Load roles
+    rolesContainer.innerHTML = '<div class="loading">Loading roles...</div>';
+    modal.style.display = 'block';
+
+    try {
+        const [userRoles, allRoles] = await Promise.all([
+            apiCall(`/api/${currentServerId}/users/${userId}/roles`),
+            apiCall(`/api/${currentServerId}/roles`)
+        ]);
+
+        if (allRoles && allRoles.roles) {
+            let html = '<div class="roles-list-check">';
+            allRoles.roles.forEach(role => {
+                const hasRole = userRoles.roles.includes(role.id);
+                html += `
+                    <label class="role-item">
+                        <input type="checkbox" value="${role.id}" ${hasRole ? 'checked' : ''}>
+                        <span style="color: #${role.color.toString(16).padStart(6, '0')}">${role.name}</span>
+                    </label>
+                `;
+            });
+            html += '</div>';
+            rolesContainer.innerHTML = html;
+        }
+    } catch (error) {
+        rolesContainer.innerHTML = `<div class="error">Failed to load roles: ${error.message}</div>`;
+    }
+}
+
+function closeUserManagementModal() {
+    document.getElementById('user-management-modal').style.display = 'none';
+    currentManagingUserId = null;
+}
+
+async function addBalance() {
+    if (!currentManagingUserId) return;
+    const amount = document.getElementById('balance-amount').value;
+    const reason = document.getElementById('balance-reason').value;
+
+    try {
+        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance/add`, {
+            method: 'POST',
+            body: JSON.stringify({ amount: parseInt(amount), reason })
+        });
+        showNotification('Balance added successfully', 'success');
+        loadUsers();
+    } catch (error) {
+        showNotification('Failed to add balance: ' + error.message, 'error');
+    }
+}
+
+async function removeBalance() {
+    if (!currentManagingUserId) return;
+    const amount = document.getElementById('balance-amount').value;
+    const reason = document.getElementById('balance-reason').value;
+
+    try {
+        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance/remove`, {
+            method: 'POST',
+            body: JSON.stringify({ amount: parseInt(amount), reason })
+        });
+        showNotification('Balance removed successfully', 'success');
+        loadUsers();
+    } catch (error) {
+        showNotification('Failed to remove balance: ' + error.message, 'error');
+    }
+}
+
+async function saveUserRoles() {
+    if (!currentManagingUserId) return;
+    const checkboxes = document.querySelectorAll('#user-roles-container input[type="checkbox"]');
+    const roleIds = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+    try {
+        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/roles`, {
+            method: 'PUT',
+            body: JSON.stringify({ roles: roleIds })
+        });
+        showNotification('Roles updated successfully', 'success');
+    } catch (error) {
+        showNotification('Failed to update roles: ' + error.message, 'error');
+    }
+}
+
+async function kickUserFromModal() {
+    if (!currentManagingUserId || !confirm('Kick this user?')) return;
+    try {
+        await apiCall(`/api/${currentServerId}/moderation/kick`, {
+            method: 'POST',
+            body: JSON.stringify({ user_id: currentManagingUserId })
+        });
+        showNotification('User kicked', 'success');
+        closeUserManagementModal();
+        loadUsers();
+    } catch (error) {
+        showNotification('Failed to kick user: ' + error.message, 'error');
+    }
+}
+
+async function banUserFromModal() {
+    if (!currentManagingUserId || !confirm('Ban this user?')) return;
+    try {
+        await apiCall(`/api/${currentServerId}/moderation/ban`, {
+            method: 'POST',
+            body: JSON.stringify({ user_id: currentManagingUserId })
+        });
+        showNotification('User banned', 'success');
+        closeUserManagementModal();
+        loadUsers();
+    } catch (error) {
+        showNotification('Failed to ban user: ' + error.message, 'error');
+    }
+}
+
+async function timeoutUserFromModal() {
+    if (!currentManagingUserId) return;
+    const duration = prompt('Enter timeout duration in minutes:', '60');
+    if (!duration) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/moderation/timeout`, {
+            method: 'POST',
+            body: JSON.stringify({ user_id: currentManagingUserId, duration: parseInt(duration) })
+        });
+        showNotification('User timed out', 'success');
+    } catch (error) {
+        showNotification('Failed to timeout user: ' + error.message, 'error');
+    }
+}
+
 // Auth & Initialization
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('App initialized');
@@ -321,6 +467,10 @@ async function loadShop() {
                         <p>${item.description || ''}</p>
                         <div class="price">${item.price} coins</div>
                         <div class="stock">Stock: ${item.stock === -1 ? '∞' : item.stock}</div>
+                        <div class="card-actions">
+                            <button onclick="editShopItem('${item.id}')" class="btn-small btn-primary">✏️ Edit</button>
+                            <button onclick="deleteShopItem('${item.id}')" class="btn-small btn-danger">🗑️ Delete</button>
+                        </div>
                     </div>
                 `;
             });
@@ -332,6 +482,25 @@ async function loadShop() {
     } catch (error) {
         list.innerHTML = `<div class="error">Error: ${error.message}</div>`;
     }
+}
+
+async function deleteShopItem(itemId) {
+    if (!confirm('Are you sure you want to delete this item?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+            method: 'DELETE'
+        });
+        showNotification('Item deleted successfully', 'success');
+        loadShop();
+    } catch (error) {
+        showNotification(`Failed to delete item: ${error.message}`, 'error');
+    }
+}
+
+async function editShopItem(itemId) {
+    // TODO: Implement edit modal population
+    alert('Edit functionality coming soon!');
 }
 
 async function loadTasks() {
@@ -348,6 +517,10 @@ async function loadTasks() {
                         <h4>${task.name}</h4>
                         <p>${task.description}</p>
                         <div class="reward">Reward: ${task.reward}</div>
+                        <div class="card-actions">
+                            <button onclick="editTask('${task.id}')" class="btn-small btn-primary">✏️ Edit</button>
+                            <button onclick="deleteTask('${task.id}')" class="btn-small btn-danger">🗑️ Delete</button>
+                        </div>
                     </div>
                 `;
             });
@@ -359,6 +532,25 @@ async function loadTasks() {
     } catch (error) {
         list.innerHTML = `<div class="error">Error: ${error.message}</div>`;
     }
+}
+
+async function deleteTask(taskId) {
+    if (!confirm('Are you sure you want to delete this task?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+            method: 'DELETE'
+        });
+        showNotification('Task deleted successfully', 'success');
+        loadTasks();
+    } catch (error) {
+        showNotification(`Failed to delete task: ${error.message}`, 'error');
+    }
+}
+
+async function editTask(taskId) {
+    // TODO: Implement edit modal population
+    alert('Edit functionality coming soon!');
 }
 
 async function loadServerSettings() {
@@ -469,7 +661,9 @@ function getRoleDisplay(roleId) {
 // Full implementations for all tabs
 async function loadAnnouncements() {
     if (!currentServerId) return;
-    const content = document.getElementById('tab-content');
+    const content = document.getElementById('announcements-list');
+    if (!content) return;
+
     content.innerHTML = '<div class="loading">Loading announcements...</div>';
 
     try {
@@ -477,16 +671,7 @@ async function loadAnnouncements() {
         const data = await apiCall(`/api/${currentServerId}/announcements`);
 
         if (data && data.announcements && data.announcements.length > 0) {
-            let html = `
-                <div class="announcements-header">
-                    <h2>📢 Announcements</h2>
-                    <div class="announcements-actions">
-                        <button onclick="showCreateAnnouncementModal()" class="btn-success">➕ Create</button>
-                        <button onclick="loadAnnouncements()" class="btn-primary">🔄 Refresh</button>
-                    </div>
-                </div>
-                <div class="announcements-list">
-            `;
+            let html = '<div class="announcements-grid">';
 
             data.announcements.forEach(announcement => {
                 const channelName = getChannelDisplay(announcement.channel_id);
@@ -519,7 +704,7 @@ async function loadAnnouncements() {
                 `;
             });
 
-            html += '</div></div>';
+            html += '</div>';
             content.innerHTML = html;
         } else {
             content.innerHTML = `
@@ -820,7 +1005,7 @@ async function loadModerationTab() {
 
 async function loadPermissionsTab() {
     console.log('Loading permissions...');
-    const permissionsContent = document.getElementById('permissions-content');
+    const permissionsContent = document.getElementById('permissions-dynamic-section');
 
     if (!permissionsContent) return;
 
