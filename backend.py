@@ -754,6 +754,32 @@ def delete_embed(server_id, embed_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/<server_id>/logs', methods=['GET'])
+@require_guild_access
+def get_logs(server_id):
+    try:
+        # Fetch moderation audit logs from database
+        limit = int(request.args.get('limit', 100))
+        log_type = request.args.get('type', '')
+        
+        result = data_manager.admin_client.table('moderation_audit_logs') \
+            .select('*') \
+            .eq('guild_id', server_id) \
+            .order('created_at', desc=True) \
+            .limit(limit) \
+            .execute()
+        
+        logs = result.data if result.data else []
+        
+        # Filter by type if specified
+        if log_type:
+            logs = [log for log in logs if log.get('action', '').startswith(log_type)]
+        
+        return jsonify({'logs': logs}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+
 @app.route('/api/<server_id>/bot_status', methods=['POST'])
 @require_guild_access
 def update_bot_status(server_id):
