@@ -1105,6 +1105,129 @@ class BotAdmin(commands.Cog):
             logger.error(f"Error getting config: {e}")
             await interaction.followup.send("❌ Failed to load configuration.", ephemeral=True)
 
+    @app_commands.command(name="set_bot_status", description="Set the bot's status message (saved across restarts)")
+    @app_commands.describe(
+        message="The status message (leave empty to reset to default)",
+        type="The activity type"
+    )
+    @app_commands.choices(type=[
+        app_commands.Choice(name="Watching", value="watching"),
+        app_commands.Choice(name="Playing", value="playing"),
+        app_commands.Choice(name="Listening to", value="listening"),
+        app_commands.Choice(name="Streaming", value="streaming")
+    ])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_bot_status(
+        self,
+        interaction: discord.Interaction,
+        message: str = None,
+        type: str = "watching"
+    ):
+        """Set bot status message that persists across restarts."""
+        await interaction.response.defer(ephemeral=True)
+
+        # Load guild record
+        guild_result = self.data_manager.supabase.table('guilds').select('bot_status_message, bot_status_type, server_name').eq('guild_id', str(interaction.guild.id)).execute()
+
+        if not guild_result.data or len(guild_result.data) == 0:
+            await interaction.followup.send("❌ Guild configuration not found.", ephemeral=True)
+            return
+
+        guild_data = guild_result.data[0]
+        server_name = guild_data.get('server_name', 'Unknown Server')
+
+        # Allow empty message for specific use cases
+        if message is None or message.strip() == "":
+            # Reset to default based on guild count
+            guild_count = len(interaction.client.guilds)
+            message = f"{guild_count} servers"
+            type = "watching"
+
+        try:
+            # Update database
+            self.data_manager.supabase.table('guilds').update({
+                'bot_status_message': message,
+                'bot_status_type': type
+            }).eq('guild_id', str(interaction.guild.id)).execute()
+
+            # Clear cache
+            self.data_manager.invalidate_cache(str(interaction.guild.id), 'config')
+
+            # Apply status immediately
+            activity_type_map = {
+                'watching': discord.ActivityType.watching,
+                'playing': discord.ActivityType.playing,
+                'listening': discord.ActivityType.listening,
+                'streaming': discord.ActivityType.streaming
+            }
+
+            activity = discord.Activity(
+                type=activity_type_map.get(type, discord.ActivityType.watching),
+                name=message
+            )
+
+            await interaction.client.change_presence(activity=activity)
+
+            await interaction.followup.send(f"✅ Bot status updated for **{server_name}**!\n🔸 Type: **{type.title()}**\n🔸 Message: **{message}**", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error setting bot status: {e}")
+            await interaction.followup.send("❌ Failed to update bot status.", ephemeral=True)
+
+    @app_commands.command(name="get_bot_status", description="View current bot status settings")
+    async def get_bot_status(self, interaction: discord.Interaction):
+        """View current bot status settings."""
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            # Load current status from database
+            guild_result = self.data_manager.supabase.table('guilds').select('bot_status_message, bot_status_type, server_name').eq('guild_id', str(interaction.guild.id)).execute()
+
+            if not guild_result.data or len(guild_result.data) == 0:
+                await interaction.followup.send("❌ Guild configuration not found.", ephemeral=True)
+                return
+
+            guild_data = guild_result.data[0]
+            server_name = guild_data.get('server_name', 'Unknown Server')
+            current_message = guild_data.get('bot_status_message')
+            current_type = guild_data.get('bot_status_type', 'watching')
+
+            embed = discord.Embed(
+                title="🤖 Bot Status Settings",
+                description=f"Current settings for **{server_name}**",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            embed.add_field(
+                name="Activity Type",
+                value=current_type.title(),
+                inline=True
+            )
+
+            embed.add_field(
+                name="Status Message",
+                value=current_message or "Default (server count)",
+                inline=True
+            )
+
+            # Get current presence
+            presence = interaction.client.user.activity
+            if presence:
+                status_type = str(presence.type).split('.')[1].title()
+                embed.add_field(
+                    name="Current Live Status",
+                    value=f"{status_type}: {presence.name}",
+                    inline=False
+                )
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error getting bot status: {e}")
+            await interaction.followup.send("❌ Failed to load bot status.", ephemeral=True)
+
+
 async def setup(bot):
     """Setup the bot admin cog."""
     cog = BotAdmin(bot)

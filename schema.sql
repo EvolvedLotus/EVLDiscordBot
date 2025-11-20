@@ -34,6 +34,8 @@ feature_moderation BOOLEAN DEFAULT true,
 -- Settings
 global_shop BOOLEAN DEFAULT false,
 global_tasks BOOLEAN DEFAULT false,
+bot_status_message TEXT,  -- Custom bot status message
+bot_status_type TEXT DEFAULT 'watching',  -- Activity type: playing, streaming, listening, watching
 
 -- Metadata
 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

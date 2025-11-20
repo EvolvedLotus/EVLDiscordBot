@@ -209,13 +209,49 @@ async def run_bot():
             logger.info(f"📊 Connected to {len(bot.guilds)} guild(s)")
             logger.info("=" * 60)
 
-            # Set bot status
-            await bot.change_presence(
-                activity=discord.Activity(
-                    type=discord.ActivityType.watching,
-                    name=f"{len(bot.guilds)} servers"
+            # Set bot status - load from database if configured
+            custom_status_set = False
+            for guild in bot.guilds:
+                try:
+                    # Query guild-specific bot status
+                    guild_result = data_manager.supabase.table('guilds').select('bot_status_message, bot_status_type').eq('guild_id', str(guild.id)).execute()
+
+                    if guild_result.data and len(guild_result.data) > 0:
+                        guild_data = guild_result.data[0]
+                        status_message = guild_data.get('bot_status_message')
+                        status_type = guild_data.get('bot_status_type', 'watching')
+
+                        if status_message:
+                            # Use custom bot status
+                            activity_type_map = {
+                                'watching': discord.ActivityType.watching,
+                                'playing': discord.ActivityType.playing,
+                                'listening': discord.ActivityType.listening,
+                                'streaming': discord.ActivityType.streaming
+                            }
+
+                            activity = discord.Activity(
+                                type=activity_type_map.get(status_type, discord.ActivityType.watching),
+                                name=status_message
+                            )
+
+                            await bot.change_presence(activity=activity)
+                            logger.info(f"✓ Custom bot status loaded for guild {guild.name}: {status_type.title()} '{status_message}'")
+                            custom_status_set = True
+                            break  # Use first custom status found
+
+                except Exception as e:
+                    logger.warning(f"Failed to load custom bot status for guild {guild.id}: {e}")
+
+            # Fallback to default status if no custom status found
+            if not custom_status_set:
+                await bot.change_presence(
+                    activity=discord.Activity(
+                        type=discord.ActivityType.watching,
+                        name=f"{len(bot.guilds)} servers"
+                    )
                 )
-            )
+                logger.info("✓ Using default bot status (watching server count)")
 
             # Sync slash commands first
             try:
