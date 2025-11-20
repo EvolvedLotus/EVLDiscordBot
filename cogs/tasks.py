@@ -377,9 +377,9 @@ class Tasks(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.data_manager = None
-        self.transaction_manager = None
-        # Initialize managers - will be set in set_managers
+        self.data_manager = data_manager
+        self.transaction_manager = TransactionManager
+        # Initialize managers lazily to avoid dependency issues during cog loading
         # Don't start the loop here - it will be started in setup or after bot is ready
 
     def set_managers(self, data_manager, transaction_manager):
@@ -497,6 +497,21 @@ class Tasks(commands.Cog):
                 "❌ Error submitting task. Please try again.",
                 ephemeral=True
             )
+
+    @app_commands.command(name="submittask", description="Submit proof for a claimed task")
+    @app_commands.describe(
+        task_id="The ID of the task to submit",
+        proof="Description or link to proof of completion"
+    )
+    async def submittask(
+        self,
+        interaction: discord.Interaction,
+        task_id: int,
+        proof: str,
+        attachment: discord.Attachment = None
+    ):
+        """Submit task completion proof (duplicate of /task_submit)."""
+        await self.submit_task(interaction, task_id, proof, attachment)
 
 class TaskReviewView(discord.ui.View):
     """View for task submission review."""

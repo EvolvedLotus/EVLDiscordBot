@@ -23,6 +23,149 @@ class BotAdmin(commands.Cog):
 
     # ===== USER MANAGEMENT =====
 
+    @app_commands.command(name="addbalance", description="Add currency to a user's balance (Admin only)")
+    @app_commands.describe(
+        user="The user to add currency to",
+        amount="Amount of currency to add",
+        reason="Reason for adding currency (optional)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def addbalance(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str = "Admin adjustment"):
+        """Add currency to a user's balance"""
+        result = await self._modify_user_balance(interaction, user, amount, reason, "add")
+        await self._send_balance_result(interaction, result, "added to", user, amount)
+
+    @app_commands.command(name="removebalance", description="Remove currency from a user's balance (Admin only)")
+    @app_commands.describe(
+        user="The user to remove currency from",
+        amount="Amount of currency to remove",
+        reason="Reason for removing currency (optional)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def removebalance(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str = "Admin adjustment"):
+        """Remove currency from a user's balance"""
+        if amount < 0:
+            amount = -amount  # Ensure positive for removal
+        result = await self._modify_user_balance(interaction, user, -amount, reason, "subtract")
+        await self._send_balance_result(interaction, result, "removed from", user, amount)
+
+    @app_commands.command(name="setbalance", description="Set a user's balance to exact amount (Admin only)")
+    @app_commands.describe(
+        user="The user whose balance to set",
+        amount="The exact balance amount to set",
+        reason="Reason for setting balance (optional)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def setbalance(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str = "Admin adjustment"):
+        """Set a user's balance to an exact amount"""
+        result = await self._modify_user_balance(interaction, user, amount, reason, "set")
+        await self._send_balance_result(interaction, result, "set to", user, amount)
+
+    async def _modify_user_balance(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str, action: str):
+        """Helper method to modify user balance"""
+        guild_id = str(interaction.guild.id)
+        user_id = str(user.id)
+
+        try:
+            # Load currency data
+            currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
+            users = currency_data.get('users', {})
+
+            # Get current balance
+            user_data = users.get(user_id, {'balance': 0, 'total_earned': 0, 'total_spent': 0})
+            current_balance = user_data.get('balance', 0)
+
+            # Calculate new balance
+            if action == "set":
+                new_balance = max(0, amount)  # Ensure non-negative
+                actual_change = new_balance - current_balance
+            elif action == "add":
+                new_balance = current_balance + amount
+                actual_change = amount
+            elif action == "subtract":
+                new_balance = max(0, current_balance - amount)
+                actual_change = -(min(amount, current_balance))
+            else:
+                return {"success": False, "error": "Invalid action"}
+
+            # Initialize user if doesn't exist
+            if user_id not in users:
+                users[user_id] = {
+                    'balance': 0,
+                    'total_earned': 0,
+                    'total_spent': 0,
+                    'created_at': datetime.now().isoformat(),
+                    'is_active': True,
+                    'username': user.name,
+                    'display_name': user.display_name
+                }
+                user_data = users[user_id]
+
+            # Update balance
+            user_data['balance'] = new_balance
+
+            # Update totals
+            if actual_change > 0:
+                user_data['total_earned'] = user_data.get('total_earned', 0) + actual_change
+            elif actual_change < 0:
+                user_data['total_spent'] = user_data.get('total_spent', 0) + abs(actual_change)
+
+            # Create transaction log
+            transaction_data = {
+                'id': f"txn_{int(datetime.now().timestamp() * 1000)}",
+                'user_id': user_id,
+                'amount': actual_change,
+                'balance_before': current_balance,
+                'balance_after': new_balance,
+                'type': 'admin_adjustment',
+                'description': reason,
+                'timestamp': datetime.now().isoformat(),
+                'source': 'discord_admin'
+            }
+
+            # Save transaction
+            transactions = self.data_manager.load_guild_data(guild_id, 'transactions') or []
+            transactions.append(transaction_data)
+            self.data_manager.save_guild_data(guild_id, 'transactions', transactions)
+
+            # Save currency data
+            self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
+
+            return {
+                "success": True,
+                "user": user,
+                "old_balance": current_balance,
+                "new_balance": new_balance,
+                "change": actual_change,
+                "action": action
+            }
+
+        except Exception as e:
+            logger.error(f"Error modifying user balance: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _send_balance_result(self, interaction: discord.Interaction, result: dict, action_text: str, user: discord.Member, amount: int):
+        """Send the result of a balance modification"""
+        if result["success"]:
+            embed = discord.Embed(
+                title="✅ Balance Updated",
+                description=f"Successfully {action_text} {user.mention}",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="Old Balance", value=f"{result['old_balance']} coins", inline=True)
+            embed.add_field(name="New Balance", value=f"{result['new_balance']} coins", inline=True)
+            embed.add_field(name="Change", value=f"{result['change']} coins", inline=True)
+            if result.get("error"):
+                embed.add_field(name="Note", value=result["error"], inline=False)
+        else:
+            embed = discord.Embed(
+                title="❌ Balance Update Failed",
+                description=result.get("error", "Unknown error"),
+                color=discord.Color.red()
+            )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="user_balance", description="View or modify a user's balance")
     @app_commands.describe(
         user="The user to check/modify",
@@ -742,6 +885,190 @@ class BotAdmin(commands.Cog):
 
     # ===== CONFIGURATION MANAGEMENT =====
 
+    @app_commands.command(name="setcurrency", description="Customize server currency (symbol and name)")
+    @app_commands.describe(
+        symbol="Currency symbol (e.g., $, £, €)",
+        name="Currency name (e.g., coins, points)"
+    )
+    @app_commands.checks.has_permissions(administrator=True)
+    async def setcurrency(
+        self,
+        interaction: discord.Interaction,
+        symbol: str,
+        name: str = None
+    ):
+        """Customize server currency settings."""
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            # Validate symbol
+            if len(symbol.strip()) > 5:
+                await interaction.followup.send("❌ Currency symbol must be 5 characters or less.", ephemeral=True)
+                return
+
+            # Update config
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+            config['currency_symbol'] = symbol.strip()
+
+            if name:
+                if len(name.strip()) > 20:
+                    await interaction.followup.send("❌ Currency name must be 20 characters or less.", ephemeral=True)
+                    return
+                config['currency_name'] = name.lower().strip()
+
+            self.data_manager.save_guild_data(guild_id, 'config', config)
+            self.data_manager.invalidate_cache(guild_id, 'config')
+
+            currency_name = name or config.get('currency_name', 'coins')
+            await interaction.followup.send(f"✅ Currency updated: {symbol} {currency_name}", ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error setting currency: {e}")
+            await interaction.followup.send("❌ Failed to update currency settings.", ephemeral=True)
+
+    @app_commands.command(name="economystats", description="View detailed economy statistics")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def economystats(self, interaction: discord.Interaction):
+        """View detailed economy statistics for admins."""
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
+            transactions = self.data_manager.load_guild_data(guild_id, 'transactions') or []
+
+            users = currency_data.get('users', {})
+
+            # Calculate statistics
+            total_users = len([u for u in users.values() if u.get('is_active', True)])
+            total_balance = sum(u.get('balance', 0) for u in users.values() if u.get('is_active', True))
+            total_earned = sum(u.get('total_earned', 0) for u in users.values() if u.get('is_active', True))
+            total_spent = sum(u.get('total_spent', 0) for u in users.values() if u.get('is_active', True))
+
+            # Transaction stats
+            total_transactions = len(transactions) if isinstance(transactions, list) else len(transactions.get('transactions', []))
+            recent_txns = self._get_recent_transactions(transactions, 10)
+
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+            symbol = config.get('currency_symbol', '$')
+
+            embed = discord.Embed(
+                title="📊 Economy Statistics",
+                description=f"Detailed economy stats for {interaction.guild.name}",
+                color=discord.Color.gold(),
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            embed.add_field(name="👥 Active Users", value=f"{total_users}", inline=True)
+            embed.add_field(name="💰 Total Balance", value=f"{symbol}{total_balance:,}", inline=True)
+            embed.add_field(name="📈 Total Earned", value=f"{symbol}{total_earned:,}", inline=True)
+            embed.add_field(name="📉 Total Spent", value=f"{symbol}{total_spent:,}", inline=True)
+            embed.add_field(name="💸 Transactions", value=f"{total_transactions}", inline=True)
+
+            if recent_txns:
+                txn_text = "\n".join([
+                    f"{symbol}{abs(txn.get('amount', 0)):+g} - {txn.get('description', 'Unknown')[:25]}"
+                    for txn in recent_txns[:5]
+                ])
+                embed.add_field(name="🔄 Recent Transactions", value=txn_text, inline=False)
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error getting economy stats: {e}")
+            await interaction.followup.send("❌ Failed to load economy statistics.", ephemeral=True)
+
+    def _get_recent_transactions(self, transactions, limit=10):
+        """Helper to get recent transactions."""
+        if isinstance(transactions, list):
+            return sorted(transactions, key=lambda x: x.get('timestamp', ''), reverse=True)[:limit]
+        elif isinstance(transactions, dict):
+            return transactions.get('transactions', [])[-limit:]
+        return []
+
+    @app_commands.command(name="serverconfig", description="View all server configuration settings")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def serverconfig(self, interaction: discord.Interaction):
+        """Display comprehensive server configuration."""
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = str(interaction.guild.id)
+
+        try:
+            config = self.data_manager.load_guild_data(guild_id, 'config')
+
+            embed = discord.Embed(
+                title="⚙️ Complete Server Configuration",
+                description="All server settings and configuration",
+                color=discord.Color.blue(),
+                timestamp=datetime.now(timezone.utc)
+            )
+
+            # Basic settings
+            embed.add_field(name="🤖 Prefix", value=f"`{config.get('prefix', '!')}`", inline=True)
+            embed.add_field(name="💰 Currency", value=f"`{config.get('currency_symbol', '$')} {config.get('currency_name', 'coins')}`", inline=True)
+
+            # Feature toggles
+            features = []
+            for feature in ['currency', 'tasks', 'shop', 'announcements', 'moderation']:
+                enabled = config.get(f'feature_{feature}', True)
+                icon = "✅" if enabled else "❌"
+                features.append(f"{icon} {feature.title()}")
+            embed.add_field(name="🔧 Features", value="\n".join(features), inline=False)
+
+            # Channels
+            channels = []
+            channel_configs = {
+                'task_channel_id': 'Task Channel',
+                'shop_channel_id': 'Shop Channel',
+                'welcome_channel': 'Welcome Channel',
+                'log_channel': 'Log Channel'
+            }
+            for key, name in channel_configs.items():
+                channel_id = config.get(key)
+                if channel_id and interaction.guild:
+                    channel = interaction.guild.get_channel(int(channel_id))
+                    value = f"#{channel.name}" if channel else f"Unknown ({channel_id})"
+                elif channel_id:
+                    value = f"<#{channel_id}>"
+                else:
+                    value = "Not set"
+                channels.append(f"📢 {name}: {value}")
+            embed.add_field(name="📋 Channels", value="\n".join(channels), inline=False)
+
+            # Roles
+            admin_roles = config.get('admin_roles', [])
+            moderator_roles = config.get('moderator_roles', [])
+
+            if admin_roles:
+                admin_role_names = []
+                for role_id in admin_roles:
+                    if interaction.guild:
+                        role = interaction.guild.get_role(int(role_id))
+                        admin_role_names.append(role.name if role else f"Unknown ({role_id})")
+                embed.add_field(name="👑 Admin Roles", value=", ".join(admin_role_names), inline=False)
+
+            if moderator_roles:
+                mod_role_names = []
+                for role_id in moderator_roles:
+                    if interaction.guild:
+                        role = interaction.guild.get_role(int(role_id))
+                        mod_role_names.append(role.name if role else f"Unknown ({role_id})")
+                embed.add_field(name="🛡️ Moderator Roles", value=", ".join(mod_role_names), inline=False)
+
+            # Global settings
+            embed.add_field(name="🌐 Global Tasks", value="Yes" if config.get('global_tasks') else "No", inline=True)
+            embed.add_field(name="🛒 Global Shop", value="Yes" if config.get('global_shop') else "No", inline=True)
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        except Exception as e:
+            logger.error(f"Error getting server config: {e}")
+            await interaction.followup.send("❌ Failed to load server configuration.", ephemeral=True)
+
     @app_commands.command(name="set_config", description="Update server configuration")
     @app_commands.describe(
         setting="Configuration setting to update",
@@ -1310,4 +1637,3 @@ class BotAdmin(commands.Cog):
                         value=f"{status_type}: {presence.name}",
                         inline=False
                     )
-
