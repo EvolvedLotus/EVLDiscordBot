@@ -936,6 +936,73 @@ CREATE POLICY "Service role full access" ON moderation_actions FOR ALL USING (tr
 -- SYNC FUNCTIONS
 -- =====================================================
 
+-- Function to atomically log transaction and update user balance
+DROP FUNCTION IF EXISTS log_transaction_atomic(text,text,integer,integer,integer,text,text,text,jsonb);
+
+CREATE FUNCTION log_transaction_atomic(
+    p_guild_id TEXT,
+    p_user_id TEXT,
+    p_amount INTEGER,
+    p_balance_before INTEGER,
+    p_balance_after INTEGER,
+    p_transaction_type TEXT,
+    p_description TEXT,
+    p_transaction_id TEXT,
+    p_metadata JSONB DEFAULT '{}'::JSONB
+)
+RETURNS TABLE(
+    transaction_id TEXT,
+    user_id TEXT,
+    guild_id TEXT,
+    amount INTEGER,
+    balance_before INTEGER,
+    balance_after INTEGER,
+    transaction_type TEXT,
+    description TEXT,
+    metadata JSONB,
+    "timestamp" TIMESTAMP WITH TIME ZONE
+) AS $$
+DECLARE
+    v_timestamp TIMESTAMP WITH TIME ZONE;
+BEGIN
+    v_timestamp := NOW();
+    
+    INSERT INTO transactions (
+        transaction_id,
+        user_id,
+        guild_id,
+        amount,
+        balance_before,
+        balance_after,
+        transaction_type,
+        description,
+        metadata,
+        "timestamp"
+    ) VALUES (
+        p_transaction_id,
+        p_user_id,
+        p_guild_id,
+        p_amount,
+        p_balance_before,
+        p_balance_after,
+        p_transaction_type,
+        p_description,
+        p_metadata,
+        v_timestamp
+    );
+    
+    UPDATE users
+    SET 
+        balance = p_balance_after,
+        total_earned = CASE WHEN p_amount > 0 THEN COALESCE(total_earned,0)+p_amount ELSE COALESCE(total_earned,0) END,
+        total_spent = CASE WHEN p_amount < 0 THEN COALESCE(total_spent,0)+ABS(p_amount) ELSE COALESCE(total_spent,0) END,
+        updated_at = v_timestamp
+    WHERE user_id = p_user_id AND guild_id = p_guild_id;
+    
+    RETURN QUERY SELECT p_transaction_id, p_user_id, p_guild_id, p_amount, p_balance_before, p_balance_after, p_transaction_type, p_description, p_metadata, v_timestamp;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Function to sync guild last_sync timestamp
 CREATE OR REPLACE FUNCTION sync_guild_last_sync(p_guild_id TEXT)
 RETURNS VOID AS $$
