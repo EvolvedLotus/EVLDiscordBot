@@ -874,6 +874,104 @@ class Currency(commands.Cog):
                 ))
         return choices[:25]  # Discord limit
 
+    @app_commands.command(name="transfer", description="Send coins to another user")
+    @app_commands.describe(
+        user="The user to send coins to",
+        amount="Amount of coins to send",
+        reason="Optional reason for the transfer"
+    )
+    @app_commands.guild_only()
+    async def transfer_coins(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str = ""):
+        """Transfer coins to another user"""
+        sender_id = str(interaction.user.id)
+        receiver_id = str(user.id)
+        guild_id = str(interaction.guild_id)
+
+        # VALIDATION: Prevent self-transfer
+        if sender_id == receiver_id:
+            await interaction.response.send_message("You cannot transfer coins to yourself.", ephemeral=True)
+            return
+
+        # VALIDATION: Prevent negative/zero amounts
+        if amount <= 0:
+            await interaction.response.send_message("Amount must be positive.", ephemeral=True)
+            return
+
+        # VALIDATION: Prevent bots
+        if user.bot:
+            await interaction.response.send_message("You cannot transfer coins to bots.", ephemeral=True)
+            return
+
+        try:
+            # Get sender balance
+            sender_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', sender_id).eq('guild_id', guild_id).execute()
+
+            if not sender_data.data or len(sender_data.data) == 0:
+                await interaction.response.send_message("You don't have an account.", ephemeral=True)
+                return
+
+            sender_balance = sender_data.data[0]['balance']
+
+            # VALIDATION: Check sufficient balance
+            if sender_balance < amount:
+                await interaction.response.send_message(
+                    f"Insufficient balance. You have {sender_balance} coins.",
+                    ephemeral=True
+                )
+                return
+
+            # Ensure receiver exists
+            await self.data_manager.ensure_user_exists(guild_id, user.id)
+
+            # Get receiver balance
+            receiver_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
+            receiver_balance = receiver_data.data[0]['balance'] if receiver_data.data and len(receiver_data.data) > 0 else 0
+
+            # Calculate new balances
+            sender_new_balance = sender_balance - amount
+            receiver_new_balance = receiver_balance + amount
+
+            reason_text = reason if reason else "Coin transfer"
+
+            # Log transactions
+            self.transaction_manager.log_transaction(
+                user_id=int(sender_id),
+                guild_id=int(guild_id),
+                amount=-amount,
+                transaction_type="transfer_sent",
+                balance_before=sender_balance,
+                balance_after=sender_new_balance,
+                description=f"Sent {amount} coins to {user.display_name}" + (f" - {reason}" if reason else ""),
+                metadata={"recipient_id": receiver_id}
+            )
+
+            self.transaction_manager.log_transaction(
+                user_id=int(receiver_id),
+                guild_id=int(guild_id),
+                amount=amount,
+                transaction_type="transfer_received",
+                balance_before=receiver_balance,
+                balance_after=receiver_new_balance,
+                description=f"Received {amount} coins from {interaction.user.display_name}" + (f" - {reason}" if reason else ""),
+                metadata={"sender_id": sender_id}
+            )
+
+            # Update balances
+            self.data_manager.supabase.table('users').update({'balance': sender_new_balance}).eq('user_id', sender_id).eq('guild_id', guild_id).execute()
+            self.data_manager.supabase.table('users').update({'balance': receiver_new_balance}).eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
+
+            # Invalidate caches
+            self.data_manager.invalidate_cache(int(guild_id), 'currency')
+
+            await interaction.response.send_message(
+                f"Successfully transferred {amount} coins to {user.mention}. Your new balance: {sender_new_balance}" + (f"\nReason: {reason}" if reason else ""),
+                ephemeral=True
+            )
+
+        except Exception as e:
+            logger.exception(f"Transfer command error: {e}")
+            await interaction.response.send_message("Failed to transfer coins. Please try again.", ephemeral=True)
+
 
 
     @app_commands.command(name="view_tasks", description="View available tasks")

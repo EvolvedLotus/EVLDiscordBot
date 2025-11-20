@@ -4,6 +4,7 @@
 .env.production
 .env.*.local
 *.env
+BOT_COMMANDS.txt
 
 # Sensitive configuration files
 manualtodo.txt
