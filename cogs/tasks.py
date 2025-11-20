@@ -251,6 +251,10 @@ class TaskClaimView(discord.ui.View):
 
             # Update task claims atomically
             task['current_claims'] += 1
+            
+            # Ensure assigned_users is a list before appending
+            if 'assigned_users' not in task or not isinstance(task['assigned_users'], list):
+                task['assigned_users'] = []
             task['assigned_users'].append(user_id)
 
             return {
@@ -1106,6 +1110,10 @@ class TaskReviewView(discord.ui.View):
             }
 
             task['current_claims'] += 1
+            
+            # Ensure assigned_users is a list before appending
+            if 'assigned_users' not in task or not isinstance(task['assigned_users'], list):
+                task['assigned_users'] = []
             task['assigned_users'].append(user_id)
 
             # Save

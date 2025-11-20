@@ -317,6 +317,12 @@ class DataManager:
                 tasks_result = self.admin_client.table('tasks').select('*').eq('guild_id', str(guild_id)).execute()
                 tasks = {}
                 for task in tasks_result.data:
+                    # Ensure assigned_users is always a list
+                    assigned_users = task.get('assigned_users', [])
+                    if not isinstance(assigned_users, list):
+                        # Convert to list if it's not (e.g., dict, string, etc.)
+                        assigned_users = []
+                    
                     tasks[str(task['task_id'])] = {
                         'id': task['task_id'],
                         'name': task['name'],
@@ -330,7 +336,7 @@ class DataManager:
                         'message_id': task['message_id'],
                         'max_claims': task['max_claims'],
                         'current_claims': task['current_claims'],
-                        'assigned_users': task.get('assigned_users', []),
+                        'assigned_users': assigned_users,
                         'category': task['category'],
                         'role_name': task['role_name']
                     }

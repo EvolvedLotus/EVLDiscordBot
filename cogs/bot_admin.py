@@ -113,9 +113,14 @@ class BotAdmin(commands.Cog):
             }
 
             # Save transaction
-            transactions = self.data_manager.load_guild_data(guild_id, 'transactions') or []
+            transactions_data = self.data_manager.load_guild_data(guild_id, 'transactions') or {'transactions': []}
+            transactions = transactions_data.get('transactions', [])
+            # Ensure transactions is a list
+            if not isinstance(transactions, list):
+                transactions = []
             transactions.append(transaction_data)
-            self.data_manager.save_guild_data(guild_id, 'transactions', transactions)
+            transactions_data['transactions'] = transactions
+            self.data_manager.save_guild_data(guild_id, 'transactions', transactions_data)
 
             # Save currency data
             self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
@@ -266,9 +271,14 @@ class BotAdmin(commands.Cog):
             }
 
             # Save transaction
-            transactions = self.data_manager.load_guild_data(guild_id, 'transactions') or []
+            transactions_data = self.data_manager.load_guild_data(guild_id, 'transactions') or {'transactions': []}
+            transactions = transactions_data.get('transactions', [])
+            # Ensure transactions is a list
+            if not isinstance(transactions, list):
+                transactions = []
             transactions.append(transaction_data)
-            self.data_manager.save_guild_data(guild_id, 'transactions', transactions)
+            transactions_data['transactions'] = transactions
+            self.data_manager.save_guild_data(guild_id, 'transactions', transactions_data)
 
             # Save currency data
             self.data_manager.save_guild_data(guild_id, 'currency', currency_data)

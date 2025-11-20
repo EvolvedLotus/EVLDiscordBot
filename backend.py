@@ -628,9 +628,16 @@ def update_task(server_id, task_id):
 
 @app.route('/api/<server_id>/tasks/<task_id>', methods=['DELETE'])
 @require_guild_access
-async def delete_task(server_id, task_id):
+def delete_task(server_id, task_id):
     try:
-        result = await task_manager.delete_task(server_id, task_id)
+        # Run async delete_task in event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(task_manager.delete_task(int(server_id), int(task_id)))
+        finally:
+            loop.close()
+        
         if not result.get('success', False):
             return jsonify({'error': result.get('error', 'Failed to delete task')}), 400
         return jsonify({'success': True}), 200
@@ -671,8 +678,11 @@ def update_shop_item(server_id, item_id):
 @require_guild_access
 def delete_shop_item(server_id, item_id):
     try:
-        shop_manager.delete_item(server_id, item_id)
-        return jsonify({'success': True}), 200
+        result = shop_manager.delete_item(int(server_id), str(item_id))
+        if result:
+            return jsonify({'success': True}), 200
+        else:
+            return jsonify({'error': 'Item not found'}), 404
     except Exception as e:
         return safe_error_response(e)
 
