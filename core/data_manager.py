@@ -1269,118 +1269,6 @@ class DataManager:
         """
         return AtomicTransactionContext(self.admin_client, guild_id)
 
-
-class AtomicTransactionContext:
-    """Context manager for atomic database transactions"""
-
-    def __init__(self, client, guild_id: int = None):
-        self.client = client
-        self.guild_id = guild_id
-        self.connection = None
-        self.in_transaction = False
-
-    async def __aenter__(self):
-        """Enter the transaction context"""
-        try:
-            # For Supabase, we use the client directly since it handles connection pooling
-            # Note: Supabase doesn't expose raw connections, so we simulate transaction behavior
-            self.connection = self.client
-            self.in_transaction = True
-            logger.debug(f"Entered atomic transaction context for guild {self.guild_id}")
-            return self
-        except Exception as e:
-            logger.error(f"Failed to enter transaction context: {e}")
-            raise
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Exit the transaction context"""
-        try:
-            if exc_type is not None:
-                # An exception occurred, transaction should be rolled back
-                logger.warning(f"Transaction rolled back due to exception: {exc_val}")
-                # Note: Supabase handles rollback automatically on errors
-            else:
-                logger.debug(f"Transaction committed successfully for guild {self.guild_id}")
-
-            self.in_transaction = False
-            self.connection = None
-        except Exception as e:
-            logger.error(f"Error exiting transaction context: {e}")
-
-    def execute(self, query: str, *args):
-        """
-        Execute a query within the transaction context.
-        Note: This is a simplified version since Supabase handles transactions internally.
-        """
-        if not self.in_transaction:
-            raise RuntimeError("Not in transaction context")
-
-        try:
-            # For Supabase, we execute directly since it handles transactions
-            if query.strip().upper().startswith('SELECT'):
-                result = self.client.table(query.split()[3]).select('*').execute()
-            else:
-                # This is a simplified implementation
-                # In a real scenario, you'd need proper query parsing
-                logger.warning("Complex queries in atomic_transaction need proper implementation")
-                result = None
-
-            return result
-        except Exception as e:
-            logger.error(f"Query execution failed in transaction: {e}")
-            raise
-
-    async def reconcile_user_balances(self, guild_id):
-        """Recalculate all user balances from transaction history"""
-
-        try:
-            async with self.atomic_transaction() as conn:
-                # Get all users in guild
-                users = await conn.fetch(
-                    "SELECT user_id, balance FROM users WHERE guild_id = $1",
-                    guild_id
-                )
-
-                reconciliation_report = []
-
-                for user in users:
-                    # Calculate balance from transactions
-                    txs = await conn.fetch(
-                        """SELECT amount FROM transactions
-                           WHERE user_id = $1 AND guild_id = $2
-                           ORDER BY timestamp ASC""",
-                        user['user_id'], guild_id
-                    )
-
-                    calculated_balance = sum(tx['amount'] for tx in txs)
-                    current_balance = user['balance']
-
-                    if calculated_balance != current_balance:
-                        # Mismatch found
-                        reconciliation_report.append({
-                            'user_id': user['user_id'],
-                            'current_balance': current_balance,
-                            'calculated_balance': calculated_balance,
-                            'difference': calculated_balance - current_balance
-                        })
-
-                        # Fix the balance
-                        await conn.execute(
-                            "UPDATE users SET balance = $1 WHERE user_id = $2 AND guild_id = $3",
-                            calculated_balance, user['user_id'], guild_id
-                        )
-
-                        logger.warning(
-                            f"Balance reconciled for user {user['user_id']}: "
-                            f"{current_balance} -> {calculated_balance}"
-                        )
-
-                return reconciliation_report
-
-        except Exception as e:
-            logger.exception(f"Balance reconciliation error: {e}")
-            return []
-
     def get_user_guilds(self, user_id: str) -> List[Dict]:
         """
         Get all guilds accessible by a user.
@@ -1609,3 +1497,116 @@ class AtomicTransactionContext:
         except Exception as e:
             logger.error(f"Error getting user {user_id} for guild {guild_id}: {e}")
             return {'error': str(e)}
+
+
+class AtomicTransactionContext:
+    """Context manager for atomic database transactions"""
+
+    def __init__(self, client, guild_id: int = None):
+        self.client = client
+        self.guild_id = guild_id
+        self.connection = None
+        self.in_transaction = False
+
+    async def __aenter__(self):
+        """Enter the transaction context"""
+        try:
+            # For Supabase, we use the client directly since it handles connection pooling
+            # Note: Supabase doesn't expose raw connections, so we simulate transaction behavior
+            self.connection = self.client
+            self.in_transaction = True
+            logger.debug(f"Entered atomic transaction context for guild {self.guild_id}")
+            return self
+        except Exception as e:
+            logger.error(f"Failed to enter transaction context: {e}")
+            raise
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Exit the transaction context"""
+        try:
+            if exc_type is not None:
+                # An exception occurred, transaction should be rolled back
+                logger.warning(f"Transaction rolled back due to exception: {exc_val}")
+                # Note: Supabase handles rollback automatically on errors
+            else:
+                logger.debug(f"Transaction committed successfully for guild {self.guild_id}")
+
+            self.in_transaction = False
+            self.connection = None
+        except Exception as e:
+            logger.error(f"Error exiting transaction context: {e}")
+
+    def execute(self, query: str, *args):
+        """
+        Execute a query within the transaction context.
+        Note: This is a simplified version since Supabase handles transactions internally.
+        """
+        if not self.in_transaction:
+            raise RuntimeError("Not in transaction context")
+
+        try:
+            # For Supabase, we execute directly since it handles transactions
+            if query.strip().upper().startswith('SELECT'):
+                result = self.client.table(query.split()[3]).select('*').execute()
+            else:
+                # This is a simplified implementation
+                # In a real scenario, you'd need proper query parsing
+                logger.warning("Complex queries in atomic_transaction need proper implementation")
+                result = None
+
+            return result
+        except Exception as e:
+            logger.error(f"Query execution failed in transaction: {e}")
+            raise
+
+    async def reconcile_user_balances(self, guild_id):
+        """Recalculate all user balances from transaction history"""
+
+        try:
+            async with self.atomic_transaction() as conn:
+                # Get all users in guild
+                users = await conn.fetch(
+                    "SELECT user_id, balance FROM users WHERE guild_id = $1",
+                    guild_id
+                )
+
+                reconciliation_report = []
+
+                for user in users:
+                    # Calculate balance from transactions
+                    txs = await conn.fetch(
+                        """SELECT amount FROM transactions
+                           WHERE user_id = $1 AND guild_id = $2
+                           ORDER BY timestamp ASC""",
+                        user['user_id'], guild_id
+                    )
+
+                    calculated_balance = sum(tx['amount'] for tx in txs)
+                    current_balance = user['balance']
+
+                    if calculated_balance != current_balance:
+                        # Mismatch found
+                        reconciliation_report.append({
+                            'user_id': user['user_id'],
+                            'current_balance': current_balance,
+                            'calculated_balance': calculated_balance,
+                            'difference': calculated_balance - current_balance
+                        })
+
+                        # Fix the balance
+                        await conn.execute(
+                            "UPDATE users SET balance = $1 WHERE user_id = $2 AND guild_id = $3",
+                            calculated_balance, user['user_id'], guild_id
+                        )
+
+                        logger.warning(
+                            f"Balance reconciled for user {user['user_id']}: "
+                            f"{current_balance} -> {calculated_balance}"
+                        )
+
+                return reconciliation_report
+
+        except Exception as e:
+            logger.exception(f"Balance reconciliation error: {e}")
+            return []
+
