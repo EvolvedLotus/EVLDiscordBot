@@ -866,7 +866,7 @@ class Currency(commands.Cog):
             logger.exception(f"Transfer command error: {e}")
             await interaction.response.send_message("Failed to transfer coins. Please try again.", ephemeral=True)
 
-    @app_commands.command(name="create_item", description="Create a shop item (Admin only)")
+    @app_commands.command(name="shop_create", description="Create a shop item (Admin only)")
     @app_commands.describe(
         name="Item name",
         description="Item description",
@@ -932,7 +932,7 @@ class Currency(commands.Cog):
             logger.exception(f"Shop item creation error: {e}")
             await interaction.followup.send("❌ Error creating shop item.", ephemeral=True)
 
-    @app_commands.command(name="edit_item", description="Edit a shop item (Admin only)")
+    @app_commands.command(name="shop_edit", description="Edit a shop item (Admin only)")
     @app_commands.describe(
         item_id="ID of item to edit",
         name="New name (optional)",
