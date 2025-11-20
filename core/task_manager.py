@@ -553,40 +553,5 @@ class TaskManager:
             return result
 
         except Exception as e:
-            logger.error(f"Atomic task operation failed: {e}")
-            raise
-
-    def get_task_statistics(self, guild_id: int) -> Dict:
-        """
-        Get task statistics for a guild.
-
-        Args:
-            guild_id: Guild ID
-
-        Returns:
-            Statistics dictionary
-        """
-        try:
-            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
-            if not tasks_data:
-                return {}
-
-            tasks = tasks_data.get('tasks', {})
-            user_tasks = tasks_data.get('user_tasks', {})
-            settings = tasks_data.get('settings', {})
-
-            stats = {
-                'total_tasks': len(tasks),
-                'active_tasks': len([t for t in tasks.values() if t['status'] == 'active']),
-                'completed_tasks': settings.get('total_completed', 0),
-                'expired_tasks': settings.get('total_expired', 0),
-                'total_user_tasks': sum(len(user_tasks) for user_tasks in user_tasks.values()),
-                'pending_submissions': len([ut for user_tasks in user_tasks.values()
-                                          for ut in user_tasks.values() if ut['status'] == 'submitted'])
-            }
-
-            return stats
-
-        except Exception as e:
             logger.error(f"Error getting task statistics for guild {guild_id}: {e}")
             return {}

@@ -17,6 +17,7 @@ import hashlib
 import secrets
 import json
 from functools import wraps
+import discord
 
 # Logging setup
 logging.basicConfig(
@@ -190,6 +191,7 @@ try:
     from core.shop_manager import ShopManager
     from core.announcement_manager import AnnouncementManager
     from core.embed_builder import EmbedBuilder
+    from core.embed_manager import EmbedManager
     from core.cache_manager import CacheManager
     from core.auth_manager import AuthManager
     from core.audit_manager import AuditManager
@@ -206,6 +208,7 @@ try:
     shop_manager = ShopManager(data_manager, transaction_manager)
     announcement_manager = AnnouncementManager(data_manager)
     embed_builder = EmbedBuilder()
+    embed_manager = EmbedManager(data_manager)
     sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
 
     logger.info("✅ All managers initialized")
@@ -347,10 +350,26 @@ def health_check():
 
 @app.route('/api/status', methods=['GET'])
 def get_status():
+    bot_status = 'offline'
+    uptime_str = '0d 0h 0m'
+    server_count = 0
+    
+    if _bot_instance and _bot_instance.is_ready():
+        bot_status = 'online'
+        server_count = len(_bot_instance.guilds)
+        
+        # Calculate uptime
+        if hasattr(_bot_instance, 'uptime'):
+            delta = datetime.now(timezone.utc) - _bot_instance.uptime
+            days = delta.days
+            hours, remainder = divmod(delta.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            uptime_str = f"{days}d {hours}h {minutes}m"
+
     return jsonify({
-        'bot_status': 'online',
-        'uptime': '0d 0h 0m',
-        'servers': 0
+        'bot_status': bot_status,
+        'uptime': uptime_str,
+        'servers': server_count
     })
 
 # ========== AUTHENTICATION ==========
@@ -685,7 +704,7 @@ def create_announcement(server_id):
 @require_guild_access
 def get_embeds(server_id):
     try:
-        embeds = embed_builder.get_embeds(server_id)
+        embeds = embed_manager.get_embeds(server_id)
         return jsonify({'embeds': embeds}), 200
     except Exception as e:
         return safe_error_response(e)
@@ -725,6 +744,64 @@ def delete_embed(server_id, embed_id):
     try:
         embed_builder.delete_embed(server_id, embed_id)
         return jsonify({'success': True}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/bot_status', methods=['POST'])
+@require_guild_access
+def update_bot_status(server_id):
+    try:
+        data = request.get_json()
+        # Validate data
+        status_message = data.get('message')
+        status_type = data.get('type', 'playing')
+        
+        # Load current config
+        current_config = data_manager.load_guild_data(server_id, 'config')
+        
+        # Update fields
+        current_config['bot_status_message'] = status_message
+        current_config['bot_status_type'] = status_type
+        
+        # Save config
+        data_manager.save_guild_data(server_id, 'config', current_config)
+        
+        # If bot is running, update presence immediately
+        if _bot_instance and _bot_instance.is_ready():
+            try:
+                activity = None
+                if status_type == 'playing':
+                    activity = discord.Game(name=status_message)
+                elif status_type == 'watching':
+                    activity = discord.Activity(type=discord.ActivityType.watching, name=status_message)
+                elif status_type == 'listening':
+                    activity = discord.Activity(type=discord.ActivityType.listening, name=status_message)
+                elif status_type == 'competing':
+                    activity = discord.Activity(type=discord.ActivityType.competing, name=status_message)
+                elif status_type == 'streaming':
+                    url = data.get('streaming_url')
+                    activity = discord.Streaming(name=status_message, url=url)
+
+                status = discord.Status.online
+                presence_str = data.get('presence', 'online')
+                if presence_str == 'idle':
+                    status = discord.Status.idle
+                elif presence_str == 'dnd':
+                    status = discord.Status.dnd
+                elif presence_str == 'invisible':
+                    status = discord.Status.invisible
+
+                asyncio.run_coroutine_threadsafe(
+                    _bot_instance.change_presence(activity=activity, status=status),
+                    _bot_instance.loop
+                )
+                logger.info(f"Updated bot presence to {status_type}: {status_message}")
+            except Exception as e:
+                logger.error(f"Failed to update bot presence: {e}")
+                # Don't fail the request if just the live update fails
+
+
+        return jsonify({'success': True, 'message': 'Bot status updated'}), 200
     except Exception as e:
         return safe_error_response(e)
 

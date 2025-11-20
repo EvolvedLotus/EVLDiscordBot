@@ -6,6 +6,9 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 import asyncio
 from core.data_manager import DataManager
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AnnouncementManager:
     def __init__(self, data_manager: DataManager, bot=None):
@@ -460,28 +463,78 @@ class AnnouncementManager:
         except discord.NotFound:
             return False
 
-    async def _pin_message(self, guild, channel_id: str, message_id: str) -> bool:
+    def get_announcements(self, guild_id: str) -> List[Dict]:
+        """
+        Get all announcements for a guild.
+        
+        Args:
+            guild_id: Guild ID
+            
+        Returns:
+            List of announcement dictionaries
+        """
+        try:
+            data = self.data_manager.load_guild_data(guild_id, 'announcements')
+            announcements_dict = data.get('announcements', {})
+            
+            announcements_list = []
+            for ann_id, ann in announcements_dict.items():
+                ann['announcement_id'] = ann_id
+                announcements_list.append(ann)
+                
+            # Sort by creation date (newest first)
+            announcements_list.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+            
+            return announcements_list
+        except Exception as e:
+            logger.error(f"Failed to get announcements for guild {guild_id}: {e}")
+            return []
+
+    def _pin_message(self, guild, channel_id: str, message_id: str):
         """Pin announcement in channel"""
-        channel = guild.get_channel(int(channel_id))
-        if not channel:
-            return False
-
+        if not guild:
+            return
+            
         try:
-            message = await channel.fetch_message(int(message_id))
+            channel = guild.get_channel(int(channel_id))
+            if channel:
+                # We need to schedule this as a coroutine since we're in a sync context potentially
+                # But AnnouncementManager methods are usually called from async contexts
+                # For now, we'll assume the caller handles the async nature or we use the bot loop
+                if self.bot:
+                    asyncio.run_coroutine_threadsafe(
+                        self._async_pin(channel, int(message_id)),
+                        self.bot.loop
+                    )
+        except Exception as e:
+            logger.error(f"Failed to pin message: {e}")
+
+    async def _async_pin(self, channel, message_id):
+        try:
+            message = await channel.fetch_message(message_id)
             await message.pin()
-            return True
-        except discord.HTTPException:
-            return False
+        except Exception as e:
+            logger.error(f"Async pin failed: {e}")
 
-    async def _unpin_message(self, guild, channel_id: str, message_id: str) -> bool:
+    def _unpin_message(self, guild, channel_id: str, message_id: str):
         """Unpin announcement from channel"""
-        channel = guild.get_channel(int(channel_id))
-        if not channel:
-            return False
-
+        if not guild:
+            return
+            
         try:
-            message = await channel.fetch_message(int(message_id))
+            channel = guild.get_channel(int(channel_id))
+            if channel:
+                if self.bot:
+                    asyncio.run_coroutine_threadsafe(
+                        self._async_unpin(channel, int(message_id)),
+                        self.bot.loop
+                    )
+        except Exception as e:
+            logger.error(f"Failed to unpin message: {e}")
+
+    async def _async_unpin(self, channel, message_id):
+        try:
+            message = await channel.fetch_message(message_id)
             await message.unpin()
-            return True
-        except discord.HTTPException:
-            return False
+        except Exception as e:
+            logger.error(f"Async unpin failed: {e}")

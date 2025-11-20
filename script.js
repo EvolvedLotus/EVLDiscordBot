@@ -746,6 +746,16 @@ async function loadServerSettingsTab() {
         document.getElementById('feature-announcements').checked = config.feature_announcements !== false;
         document.getElementById('feature-moderation').checked = config.feature_moderation !== false;
 
+        // Bot Status
+        if (config.bot_status_message) {
+            document.getElementById('bot-status-message').value = config.bot_status_message;
+        }
+        if (config.bot_status_type) {
+            document.getElementById('bot-status-type').value = config.bot_status_type;
+        }
+        // Note: presence and streaming_url are not yet in config, but UI exists. 
+        // We can default them or leave as is.
+
         showNotification('Server settings loaded', 'success');
     } catch (error) {
         console.error('Failed to load server settings:', error);
@@ -940,6 +950,10 @@ function clearFilters() {
     showNotification('Filters cleared', 'info');
 }
 
+function loadServerSettings() {
+    loadServerSettingsTab();
+}
+
 function saveServerSettings() {
     showNotification('Save server settings - Feature coming soon', 'info');
 }
@@ -948,9 +962,7 @@ function saveSettings() {
     showNotification('Save settings - Feature coming soon', 'info');
 }
 
-function updateBotStatus() {
-    showNotification('Update bot status - Feature coming soon', 'info');
-}
+
 
 function saveChannelSetting(type) {
     showNotification(`Save ${type} channel - Feature coming soon`, 'info');
@@ -1010,4 +1022,35 @@ function syncRoles() {
 
 function clearLogs() {
     showNotification('Clear logs - Feature coming soon', 'info');
+}
+
+async function updateBotStatus() {
+    const serverId = document.getElementById('server-select').value;
+    if (!serverId) return;
+
+    const type = document.getElementById('bot-status-type').value;
+    const message = document.getElementById('bot-status-message').value;
+    const presence = document.getElementById('bot-presence').value;
+    const streamingUrl = document.getElementById('streaming-url').value;
+
+    try {
+        const response = await apiCall(`/api/${serverId}/bot_status`, {
+            method: 'POST',
+            body: JSON.stringify({
+                type: type,
+                message: message,
+                presence: presence,
+                streaming_url: streamingUrl
+            })
+        });
+
+        if (response.success) {
+            showNotification('Bot status updated successfully', 'success');
+        } else {
+            showNotification('Failed to update bot status: ' + (response.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        console.error('Error updating bot status:', error);
+        showNotification('Error updating bot status', 'error');
+    }
 }

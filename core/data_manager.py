@@ -248,7 +248,9 @@ class DataManager:
                             'moderation': guild_data.get('feature_moderation', True)
                         },
                         'global_shop': guild_data.get('global_shop', False),
-                        'global_tasks': guild_data.get('global_tasks', False)
+                        'global_tasks': guild_data.get('global_tasks', False),
+                        'bot_status_message': guild_data.get('bot_status_message'),
+                        'bot_status_type': guild_data.get('bot_status_type', 'playing')
                     }
                 else:
                     # Guild not found, return defaults
@@ -555,7 +557,9 @@ class DataManager:
                         'feature_announcements': save_data.get('feature_announcements', True),
                         'feature_moderation': save_data.get('feature_moderation', True),
                         'global_shop': save_data.get('global_shop', False),
-                        'global_tasks': save_data.get('global_tasks', False)
+                        'global_tasks': save_data.get('global_tasks', False),
+                        'bot_status_message': save_data.get('bot_status_message'),
+                        'bot_status_type': save_data.get('bot_status_type', 'playing')
                     }
 
                     # Save guild data

@@ -101,6 +101,20 @@ class ShopManager:
 
         return sorted_items
 
+    def get_items(self, guild_id: int) -> List[Dict]:
+        """
+        Get all shop items as a list for the API.
+        """
+        items_dict = self.get_shop_items(guild_id, active_only=False, include_out_of_stock=True)
+        items_list = []
+        for item_id, item in items_dict.items():
+            item['item_id'] = item_id  # Ensure ID is present
+            items_list.append(item)
+        
+        # Sort by name
+        items_list.sort(key=lambda x: x.get('name', ''))
+        return items_list
+
     def get_item(self, guild_id: int, item_id: str) -> Optional[dict]:
         """Get single item details"""
         currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
@@ -1210,7 +1224,7 @@ class ShopManager:
         return stock >= quantity
 
     def _calculate_total_cost(self, item, quantity):
-        """Return price × quantity"""
+        """Return price * quantity"""
         return item['price'] * quantity
 
     def _update_item_stock(self, guild_id, item_id, quantity_change):
