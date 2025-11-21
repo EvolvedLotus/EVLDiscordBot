@@ -1826,3 +1826,116 @@ async function configureChannelPermissions() {
     if (!currentServerId) return;
     alert('Channel permissions configuration coming soon!');
 }
+
+// ========== LOGIN HANDLING ==========
+
+async function handleLogin(event) {
+    event.preventDefault();
+
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const errorDiv = document.getElementById('login-error');
+
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.user) {
+            currentUser = data.user;
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('main-dashboard').style.display = 'block';
+            await loadServers();
+            showNotification('Login successful!', 'success');
+        } else {
+            errorDiv.textContent = data.error || 'Invalid credentials';
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        errorDiv.textContent = 'Connection error. Please try again.';
+        errorDiv.style.display = 'block';
+    }
+}
+
+function showLoginScreen() {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('main-dashboard').style.display = 'none';
+    currentUser = null;
+    currentServerId = '';
+}
+
+async function loadServers() {
+    try {
+        const servers = await apiCall('/api/servers');
+        const select = document.getElementById('server-select');
+        select.innerHTML = '<option value="">Select a server...</option>';
+
+        servers.forEach(server => {
+            const option = document.createElement('option');
+            option.value = server.id;
+            option.textContent = server.name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Failed to load servers:', error);
+    }
+}
+
+function onServerChange() {
+    const select = document.getElementById('server-select');
+    currentServerId = select.value;
+
+    if (currentServerId) {
+        // Load the currently active tab's data
+        const activeTab = document.querySelector('.tab-btn.active');
+        if (activeTab) {
+            const tabName = activeTab.textContent.trim();
+            // Trigger the appropriate load function based on active tab
+            if (tabName.includes('Dashboard')) loadDashboard();
+            else if (tabName.includes('User')) loadUsersTab();
+            else if (tabName.includes('Shop')) loadShopTab();
+            else if (tabName.includes('Task')) loadTasksTab();
+            else if (tabName.includes('Announcement')) loadAnnouncementsTab();
+            else if (tabName.includes('Embed')) loadEmbedsTab();
+            else if (tabName.includes('Transaction')) loadTransactionsTab();
+            else if (tabName.includes('Server Settings')) loadServerSettingsTab();
+            else if (tabName.includes('Permissions')) loadPermissionsTab();
+        }
+    }
+}
+
+// ========== PAGE INITIALIZATION ==========
+
+function initializePage() {
+    console.log('Initializing page...');
+
+    // Attach login form handler
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        console.log('Login form found, attaching submit handler');
+        loginForm.addEventListener('submit', handleLogin);
+    } else {
+        console.error('Login form not found!');
+    }
+
+    // Check if already logged in (for development)
+    const loginScreen = document.getElementById('login-screen');
+    if (loginScreen) {
+        loginScreen.style.display = 'flex';
+    }
+}
+
+// Run initialization when DOM is ready
+if (document.readyState === 'loading') {
+    // DOM is still loading, wait for it
+    document.addEventListener('DOMContentLoaded', initializePage);
+} else {
+    // DOM is already loaded, run immediately
+    initializePage();
+}
