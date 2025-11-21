@@ -420,16 +420,27 @@ async function loadDashboard() {
     }
 }
 
-async function loadUsers() {
+let currentUsersPage = 1;
+const USERS_PER_PAGE = 50;
+
+async function loadUsers(page = 1) {
     if (!currentServerId) return;
+    currentUsersPage = page;
     const list = document.getElementById('users-list');
     list.innerHTML = '<div class="loading">Loading users...</div>';
 
     try {
         const data = await apiCall(`/api/${currentServerId}/users`);
         if (data.users && data.users.length > 0) {
+            // Calculate pagination
+            const totalUsers = data.users.length;
+            const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
+            const startIndex = (page - 1) * USERS_PER_PAGE;
+            const endIndex = Math.min(startIndex + USERS_PER_PAGE, totalUsers);
+            const paginatedUsers = data.users.slice(startIndex, endIndex);
+
             let html = '<table class="data-table"><thead><tr><th>User</th><th>Balance</th><th>Level</th><th>XP</th><th>Actions</th></tr></thead><tbody>';
-            data.users.forEach(user => {
+            paginatedUsers.forEach(user => {
                 html += `
                     <tr>
                         <td>${user.username || user.user_id}</td>
@@ -443,6 +454,14 @@ async function loadUsers() {
                 `;
             });
             html += '</tbody></table>';
+
+            // Add pagination controls
+            html += '<div class="pagination-controls">';
+            html += `<button onclick="loadUsers(${page - 1})" ${page === 1 ? 'disabled' : ''} class="btn-small">Previous</button>`;
+            html += `<span class="page-info">Page ${page} of ${totalPages} (${totalUsers} users)</span>`;
+            html += `<button onclick="loadUsers(${page + 1})" ${page === totalPages ? 'disabled' : ''} class="btn-small">Next</button>`;
+            html += '</div>';
+
             list.innerHTML = html;
         } else {
             list.innerHTML = '<p>No users found.</p>';
@@ -501,6 +520,98 @@ async function deleteShopItem(itemId) {
 async function editShopItem(itemId) {
     // TODO: Implement edit modal population
     alert('Edit functionality coming soon!');
+}
+
+async function viewShopStatistics() {
+    if (!currentServerId) return;
+
+    try {
+        const data = await apiCall(`/api/${currentServerId}/shop`);
+
+        if (!data.items || data.items.length === 0) {
+            showNotification('No shop items to analyze', 'info');
+            return;
+        }
+
+        // Calculate statistics
+        let totalItems = data.items.length;
+        let activeItems = data.items.filter(item => item.is_active !== false).length;
+        let totalValue = data.items.reduce((sum, item) => sum + (item.price || 0), 0);
+        let outOfStock = data.items.filter(item => item.stock === 0).length;
+        let unlimitedStock = data.items.filter(item => item.stock === -1).length;
+
+        // Build statistics modal
+        const statsHtml = `
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Items</h3>
+                    <p class="stat-value">${totalItems}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Active Items</h3>
+                    <p class="stat-value">${activeItems}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Total Value</h3>
+                    <p class="stat-value">$${totalValue.toLocaleString()}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Out of Stock</h3>
+                    <p class="stat-value">${outOfStock}</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Unlimited Stock</h3>
+                    <p class="stat-value">${unlimitedStock}</p>
+                </div>
+            </div>
+        `;
+
+        createModal('Shop Statistics', statsHtml);
+    } catch (error) {
+        showNotification(`Failed to load statistics: ${error.message}`, 'error');
+    }
+}
+
+async function validateShopIntegrity() {
+    if (!currentServerId) return;
+
+    try {
+        const data = await apiCall(`/api/${currentServerId}/shop`);
+
+        if (!data.items || data.items.length === 0) {
+            showNotification('No shop items to validate', 'info');
+            return;
+        }
+
+        // Validation checks
+        let issues = [];
+
+        data.items.forEach((item, index) => {
+            // Check for missing required fields
+            if (!item.item_id) issues.push(`Item #${index + 1}: Missing item_id`);
+            if (!item.name || item.name.trim() === '') issues.push(`Item ${item.item_id || index + 1}: Missing name`);
+            if (item.price === undefined || item.price === null) issues.push(`Item ${item.name || item.item_id}: Missing price`);
+            if (item.price < 0) issues.push(`Item ${item.name || item.item_id}: Negative price`);
+            if (item.stock !== undefined && item.stock < -1) issues.push(`Item ${item.name || item.item_id}: Invalid stock value`);
+        });
+
+        // Build validation report
+        let reportHtml = '';
+        if (issues.length === 0) {
+            reportHtml = '<div class="success-message">✅ All shop items passed validation!</div>';
+        } else {
+            reportHtml = `
+                <div class="warning-message">⚠️ Found ${issues.length} issue(s):</div>
+                <ul class="validation-issues">
+                    ${issues.map(issue => `<li>${issue}</li>`).join('')}
+                </ul>
+            `;
+        }
+
+        createModal('Shop Integrity Validation', reportHtml);
+    } catch (error) {
+        showNotification(`Failed to validate shop: ${error.message}`, 'error');
+    }
 }
 
 async function loadTasks() {
@@ -764,8 +875,12 @@ async function loadEmbeds() {
     }
 }
 
-async function loadTransactions() {
+let currentTransactionsPage = 1;
+const TRANSACTIONS_PER_PAGE = 50;
+
+async function loadTransactions(page = 1) {
     if (!currentServerId) return;
+    currentTransactionsPage = page;
     const list = document.getElementById('transactions-list');
     const statsSection = document.getElementById('transaction-stats');
     list.innerHTML = '<div class="loading">Loading transactions...</div>';
@@ -795,16 +910,34 @@ async function loadTransactions() {
             }
 
             const avgTransaction = totalVolume / data.transactions.length;
-            const mostActiveUser = mostActiveUserId ? getUserDisplay(mostActiveUserId) : '-';
+
+            // Enhanced most active user display with Discord info
+            let mostActiveUserDisplay = '-';
+            if (mostActiveUserId) {
+                const userInfo = discordDataCache.users[mostActiveUserId];
+                if (userInfo) {
+                    const avatarUrl = userInfo.avatar_url || 'https://cdn.discordapp.com/embed/avatars/0.png';
+                    mostActiveUserDisplay = `<img src="${avatarUrl}" class="user-avatar-small" alt="avatar"> ${userInfo.username}`;
+                } else {
+                    mostActiveUserDisplay = getUserDisplay(mostActiveUserId);
+                }
+            }
 
             // Update statistics
             if (statsSection) {
                 statsSection.style.display = 'grid';
                 document.getElementById('total-transactions').textContent = data.transactions.length;
                 document.getElementById('total-volume').textContent = `$${totalVolume.toLocaleString()}`;
-                document.getElementById('most-active-user').textContent = mostActiveUser;
+                document.getElementById('most-active-user').innerHTML = mostActiveUserDisplay;
                 document.getElementById('avg-transaction').textContent = `$${Math.round(avgTransaction).toLocaleString()}`;
             }
+
+            // Calculate pagination
+            const totalTransactions = data.transactions.length;
+            const totalPages = Math.ceil(totalTransactions / TRANSACTIONS_PER_PAGE);
+            const startIndex = (page - 1) * TRANSACTIONS_PER_PAGE;
+            const endIndex = Math.min(startIndex + TRANSACTIONS_PER_PAGE, totalTransactions);
+            const paginatedTransactions = data.transactions.slice(startIndex, endIndex);
 
             // Build transaction table
             let html = `
@@ -823,7 +956,7 @@ async function loadTransactions() {
                     <tbody>
             `;
 
-            data.transactions.forEach(txn => {
+            paginatedTransactions.forEach(txn => {
                 const userName = getUserDisplay(txn.user_id);
                 const date = new Date(txn.timestamp).toLocaleString();
                 const amountClass = txn.amount >= 0 ? 'positive' : 'negative';
@@ -843,6 +976,14 @@ async function loadTransactions() {
             });
 
             html += '</tbody></table>';
+
+            // Add pagination controls
+            html += '<div class="pagination-controls">';
+            html += `<button onclick="loadTransactions(${page - 1})" ${page === 1 ? 'disabled' : ''} class="btn-small">Previous</button>`;
+            html += `<span class="page-info">Page ${page} of ${totalPages} (${totalTransactions} transactions)</span>`;
+            html += `<button onclick="loadTransactions(${page + 1})" ${page === totalPages ? 'disabled' : ''} class="btn-small">Next</button>`;
+            html += '</div>';
+
             list.innerHTML = html;
         } else {
             // No transactions

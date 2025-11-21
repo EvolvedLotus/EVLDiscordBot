@@ -76,9 +76,6 @@ class TaskManager:
 
     async def delete_task(self, guild_id: int, task_id: int) -> Dict:
         """Delete task and associated user tasks"""
-        guild_id = str(guild_id)
-        task_id = str(task_id)
-
         try:
             async with self.data_manager.atomic_transaction() as conn:
                 # Verify task exists

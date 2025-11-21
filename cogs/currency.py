@@ -1442,6 +1442,39 @@ class PurchaseConfirmView(discord.ui.View):
         )
         self.stop()
 
+    @app_commands.command(name='delete_task', description='[Admin] Delete a task')
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(administrator=True)
+    async def delete_task_cmd(self, interaction: discord.Interaction, task_id: int):
+        """Delete a task (Admin only)"""
+        await interaction.response.defer(ephemeral=True)
+        
+        try:
+            # Call the async delete_task method
+            result = await self.task_manager.delete_task(interaction.guild.id, task_id)
+            
+            if result.get('success'):
+                embed = discord.Embed(
+                    title="✅ Task Deleted",
+                    description=f"Task #{task_id} has been successfully deleted.",
+                    color=discord.Color.green()
+                )
+            else:
+                embed = discord.Embed(
+                    title="❌ Delete Failed",
+                    description=result.get('error', 'Failed to delete task'),
+                    color=discord.Color.red()
+                )
+            
+            await interaction.followup.send(embed=embed, ephemeral=True)
+            
+        except Exception as e:
+            logger.error(f"Error deleting task: {e}")
+            await interaction.followup.send(
+                f"❌ Error deleting task: {str(e)}",
+                ephemeral=True
+            )
+
 
 async def setup(bot):
     """Setup the currency cog."""
