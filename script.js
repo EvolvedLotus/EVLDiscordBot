@@ -384,12 +384,33 @@ async function validateShopIntegrity() {
             if (item.price < 0) issues.push(`Item ${item.name || item.item_id}: Negative price`);
             if (item.stock !== undefined && item.stock < -1) issues.push(`Item ${item.name || item.item_id}: Invalid stock value`);
         });
+
         let reportHtml = '';
         if (issues.length === 0) {
             reportHtml = '<div class="success-message">✅ All shop items passed validation!</div>';
         } else {
-            Object.values(data.tasks).forEach(task => {
+            reportHtml = '<div class="error-message">Found issues:<ul>';
+            issues.forEach(issue => reportHtml += `<li>${issue}</li>`);
+            reportHtml += '</ul></div>';
+        }
+        createModal('Shop Integrity Check', reportHtml);
+    } catch (error) {
+        showNotification(`Failed to validate shop: ${error.message}`, 'error');
+    }
+}
 
+async function loadTasks() {
+    if (!currentServerId) return;
+    const list = document.getElementById('tasks-list');
+    if (!list) return;
+
+    list.innerHTML = '<div class="loading">Loading tasks...</div>';
+
+    try {
+        const data = await apiCall(`/api/${currentServerId}/tasks`);
+        if (data.tasks && Object.keys(data.tasks).length > 0) {
+            let html = '<div class="grid-container">';
+            Object.values(data.tasks).forEach(task => {
                 html += `
                     <div class="task-card">
                         <h4>${task.name}</h4>
