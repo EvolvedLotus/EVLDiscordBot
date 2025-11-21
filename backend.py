@@ -492,12 +492,26 @@ def logout():
 
 @app.route('/api/auth/me', methods=['GET'])
 def get_current_user():
-    if session.get('authenticated'):
-        return jsonify({
-            'authenticated': True,
-            'user': {'username': session.get('username')}
-        }), 200
-    return jsonify({'authenticated': False}), 401
+    """Get current authenticated user from session token"""
+    session_token = request.cookies.get('session_token')
+    
+    if not session_token:
+        return jsonify({'authenticated': False}), 401
+    
+    # Validate session
+    user = auth_manager.validate_session(session_token)
+    
+    if not user:
+        return jsonify({'authenticated': False}), 401
+    
+    return jsonify({
+        'authenticated': True,
+        'user': {
+            'id': user['id'],
+            'username': user['username'],
+            'is_superadmin': user.get('is_superadmin', False)
+        }
+    }), 200
 
 @app.route('/api/auth/validate', methods=['GET'])
 def validate_session():

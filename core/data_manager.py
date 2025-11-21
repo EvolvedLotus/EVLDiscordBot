@@ -1320,6 +1320,7 @@ class DataManager:
         """
         Get paginated list of users for a specific guild.
         Returns dict with 'users' list and 'total' count.
+        Fetches Discord usernames from bot instance.
         """
         try:
             guild_id_str = str(guild_id)
@@ -1334,13 +1335,43 @@ class DataManager:
             # Get paginated users
             users_result = self.admin_client.table('users').select('*').eq('guild_id', guild_id_str).range(offset, offset + limit - 1).execute()
             
+            # Get Discord guild if bot instance is available
+            guild = None
+            if self.bot_instance:
+                guild = self.bot_instance.get_guild(int(guild_id))
+            
             users = []
             for user in users_result.data:
+                user_id = user['user_id']
+                username = user.get('username', 'Unknown')
+                display_name = user.get('display_name', 'Unknown')
+                
+                # Try to fetch from Discord if available
+                if guild:
+                    try:
+                        member = guild.get_member(int(user_id))
+                        if member:
+                            username = member.name
+                            display_name = member.display_name
+                            
+                            # Update database with fetched info
+                            try:
+                                self.admin_client.table('users').update({
+                                    'username': username,
+                                    'display_name': display_name
+                                }).eq('guild_id', guild_id_str).eq('user_id', user_id).execute()
+                            except:
+                                pass  # Ignore update errors
+                    except:
+                        pass  # If member not found, use database values
+                
                 users.append({
-                    'user_id': user['user_id'],
-                    'username': user.get('username', 'Unknown'),
-                    'display_name': user.get('display_name', 'Unknown'),
+                    'user_id': user_id,
+                    'username': username,
+                    'display_name': display_name,
                     'balance': user.get('balance', 0),
+                    'level': user.get('level', 0),
+                    'xp': user.get('xp', 0),
                     'total_earned': user.get('total_earned', 0),
                     'total_spent': user.get('total_spent', 0),
                     'last_daily': self._serialize_datetime_field(user.get('last_daily')),
@@ -1368,10 +1399,31 @@ class DataManager:
             }
 
     def get_guild_config(self, guild_id: str) -> Dict:
-        """Get guild configuration"""
+        """Get guild configuration with live Discord data"""
         try:
             config_data = self.load_guild_data(int(guild_id), 'config')
-            return config_data if config_data else self._get_default_data('config')
+            if not config_data:
+                config_data = self._get_default_data('config')
+            
+            # Fetch live Discord data if bot instance is available
+            if self.bot_instance:
+                guild = self.bot_instance.get_guild(int(guild_id))
+                if guild:
+                    config_data['server_name'] = guild.name
+                    config_data['member_count'] = guild.member_count
+                    config_data['icon_url'] = str(guild.icon.url) if guild.icon else None
+                    
+                    # Update database with live data
+                    try:
+                        self.admin_client.table('guilds').update({
+                            'server_name': guild.name,
+                            'member_count': guild.member_count,
+                            'icon_url': str(guild.icon.url) if guild.icon else None
+                        }).eq('guild_id', str(guild_id)).execute()
+                    except:
+                        pass  # Ignore update errors
+            
+            return config_data
         except Exception as e:
             logger.error(f"Error getting guild config for {guild_id}: {e}")
             return self._get_default_data('config')
