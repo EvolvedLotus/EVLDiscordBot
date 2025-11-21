@@ -61,6 +61,96 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
+// ========== TAB NAVIGATION ==========
+
+function showTab(tabName) {
+    // Hide all tab contents
+    const allTabs = document.querySelectorAll('.tab-content');
+    allTabs.forEach(tab => {
+        tab.classList.remove('active');
+        tab.style.display = 'none';
+    });
+
+    // Remove active class from all tab buttons
+    const allButtons = document.querySelectorAll('.tab-button');
+    allButtons.forEach(btn => btn.classList.remove('active'));
+
+    // Show selected tab
+    const selectedTab = document.getElementById(tabName);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+        selectedTab.style.display = 'block';
+    }
+
+    // Add active class to clicked button
+    const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
+
+    // Load tab data if server is selected
+    if (currentServerId) {
+        switch (tabName) {
+            case 'dashboard':
+                loadDashboard();
+                break;
+            case 'users':
+                loadUsersTab();
+                break;
+            case 'shop':
+                loadShopTab();
+                break;
+            case 'tasks':
+                loadTasksTab();
+                break;
+            case 'announcements':
+                loadAnnouncementsTab();
+                break;
+            case 'embeds':
+                loadEmbedsTab();
+                break;
+            case 'transactions':
+                loadTransactionsTab();
+                break;
+            case 'server-settings':
+                loadServerSettingsTab();
+                break;
+            case 'permissions':
+                loadPermissionsTab();
+                break;
+            case 'roles':
+                loadRolesTab();
+                break;
+            case 'moderation':
+                loadModerationTab();
+                break;
+            case 'config':
+                loadConfigTab();
+                break;
+            case 'settings':
+                loadSettingsTab();
+                break;
+            case 'logs':
+                loadLogsTab();
+                break;
+        }
+    }
+}
+
+// Tab loader functions (some may already exist, these are fallbacks)
+function loadUsersTab() { loadUsers(); }
+function loadShopTab() { loadShop(); }
+function loadTasksTab() { loadTasks(); }
+function loadAnnouncementsTab() { loadAnnouncements(); }
+function loadEmbedsTab() { loadEmbeds(); }
+function loadTransactionsTab() { loadTransactions(); }
+function loadPermissionsTab() { console.log('Permissions tab - coming soon'); }
+function loadRolesTab() { console.log('Roles tab - coming soon'); }
+function loadModerationTab() { console.log('Moderation tab - coming soon'); }
+function loadConfigTab() { loadServerSettings(); }
+function loadSettingsTab() { console.log('Settings tab - coming soon'); }
+function loadLogsTab() { console.log('Logs tab - coming soon'); }
+
 // ========== USER MANAGEMENT ==========
 
 let currentManagingUserId = null;
