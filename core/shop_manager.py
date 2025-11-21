@@ -290,10 +290,16 @@ class ShopManager:
         # Remove from active shop
         del shop_items[item_id]
 
-        # Save
+        # Explicitly delete from database
+        db_success = self.data_manager.delete_shop_item(guild_id, item_id)
+        if not db_success:
+            logger.error(f"Failed to delete shop item {item_id} from database")
+            # We continue anyway to update cache and memory
+
+        # Save other changes (like archive)
         success = self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
         if not success:
-            raise RuntimeError("Failed to delete shop item")
+            raise RuntimeError("Failed to save shop item deletion state")
 
         # Clear caches - both shop manager and data manager
         self._clear_shop_cache(guild_id)

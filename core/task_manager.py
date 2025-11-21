@@ -76,6 +76,9 @@ class TaskManager:
 
     async def delete_task(self, guild_id: int, task_id: int) -> Dict:
         """Delete task and associated user tasks"""
+        guild_id = str(guild_id)
+        # task_id is int
+
         try:
             async with self.data_manager.atomic_transaction() as conn:
                 # Verify task exists
@@ -88,7 +91,7 @@ class TaskManager:
                 if not task_data:
                     return {'success': False, 'error': "Task not found."}
 
-                # Delete associated user_tasks first (cascade would handle this but being explicit)
+                # Delete associated user_tasks first
                 await conn.execute(
                     """DELETE FROM user_tasks
                        WHERE task_id = $1 AND guild_id = $2""",
@@ -105,7 +108,7 @@ class TaskManager:
             # Invalidate cache safely
             if self.cache_manager:
                 self.cache_manager.invalidate(f"tasks:{guild_id}")
-                self.cache_manager.invalidate(f"user_tasks:{guild_id}*")  # Invalidate all user task caches
+                self.cache_manager.invalidate(f"user_tasks:{guild_id}*")
 
             # Emit SSE event safely
             if self.sse_manager:

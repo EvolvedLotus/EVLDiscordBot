@@ -753,6 +753,15 @@ class DataManager:
             logger.error(f"save_guild_data failed for {data_type}: {e}")
             return False
 
+    def delete_shop_item(self, guild_id: int, item_id: str) -> bool:
+        """Delete a shop item directly from the database"""
+        try:
+            self.admin_client.table('shop_items').delete().eq('guild_id', str(guild_id)).eq('item_id', item_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete shop item {item_id} for guild {guild_id}: {e}")
+            return False
+
     def _get_default_data(self, data_type: str) -> Dict:
         """Get default data structure for a given type"""
         defaults = {

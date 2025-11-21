@@ -25,6 +25,7 @@ class Currency(commands.Cog):
         self.data_manager = getattr(bot, 'data_manager', None)
         self.transaction_manager = getattr(bot, 'transaction_manager', None)
         self.shop_manager = getattr(bot, 'shop_manager', None)
+        self.task_manager = getattr(bot, 'task_manager', None)
 
         # Log initialization status
         if self.data_manager:

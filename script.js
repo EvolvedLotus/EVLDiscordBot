@@ -207,188 +207,6 @@ async function timeoutUserFromModal() {
     }
 }
 
-// Auth & Initialization
-document.addEventListener('DOMContentLoaded', async () => {
-    console.log('App initialized');
-
-    // Event Listeners
-    const loginBtn = document.getElementById('login-btn');
-    if (loginBtn) {
-        loginBtn.addEventListener('click', handleLogin);
-    }
-
-    const loginForm = document.getElementById('login-form');
-    if (loginForm) {
-        loginForm.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleLogin(e);
-        });
-    }
-
-    // Check session
-    await checkAuth();
-});
-
-async function checkAuth() {
-    try {
-        const data = await apiCall('/api/auth/me');
-        if (data && data.authenticated) {
-            currentUser = data.user;
-            showDashboard();
-            loadServers();
-        } else {
-            showLoginScreen();
-        }
-    } catch (e) {
-        showLoginScreen();
-    }
-}
-
-async function handleLogin(e) {
-    if (e) e.preventDefault();
-
-    const usernameInput = document.getElementById('username');
-    const passwordInput = document.getElementById('password');
-    const errorDiv = document.getElementById('login-error');
-
-    const username = usernameInput.value.trim();
-    const password = passwordInput.value.trim();
-
-    if (!username || !password) {
-        if (errorDiv) {
-            errorDiv.textContent = 'Please enter username and password';
-            errorDiv.style.display = 'block';
-        }
-        return;
-    }
-
-    try {
-        const response = await fetch(apiUrl('/api/auth/login'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, password }),
-            credentials: 'include'
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-            currentUser = data.user;
-            showDashboard();
-            loadServers();
-        } else {
-            if (errorDiv) {
-                errorDiv.textContent = data.error || 'Login failed';
-                errorDiv.style.display = 'block';
-            }
-        }
-    } catch (error) {
-        console.error('Login error:', error);
-        if (errorDiv) {
-            errorDiv.textContent = 'Network error. Please check console.';
-            errorDiv.style.display = 'block';
-        }
-    }
-}
-
-function showLoginScreen() {
-    document.getElementById('login-screen').style.display = 'flex';
-    document.getElementById('main-dashboard').style.display = 'none';
-}
-
-function showDashboard() {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('main-dashboard').style.display = 'flex';
-    loadDashboard(); // Load initial dashboard data
-}
-
-async function loadServers() {
-    try {
-        const data = await apiCall('/api/servers');
-        const select = document.getElementById('server-select');
-
-        if (data && data.servers) {
-            select.innerHTML = '<option value="">Select Server</option>';
-            data.servers.forEach(server => {
-                const option = document.createElement('option');
-                option.value = server.id;
-                option.textContent = server.name;
-                select.appendChild(option);
-            });
-
-            // Select first server by default if available
-            if (data.servers.length > 0) {
-                select.value = data.servers[0].id;
-                currentServerId = data.servers[0].id;
-                onServerChange(); // Trigger load
-            }
-        }
-    } catch (error) {
-        console.error('Failed to load servers:', error);
-    }
-}
-
-function onServerChange() {
-    const select = document.getElementById('server-select');
-    currentServerId = select.value;
-
-    if (currentServerId) {
-        // Refresh current tab
-        const activeTab = document.querySelector('.tab-content.active');
-        if (activeTab) {
-            const tabId = activeTab.id;
-            loadTabContent(tabId);
-        }
-    }
-}
-
-function showTab(tabId) {
-    // Hide all tabs
-    document.querySelectorAll('.tab-content').forEach(tab => {
-        tab.classList.remove('active');
-    });
-
-    // Deactivate buttons
-    document.querySelectorAll('.tab-button').forEach(btn => {
-        btn.classList.remove('active');
-    });
-
-    // Show selected tab
-    const selectedTab = document.getElementById(tabId);
-    if (selectedTab) {
-        selectedTab.classList.add('active');
-    }
-
-    // Activate button
-    const selectedBtn = document.querySelector(`.tab-button[data-tab="${tabId}"]`);
-    if (selectedBtn) {
-        selectedBtn.classList.add('active');
-    }
-
-    loadTabContent(tabId);
-}
-
-function loadTabContent(tabId) {
-    if (!currentServerId) return;
-
-    switch (tabId) {
-        case 'dashboard': loadDashboard(); break;
-        case 'users': loadUsers(); break;
-        case 'shop': loadShop(); break;
-        case 'tasks': loadTasks(); break;
-        case 'announcements': loadAnnouncements(); break;
-        case 'embeds': loadEmbeds(); break;
-        case 'transactions': loadTransactions(); break;
-        case 'server-settings': loadServerSettingsTab(); break;
-        case 'permissions': loadPermissionsTab(); break;
-        case 'roles-tab': loadRolesTab(); break;
-        case 'moderation-tab': loadModerationTab(); break;
-        case 'config': loadServerSettings(); break;
-        case 'logs': loadLogs(); break;
-    }
-}
-
-// --- Feature Loaders ---
-
 async function loadDashboard() {
     if (!currentServerId) return;
     const content = document.getElementById('dashboard-content');
@@ -425,7 +243,7 @@ const USERS_PER_PAGE = 50;
 
 async function loadUsers(page = 1) {
     if (!currentServerId) return;
-    currentUsersPage = page;
+    currentUsersPage = parseInt(page);
     const list = document.getElementById('users-list');
     list.innerHTML = '<div class="loading">Loading users...</div>';
 
@@ -518,54 +336,32 @@ async function deleteShopItem(itemId) {
 }
 
 async function editShopItem(itemId) {
-    // TODO: Implement edit modal population
     alert('Edit functionality coming soon!');
 }
 
 async function viewShopStatistics() {
     if (!currentServerId) return;
-
     try {
         const data = await apiCall(`/api/${currentServerId}/shop`);
-
         if (!data.items || data.items.length === 0) {
             showNotification('No shop items to analyze', 'info');
             return;
         }
-
-        // Calculate statistics
         let totalItems = data.items.length;
         let activeItems = data.items.filter(item => item.is_active !== false).length;
         let totalValue = data.items.reduce((sum, item) => sum + (item.price || 0), 0);
         let outOfStock = data.items.filter(item => item.stock === 0).length;
         let unlimitedStock = data.items.filter(item => item.stock === -1).length;
 
-        // Build statistics modal
         const statsHtml = `
             <div class="stats-grid">
-                <div class="stat-card">
-                    <h3>Total Items</h3>
-                    <p class="stat-value">${totalItems}</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Active Items</h3>
-                    <p class="stat-value">${activeItems}</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Total Value</h3>
-                    <p class="stat-value">$${totalValue.toLocaleString()}</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Out of Stock</h3>
-                    <p class="stat-value">${outOfStock}</p>
-                </div>
-                <div class="stat-card">
-                    <h3>Unlimited Stock</h3>
-                    <p class="stat-value">${unlimitedStock}</p>
-                </div>
+                <div class="stat-card"><h3>Total Items</h3><p class="stat-value">${totalItems}</p></div>
+                <div class="stat-card"><h3>Active Items</h3><p class="stat-value">${activeItems}</p></div>
+                <div class="stat-card"><h3>Total Value</h3><p class="stat-value">$${totalValue.toLocaleString()}</p></div>
+                <div class="stat-card"><h3>Out of Stock</h3><p class="stat-value">${outOfStock}</p></div>
+                <div class="stat-card"><h3>Unlimited Stock</h3><p class="stat-value">${unlimitedStock}</p></div>
             </div>
         `;
-
         createModal('Shop Statistics', statsHtml);
     } catch (error) {
         showNotification(`Failed to load statistics: ${error.message}`, 'error');
@@ -574,55 +370,26 @@ async function viewShopStatistics() {
 
 async function validateShopIntegrity() {
     if (!currentServerId) return;
-
     try {
         const data = await apiCall(`/api/${currentServerId}/shop`);
-
         if (!data.items || data.items.length === 0) {
             showNotification('No shop items to validate', 'info');
             return;
         }
-
-        // Validation checks
         let issues = [];
-
         data.items.forEach((item, index) => {
-            // Check for missing required fields
             if (!item.item_id) issues.push(`Item #${index + 1}: Missing item_id`);
             if (!item.name || item.name.trim() === '') issues.push(`Item ${item.item_id || index + 1}: Missing name`);
             if (item.price === undefined || item.price === null) issues.push(`Item ${item.name || item.item_id}: Missing price`);
             if (item.price < 0) issues.push(`Item ${item.name || item.item_id}: Negative price`);
             if (item.stock !== undefined && item.stock < -1) issues.push(`Item ${item.name || item.item_id}: Invalid stock value`);
         });
-
-        // Build validation report
         let reportHtml = '';
         if (issues.length === 0) {
             reportHtml = '<div class="success-message">✅ All shop items passed validation!</div>';
         } else {
-            reportHtml = `
-                <div class="warning-message">⚠️ Found ${issues.length} issue(s):</div>
-                <ul class="validation-issues">
-                    ${issues.map(issue => `<li>${issue}</li>`).join('')}
-                </ul>
-            `;
-        }
-
-        createModal('Shop Integrity Validation', reportHtml);
-    } catch (error) {
-        showNotification(`Failed to validate shop: ${error.message}`, 'error');
-    }
-}
-
-async function loadTasks() {
-    if (!currentServerId) return;
-    const list = document.getElementById('tasks-list');
-    list.innerHTML = '<div class="loading">Loading tasks...</div>';
-    try {
-        const data = await apiCall(`/api/${currentServerId}/tasks`);
-        if (data.tasks && Object.keys(data.tasks).length > 0) {
-            let html = '<div class="tasks-grid">';
             Object.values(data.tasks).forEach(task => {
+
                 html += `
                     <div class="task-card">
                         <h4>${task.name}</h4>
@@ -2032,4 +1799,9 @@ window.onclick = function (event) {
             modal.style.display = 'none';
         }
     });
+}
+
+async function configureChannelPermissions() {
+    if (!currentServerId) return;
+    alert('Channel permissions configuration coming soon!');
 }
