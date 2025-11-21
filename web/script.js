@@ -1826,3 +1826,105 @@ async function configureChannelPermissions() {
     if (!currentServerId) return;
     alert('Channel permissions configuration coming soon!');
 }
+
+// ========== LOGIN HANDLING ==========
+
+async function handleLogin(event) {
+    event.preventDefault();
+
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const loginError = document.getElementById('login-error');
+
+    loginError.style.display = 'none';
+
+    try {
+        const response = await fetch(apiUrl('/api/auth/login'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.user) {
+            // Store user data
+            currentUser = data.user;
+
+            // Hide login screen and show dashboard
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('main-dashboard').style.display = 'flex';
+
+            // Load initial data
+            await loadServers();
+            showNotification('Login successful!', 'success');
+        } else {
+            loginError.textContent = data.error || 'Login failed. Please check your credentials.';
+            loginError.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        loginError.textContent = 'Connection error. Please try again.';
+        loginError.style.display = 'block';
+    }
+}
+
+function showLoginScreen() {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('main-dashboard').style.display = 'none';
+    currentUser = null;
+    currentServerId = '';
+}
+
+async function loadServers() {
+    try {
+        const data = await apiCall('/api/servers');
+        const select = document.getElementById('server-select');
+        select.innerHTML = '<option value="">-- Select a server --</option>';
+
+        if (data && data.servers && data.servers.length > 0) {
+            data.servers.forEach(server => {
+                const option = document.createElement('option');
+                option.value = server.guild_id;
+                option.textContent = server.name || `Server ${server.guild_id}`;
+                select.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Failed to load servers:', error);
+        showNotification('Failed to load servers', 'error');
+    }
+}
+
+function onServerChange() {
+    const select = document.getElementById('server-select');
+    currentServerId = select.value;
+
+    if (currentServerId) {
+        // Load the current tab's data
+        const activeTab = document.querySelector('.tab-content.active');
+        if (activeTab) {
+            const tabId = activeTab.id;
+            showTab(tabId);
+        }
+    }
+}
+
+// ========== PAGE INITIALIZATION ==========
+
+document.addEventListener('DOMContentLoaded', function () {
+    // Attach login form handler
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLogin);
+    }
+
+    // Check if already logged in (for development)
+    const loginScreen = document.getElementById('login-screen');
+    if (loginScreen) {
+        loginScreen.style.display = 'flex';
+    }
+});
