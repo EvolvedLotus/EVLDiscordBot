@@ -1834,12 +1834,16 @@ async function handleLogin(event) {
 
     const username = document.getElementById('username').value;
     const password = document.getElementById('password').value;
-    const errorDiv = document.getElementById('login-error');
+    const loginError = document.getElementById('login-error');
+
+    loginError.style.display = 'none';
 
     try {
-        const response = await fetch('/api/auth/login', {
+        const response = await fetch(apiUrl('/api/auth/login'), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json'
+            },
             credentials: 'include',
             body: JSON.stringify({ username, password })
         });
@@ -1847,19 +1851,24 @@ async function handleLogin(event) {
         const data = await response.json();
 
         if (response.ok && data.user) {
+            // Store user data
             currentUser = data.user;
+
+            // Hide login screen and show dashboard
             document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('main-dashboard').style.display = 'block';
+            document.getElementById('main-dashboard').style.display = 'flex';
+
+            // Load initial data
             await loadServers();
             showNotification('Login successful!', 'success');
         } else {
-            errorDiv.textContent = data.error || 'Invalid credentials';
-            errorDiv.style.display = 'block';
+            loginError.textContent = data.error || 'Login failed. Please check your credentials.';
+            loginError.style.display = 'block';
         }
     } catch (error) {
         console.error('Login error:', error);
-        errorDiv.textContent = 'Connection error. Please try again.';
-        errorDiv.style.display = 'block';
+        loginError.textContent = 'Connection error. Please try again.';
+        loginError.style.display = 'block';
     }
 }
 
@@ -1872,18 +1881,21 @@ function showLoginScreen() {
 
 async function loadServers() {
     try {
-        const servers = await apiCall('/api/servers');
+        const data = await apiCall('/api/servers');
         const select = document.getElementById('server-select');
-        select.innerHTML = '<option value="">Select a server...</option>';
+        select.innerHTML = '<option value="">-- Select a server --</option>';
 
-        servers.forEach(server => {
-            const option = document.createElement('option');
-            option.value = server.id;
-            option.textContent = server.name;
-            select.appendChild(option);
-        });
+        if (data && data.servers && data.servers.length > 0) {
+            data.servers.forEach(server => {
+                const option = document.createElement('option');
+                option.value = server.guild_id;
+                option.textContent = server.name || `Server ${server.guild_id}`;
+                select.appendChild(option);
+            });
+        }
     } catch (error) {
         console.error('Failed to load servers:', error);
+        showNotification('Failed to load servers', 'error');
     }
 }
 
@@ -1892,23 +1904,15 @@ function onServerChange() {
     currentServerId = select.value;
 
     if (currentServerId) {
-        // Load the currently active tab's data
-        const activeTab = document.querySelector('.tab-btn.active');
+        // Load the current tab's data
+        const activeTab = document.querySelector('.tab-content.active');
         if (activeTab) {
-            const tabName = activeTab.textContent.trim();
-            // Trigger the appropriate load function based on active tab
-            if (tabName.includes('Dashboard')) loadDashboard();
-            else if (tabName.includes('User')) loadUsersTab();
-            else if (tabName.includes('Shop')) loadShopTab();
-            else if (tabName.includes('Task')) loadTasksTab();
-            else if (tabName.includes('Announcement')) loadAnnouncementsTab();
-            else if (tabName.includes('Embed')) loadEmbedsTab();
-            else if (tabName.includes('Transaction')) loadTransactionsTab();
-            else if (tabName.includes('Server Settings')) loadServerSettingsTab();
-            else if (tabName.includes('Permissions')) loadPermissionsTab();
+            const tabId = activeTab.id;
+            showTab(tabId);
         }
     }
 }
+
 
 // ========== PAGE INITIALIZATION ==========
 
