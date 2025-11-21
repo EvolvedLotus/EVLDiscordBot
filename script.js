@@ -61,6 +61,72 @@ function showNotification(message, type = 'info') {
     }, 3000);
 }
 
+// Tab Navigation
+function showTab(tabName) {
+    // Hide all tab contents
+    const allTabs = document.querySelectorAll('.tab-content');
+    allTabs.forEach(tab => {
+        tab.classList.remove('active');
+        tab.style.display = 'none';
+    });
+
+    // Remove active class from all tab buttons
+    const allButtons = document.querySelectorAll('.tab-button');
+    allButtons.forEach(btn => btn.classList.remove('active'));
+
+    // Show selected tab
+    const selectedTab = document.getElementById(tabName);
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+        selectedTab.style.display = 'block';
+    }
+
+    // Add active class to clicked button
+    const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
+
+    // Load tab data if server is selected
+    if (currentServerId) {
+        switch (tabName) {
+            case 'dashboard':
+                loadDashboard();
+                break;
+            case 'users':
+                loadUsersTab();
+                break;
+            case 'shop':
+                loadShopTab();
+                break;
+            case 'tasks':
+                loadTasksTab();
+                break;
+            case 'announcements':
+                loadAnnouncementsTab();
+                break;
+            case 'embeds':
+                loadEmbedsTab();
+                break;
+            case 'transactions':
+                loadTransactionsTab();
+                break;
+            case 'server-settings':
+                loadServerSettingsTab();
+                break;
+            case 'permissions':
+                loadPermissionsTab();
+                break;
+            case 'config':
+                loadServerSettings();
+                break;
+            case 'logs':
+                loadLogs();
+                break;
+        }
+    }
+}
+
 // ========== USER MANAGEMENT ==========
 
 let currentManagingUserId = null;
