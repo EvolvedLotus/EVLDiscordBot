@@ -1913,13 +1913,19 @@ function onServerChange() {
     }
 }
 
+
 // ========== PAGE INITIALIZATION ==========
 
-document.addEventListener('DOMContentLoaded', function () {
+function initializePage() {
+    console.log('Initializing page...');
+
     // Attach login form handler
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
+        console.log('Login form found, attaching submit handler');
         loginForm.addEventListener('submit', handleLogin);
+    } else {
+        console.error('Login form not found!');
     }
 
     // Check if already logged in (for development)
@@ -1927,4 +1933,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (loginScreen) {
         loginScreen.style.display = 'flex';
     }
-});
+}
+
+// Run initialization when DOM is ready
+if (document.readyState === 'loading') {
+    // DOM is still loading, wait for it
+    document.addEventListener('DOMContentLoaded', initializePage);
+} else {
+    // DOM is already loaded, run immediately
+    initializePage();
+}
