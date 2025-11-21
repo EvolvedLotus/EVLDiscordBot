@@ -970,3 +970,189 @@ $$ LANGUAGE plpgsql;
 INSERT INTO admin_users (username, password_hash, is_superadmin)
 VALUES ('admin', 'temporary_will_be_replaced_on_first_login', true)
 ON CONFLICT (username) DO NOTHING;
+
+-- =====================================================
+-- BALANCE MIGRATION & RECONCILIATION FUNCTIONS
+-- =====================================================
+-- These functions sync user balances from transactions table
+-- (source of truth) to the users table for CMS display
+-- =====================================================
+
+-- Function to recalculate and show balance discrepancies
+CREATE OR REPLACE FUNCTION recalculate_user_balances()
+RETURNS TABLE(
+    user_id TEXT,
+    guild_id TEXT,
+    current_balance INTEGER,
+    calculated_balance INTEGER,
+    discrepancy INTEGER,
+    transaction_count BIGINT
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH transaction_sums AS (
+        SELECT 
+            t.user_id,
+            t.guild_id,
+            SUM(t.amount) as total_amount,
+            COUNT(*) as txn_count
+        FROM transactions t
+        GROUP BY t.user_id, t.guild_id
+    )
+    SELECT 
+        u.user_id::TEXT,
+        u.guild_id::TEXT,
+        u.balance as current_balance,
+        COALESCE(ts.total_amount, 0)::INTEGER as calculated_balance,
+        (u.balance - COALESCE(ts.total_amount, 0))::INTEGER as discrepancy,
+        COALESCE(ts.txn_count, 0) as transaction_count
+    FROM users u
+    LEFT JOIN transaction_sums ts 
+        ON u.user_id = ts.user_id 
+        AND u.guild_id = ts.guild_id
+    WHERE u.balance != COALESCE(ts.total_amount, 0);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to sync all user balances from transactions
+CREATE OR REPLACE FUNCTION sync_all_user_balances()
+RETURNS TABLE(
+    users_updated INTEGER,
+    total_discrepancy BIGINT
+) AS $$
+DECLARE
+    v_users_updated INTEGER;
+    v_total_discrepancy BIGINT;
+BEGIN
+    -- Calculate total discrepancy before fix
+    SELECT SUM(ABS(u.balance - COALESCE(ts.total_amount, 0)))
+    INTO v_total_discrepancy
+    FROM users u
+    LEFT JOIN (
+        SELECT user_id, guild_id, SUM(amount) as total_amount
+        FROM transactions
+        GROUP BY user_id, guild_id
+    ) ts ON u.user_id = ts.user_id AND u.guild_id = ts.guild_id;
+    
+    -- Update all user balances from transactions
+    WITH transaction_sums AS (
+        SELECT 
+            user_id,
+            guild_id,
+            SUM(amount) as total_amount,
+            SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as total_earned,
+            SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as total_spent
+        FROM transactions
+        GROUP BY user_id, guild_id
+    )
+    UPDATE users u
+    SET 
+        balance = COALESCE(ts.total_amount, 0),
+        total_earned = COALESCE(ts.total_earned, 0),
+        total_spent = COALESCE(ts.total_spent, 0),
+        updated_at = NOW()
+    FROM transaction_sums ts
+    WHERE u.user_id = ts.user_id 
+      AND u.guild_id = ts.guild_id
+      AND u.balance != COALESCE(ts.total_amount, 0);
+    
+    GET DIAGNOSTICS v_users_updated = ROW_COUNT;
+    
+    RETURN QUERY SELECT v_users_updated, COALESCE(v_total_discrepancy, 0);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to sync a specific user's balance
+CREATE OR REPLACE FUNCTION sync_user_balance(
+    p_user_id TEXT,
+    p_guild_id TEXT
+)
+RETURNS TABLE(
+    old_balance INTEGER,
+    new_balance INTEGER,
+    difference INTEGER
+) AS $$
+DECLARE
+    v_old_balance INTEGER;
+    v_new_balance INTEGER;
+BEGIN
+    -- Get current balance
+    SELECT balance INTO v_old_balance
+    FROM users
+    WHERE user_id = p_user_id AND guild_id = p_guild_id;
+    
+    -- Calculate correct balance from transactions
+    SELECT COALESCE(SUM(amount), 0) INTO v_new_balance
+    FROM transactions
+    WHERE user_id = p_user_id AND guild_id = p_guild_id;
+    
+    -- Update user balance
+    UPDATE users
+    SET 
+        balance = v_new_balance,
+        total_earned = COALESCE((
+            SELECT SUM(amount) FROM transactions 
+            WHERE user_id = p_user_id AND guild_id = p_guild_id AND amount > 0
+        ), 0),
+        total_spent = COALESCE((
+            SELECT SUM(ABS(amount)) FROM transactions 
+            WHERE user_id = p_user_id AND guild_id = p_guild_id AND amount < 0
+        ), 0),
+        updated_at = NOW()
+    WHERE user_id = p_user_id AND guild_id = p_guild_id;
+    
+    RETURN QUERY SELECT 
+        COALESCE(v_old_balance, 0),
+        v_new_balance,
+        COALESCE(v_old_balance, 0) - v_new_balance;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function to validate balance integrity
+CREATE OR REPLACE FUNCTION validate_balance_integrity()
+RETURNS TABLE(
+    total_users BIGINT,
+    users_with_discrepancies BIGINT,
+    total_discrepancy BIGINT,
+    max_discrepancy INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH balance_check AS (
+        SELECT 
+            u.user_id,
+            u.guild_id,
+            u.balance,
+            COALESCE(SUM(t.amount), 0) as calculated_balance,
+            ABS(u.balance - COALESCE(SUM(t.amount), 0)) as discrepancy
+        FROM users u
+        LEFT JOIN transactions t 
+            ON u.user_id = t.user_id AND u.guild_id = t.guild_id
+        GROUP BY u.user_id, u.guild_id, u.balance
+    )
+    SELECT 
+        COUNT(*)::BIGINT as total_users,
+        COUNT(CASE WHEN discrepancy > 0 THEN 1 END)::BIGINT as users_with_discrepancies,
+        COALESCE(SUM(discrepancy), 0)::BIGINT as total_discrepancy,
+        COALESCE(MAX(discrepancy), 0)::INTEGER as max_discrepancy
+    FROM balance_check;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =====================================================
+-- USAGE INSTRUCTIONS
+-- =====================================================
+-- 
+-- To check for balance discrepancies:
+--   SELECT * FROM recalculate_user_balances();
+--
+-- To sync all user balances:
+--   SELECT * FROM sync_all_user_balances();
+--
+-- To sync a specific user:
+--   SELECT * FROM sync_user_balance('USER_ID', 'GUILD_ID');
+--
+-- To validate overall integrity:
+--   SELECT * FROM validate_balance_integrity();
+--
+-- =====================================================

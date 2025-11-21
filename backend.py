@@ -705,9 +705,12 @@ def delete_shop_item(server_id, item_id):
 @require_guild_access
 def get_transactions(server_id):
     try:
-        transactions = transaction_manager.get_transactions(server_id)
-        return jsonify({'transactions': transactions}), 200
+        # Convert server_id to int as transaction_manager expects
+        result = transaction_manager.get_transactions(int(server_id))
+        # result is already a dict with 'transactions', 'total', 'has_more'
+        return jsonify(result), 200
     except Exception as e:
+        logger.error(f"Error getting transactions for guild {server_id}: {e}")
         return safe_error_response(e)
 
 # ========== ANNOUNCEMENTS ==========

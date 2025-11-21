@@ -432,14 +432,14 @@ class Currency(commands.Cog):
 
         self.data_manager.save_guild_data(guild_id, "currency", data)
 
-    @app_commands.command(name="shop", description="Display shop items in paginated embed")
+    @app_commands.command(name="shop", description="Display all shop items")
     @app_commands.guild_only()
     async def shop(self, interaction: discord.Interaction, category: str = None):
-        """Display shop items in paginated embed"""
+        """Display all shop items (ephemeral response)"""
         guild_id = interaction.guild.id
 
-        # Get shop items
-        items = self.shop_manager.get_shop_items(guild_id, category=category, active_only=True, include_out_of_stock=False)
+        # Get ALL shop items (including out of stock, but only active ones)
+        items = self.shop_manager.get_shop_items(guild_id, category=category, active_only=True, include_out_of_stock=True)
 
         if not items:
             await interaction.response.send_message("No items available in the shop!", ephemeral=True)
@@ -449,31 +449,54 @@ class Currency(commands.Cog):
         symbol = self._get_currency_symbol(guild_id)
         embed = discord.Embed(
             title="🏪 Shop",
-            description=f"Available items{f' in {category}' if category else ''}",
+            description=f"All available items{f' in {category}' if category else ''}",
             color=discord.Color.blue()
         )
 
         embed.add_field(
-            name="Your Balance",
+            name="💰 Your Balance",
             value=f"{symbol}{self._get_balance(guild_id, interaction.user.id):,}",
             inline=False
         )
 
-        # Show first 5 items
-        item_list = list(items.values())[:5]
-        for item in item_list:
+        # Show ALL items (Discord has a limit of 25 fields per embed)
+        # We'll show up to 20 items to leave room for balance and footer
+        item_list = list(items.items())[:20]
+        
+        for item_id, item in item_list:
             # Handle missing emoji field gracefully
             emoji = item.get('emoji', '🛍️')  # Default to shopping bag emoji
-            stock_text = "♾️ Unlimited" if item['stock'] == -1 else f"📦 {item['stock']} available"
+            
+            # Determine stock status
+            if item['stock'] == -1:
+                stock_text = "♾️ Unlimited Stock"
+                stock_emoji = "✅"
+            elif item['stock'] == 0:
+                stock_text = "❌ **OUT OF STOCK**"
+                stock_emoji = "❌"
+            else:
+                stock_text = f"📦 {item['stock']} in stock"
+                stock_emoji = "✅"
+            
+            # Truncate description if too long
+            description = item['description'][:80] + '...' if len(item['description']) > 80 else item['description']
+            
             embed.add_field(
-                name=f"{emoji} {item['name']} - {symbol}{item['price']}",
-                value=f"{item['description'][:100]}{'...' if len(item['description']) > 100 else ''}\n{stock_text}\nID: `{list(items.keys())[list(items.values()).index(item)]}`",
+                name=f"{stock_emoji} {emoji} {item['name']} - {symbol}{item['price']:,}",
+                value=f"{description}\n{stock_text}\nID: `{item_id}`",
                 inline=False
             )
 
-        if len(items) > 5:
-            embed.set_footer(text=f"Showing 1-5 of {len(items)} items")
+        # Add footer with item count
+        total_items = len(items)
+        shown_items = len(item_list)
+        
+        if total_items > shown_items:
+            embed.set_footer(text=f"Showing {shown_items} of {total_items} items • Use /buy <item_id> to purchase")
+        else:
+            embed.set_footer(text=f"Showing all {total_items} items • Use /buy <item_id> to purchase")
 
+        # Always send as ephemeral (only visible to user)
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @app_commands.command(name="inventory", description="Display user inventory in paginated embed")

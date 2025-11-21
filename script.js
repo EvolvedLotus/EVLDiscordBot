@@ -767,6 +767,7 @@ async function loadEmbeds() {
 async function loadTransactions() {
     if (!currentServerId) return;
     const list = document.getElementById('transactions-list');
+    const statsSection = document.getElementById('transaction-stats');
     list.innerHTML = '<div class="loading">Loading transactions...</div>';
 
     try {
@@ -774,6 +775,38 @@ async function loadTransactions() {
         const data = await apiCall(`/api/${currentServerId}/transactions`);
 
         if (data && data.transactions && data.transactions.length > 0) {
+            // Calculate statistics
+            let totalVolume = 0;
+            let userActivity = {};
+
+            data.transactions.forEach(txn => {
+                totalVolume += Math.abs(txn.amount);
+                userActivity[txn.user_id] = (userActivity[txn.user_id] || 0) + 1;
+            });
+
+            // Find most active user
+            let mostActiveUserId = null;
+            let maxActivity = 0;
+            for (const [userId, count] of Object.entries(userActivity)) {
+                if (count > maxActivity) {
+                    maxActivity = count;
+                    mostActiveUserId = userId;
+                }
+            }
+
+            const avgTransaction = totalVolume / data.transactions.length;
+            const mostActiveUser = mostActiveUserId ? getUserDisplay(mostActiveUserId) : '-';
+
+            // Update statistics
+            if (statsSection) {
+                statsSection.style.display = 'grid';
+                document.getElementById('total-transactions').textContent = data.transactions.length;
+                document.getElementById('total-volume').textContent = `$${totalVolume.toLocaleString()}`;
+                document.getElementById('most-active-user').textContent = mostActiveUser;
+                document.getElementById('avg-transaction').textContent = `$${Math.round(avgTransaction).toLocaleString()}`;
+            }
+
+            // Build transaction table
             let html = `
                 <table class="data-table">
                     <thead>
@@ -812,9 +845,18 @@ async function loadTransactions() {
             html += '</tbody></table>';
             list.innerHTML = html;
         } else {
+            // No transactions
+            if (statsSection) {
+                statsSection.style.display = 'grid';
+                document.getElementById('total-transactions').textContent = '0';
+                document.getElementById('total-volume').textContent = '$0';
+                document.getElementById('most-active-user').textContent = '-';
+                document.getElementById('avg-transaction').textContent = '$0';
+            }
             list.innerHTML = '<div class="empty-state">No transactions found</div>';
         }
     } catch (error) {
+        console.error('Transaction loading error:', error);
         list.innerHTML = `<div class="error-state">Failed to load: ${error.message}</div>`;
     }
 }
