@@ -1989,6 +1989,14 @@ async function loadServers() {
                 option.textContent = server.name || `Server ${serverId}`;
                 select.appendChild(option);
             });
+
+            // Auto-select the first server
+            const firstServerId = data.servers[0].id || data.servers[0].guild_id;
+            select.value = firstServerId;
+            currentServerId = firstServerId;
+
+            // Load dashboard for the first server
+            await loadDashboard();
         }
     } catch (error) {
         console.error('Failed to load servers:', error);
