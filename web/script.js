@@ -18,6 +18,11 @@ async function apiCall(endpoint, options = {}) {
     options.headers['Content-Type'] = 'application/json';
 
     try {
+        if (endpoint.includes('/undefined/')) {
+            console.error('Prevented API call with undefined parameter:', endpoint);
+            throw new Error('Invalid API call parameters');
+        }
+
         const response = await fetch(apiUrl(endpoint), options);
 
         if (response.status === 401) {
@@ -1978,8 +1983,9 @@ async function loadServers() {
         if (data && data.servers && data.servers.length > 0) {
             data.servers.forEach(server => {
                 const option = document.createElement('option');
-                option.value = server.id;
-                option.textContent = server.name || `Server ${server.id}`;
+                const serverId = server.id || server.guild_id;
+                option.value = serverId;
+                option.textContent = server.name || `Server ${serverId}`;
                 select.appendChild(option);
             });
         }
@@ -1991,7 +1997,14 @@ async function loadServers() {
 
 function onServerChange() {
     const select = document.getElementById('server-select');
-    currentServerId = select.value;
+    const selectedValue = select.value;
+
+    if (!selectedValue || selectedValue === 'undefined' || selectedValue === 'null') {
+        currentServerId = '';
+        return;
+    }
+
+    currentServerId = selectedValue;
 
     if (currentServerId) {
         // Load the current tab's data
