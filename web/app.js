@@ -1975,6 +1975,117 @@ function showLoginScreen() {
     currentServerId = '';
 }
 
+function logout() {
+    // Clear any stored session data
+    currentUser = null;
+    currentServerId = '';
+
+    // Show login screen
+    showLoginScreen();
+
+    // Optionally call logout endpoint
+    fetch(apiUrl('/api/auth/logout'), {
+        method: 'POST',
+        credentials: 'include'
+    }).catch(err => console.error('Logout error:', err));
+
+    showNotification('Logged out successfully', 'info');
+}
+
+function closeModal() {
+    const modal = document.getElementById('dynamic-modal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function showCreateShopItemModal() {
+    const modal = createModal('Create Shop Item', `
+        <form id="shop-item-form" onsubmit="return false;">
+            <input type="hidden" id="shop-item-id">
+            <div class="form-group">
+                <label>Item Name</label>
+                <input type="text" id="shop-item-name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="shop-item-description" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Price</label>
+                <input type="number" id="shop-item-price" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Category</label>
+                <select id="shop-item-category" class="form-control">
+                    <option value="general">General</option>
+                    <option value="consumable">Consumable</option>
+                    <option value="role">Role</option>
+                    <option value="collectible">Collectible</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Stock (-1 for unlimited)</label>
+                <input type="number" id="shop-item-stock" class="form-control" value="-1">
+            </div>
+            <div class="form-group">
+                <label>Emoji (optional)</label>
+                <input type="text" id="shop-item-emoji" class="form-control" placeholder="🎁">
+            </div>
+            <div class="button-group">
+                <button type="button" onclick="saveShopItem(event)" class="btn-success">Save</button>
+                <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+            </div>
+        </form>
+    `);
+
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+}
+
+function showCreateAnnouncementModal() {
+    const modal = createModal('Create Announcement', `
+        <form id="announcement-form" onsubmit="return false;">
+            <input type="hidden" id="announcement-id">
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="announcement-title" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Content</label>
+                <textarea id="announcement-content" class="form-control" rows="5" required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Channel</label>
+                <select id="announcement-channel" class="form-control">
+                    ${getChannelOptions()}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="announcement-pinned">
+                    Pin this announcement
+                </label>
+            </div>
+            <div class="button-group">
+                <button type="button" onclick="saveAnnouncement(event)" class="btn-success">Send</button>
+                <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+            </div>
+        </form>
+    `);
+
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+}
+
+function getChannelOptions() {
+    const channels = Object.values(discordDataCache.channels);
+    if (channels.length === 0) {
+        return '<option value="">No channels available</option>';
+    }
+    return channels.map(ch => `<option value="${ch.id}">#${ch.name}</option>`).join('');
+}
+
 async function loadServers() {
     try {
         const data = await apiCall('/api/servers');
