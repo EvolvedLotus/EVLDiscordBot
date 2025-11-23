@@ -4,7 +4,6 @@
 .env.production
 .env.*.local
 *.env
-BOT_COMMANDS.txt
 
 # Sensitive configuration files
 manualtodo.txt
@@ -13,7 +12,7 @@ config.ini
 secrets.txt
 secrets.json
 credentials.json
-credentials.txt
+
 *.key
 *.pem
 *.pfx

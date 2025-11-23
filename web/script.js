@@ -1978,8 +1978,8 @@ async function loadServers() {
         if (data && data.servers && data.servers.length > 0) {
             data.servers.forEach(server => {
                 const option = document.createElement('option');
-                option.value = server.guild_id;
-                option.textContent = server.name || `Server ${server.guild_id}`;
+                option.value = server.id;
+                option.textContent = server.name || `Server ${server.id}`;
                 select.appendChild(option);
             });
         }
