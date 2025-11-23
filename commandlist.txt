@@ -1,701 +1,125 @@
-═══════════════════════════════════════════════════════════════════
-                    DISCORD BOT COMMAND LIST
-═══════════════════════════════════════════════════════════════════
+DISCORD BOT COMMAND LIST
+========================
+This file contains all Discord slash commands that are actually defined in the codebase.
+Last updated: 2025-11-23
+**NO DUPLICATES** - All command names are unique
+
+=== GENERAL COMMANDS (cogs/general.py) ===
+/help - Display help information
+/ping - Check bot latency and response
+/stats - View bot performance statistics
+/serverinfo - Display server information
+/userinfo - Display user information
+/avatar - Display user avatar (large)
+/roleinfo - Display role information
+/poll - Create polls with up to 10 options
+/remind - Set personal reminder
+/clear_channel - Clear all messages in channel (Admin only)
+
+=== CURRENCY COMMANDS (cogs/currency.py) ===
+/balance - Check your balance
+/daily - Claim your daily reward of 100 coins
+/leaderboard - Show the top 10 richest users in this server
+/shop - Display all shop items
+/inventory - Display user inventory in paginated embed
+/redeem - Redeem item from your inventory
+/buy - Purchase item with quantity
+/transfer - Send coins to another user
+/shop_create - Create a shop item (Admin only)
+/shop_delete - Delete a shop item (Admin only)
+/shop_edit - Edit a shop item (Admin only)
+/claim - Claim a task
+/mytasks - View your claimed tasks
+/transactions - View recent transaction history
+/admin_give - Give currency to any user (Admin only)
+
+=== TASK COMMANDS (cogs/tasks.py) ===
+/task_submit - Submit proof for a claimed task
+/view_tasks - View available tasks with interactive buttons
+/tasks - View available tasks
+/task_assign - Assign a task to a user
+/task_archive - Archive completed/expired tasks
+
+=== MODERATION COMMANDS (cogs/moderation_commands.py) ===
+/warn - Issue a warning to a user
+/mute - Temporarily mute a user
+/kick - Kick a user from the server
+/unmute - Remove timeout/mute from a user
+/ban - Ban a user from the server
+/moderation_stats - View moderation statistics
+/moderation_logs - View recent moderation logs
+/timeout - Timeout a user for a specified duration
+/unban - Unban a user from the server
+/softban - Ban then immediately unban a user (clears messages)
+/pardon - Remove active strikes/warnings from a user
+/warnings - View a user's warning history
+/clearwarnings - Clear all warnings for a user
+/clear - Clear messages from a channel
+/slowmode - Set slowmode delay for the current channel
+/lock - Lock the current channel (prevent messaging)
+/unlock - Unlock the current channel (allow messaging)
+
+=== MODERATION SETTINGS (cogs/moderation.py) ===
+/add_profanity - Add a word to the profanity blacklist
+/remove_profanity - Remove a word from the profanity blacklist
+/list_profanity - List current profanity blacklist
+/add_whitelist - Add a domain to the link whitelist
+/remove_whitelist - Remove a domain from the link whitelist
+/set_protection_level - Set protection strictness level
+
+=== EMBED COMMANDS (cogs/embeds.py) ===
+/embed_create - Create a custom embed
+/embed_edit - Edit an existing embed
+/embed_delete - Delete an embed
+/embed_list - List all embeds
+/announce_embed - Send an announcement embed
+
+=== ANNOUNCEMENT COMMANDS (cogs/announcements.py) ===
+/announce - Create an announcement
+/announce-task - Post announcement for a task
+/scheduleannouncement - Schedule an announcement to be posted later
+/create_embed - Create a custom embed message
+/create_rich_embed - Create a rich embed with fields and customizations
+/pin-announcement - Pin an announcement
+/unpin-announcement - Unpin an announcement
+
+=== ADMIN COMMANDS (cogs/admin.py) ===
+/setprefix - Change the bot prefix for this server
+/completetask - Mark a task as completed and award reward
+
+=== BOT ADMIN COMMANDS (cogs/bot_admin.py) ===
+/removebalance - Remove currency from a user's balance (Admin only)
+/setbalance - Set a user's balance to exact amount (Admin only)
+/user_balance - View or modify a user's balance
+/create_task - Create a new task
+/list_tasks - List all tasks with filtering
+/create_item - Create a new shop item
+/list_items - List shop items with filtering
+
+=== AI COMMANDS (cogs/ai_cog.py) ===
+/chat - Chat with AI assistant
+/clear_chat - Clear your AI conversation history
 
-This document contains ALL commands available in the Discord bot.
-Commands are organized by category and permission level.
-
-═══════════════════════════════════════════════════════════════════
-                        GENERAL COMMANDS
-═══════════════════════════════════════════════════════════════════
-
-/help
-    Description: Display help information
-    Usage: /help
-    Permissions: Everyone
-
-/ping
-    Description: Check bot latency and response time
-    Usage: /ping
-    Permissions: Everyone
-
-/stats
-    Description: View bot performance statistics
-    Usage: /stats
-    Permissions: Everyone
-
-/serverinfo
-    Description: Display server information
-    Usage: /serverinfo
-    Permissions: Everyone
-
-/userinfo [user]
-    Description: Display user information
-    Usage: /userinfo @user
-    Parameters:
-        - user (optional): User to view info for
-    Permissions: Everyone
-
-/avatar [user]
-    Description: Display user avatar in large format
-    Usage: /avatar @user
-    Parameters:
-        - user (optional): User whose avatar to display
-    Permissions: Everyone
-
-/roleinfo <role>
-    Description: Display detailed role information
-    Usage: /roleinfo @role
-    Parameters:
-        - role (required): Role to view info for
-    Permissions: Everyone
-
-/poll <question> <option1> <option2> [option3-10]
-    Description: Create a poll with up to 10 options
-    Usage: /poll "What's your favorite color?" "Red" "Blue" "Green"
-    Parameters:
-        - question (required): Poll question
-        - option1 (required): First option
-        - option2 (required): Second option
-        - option3-10 (optional): Additional options
-    Permissions: Everyone
-
-/remind <time> <message>
-    Description: Set a personal reminder
-    Usage: /remind "30m" "Check the oven"
-    Parameters:
-        - time (required): Time until reminder (e.g., 30m, 2h)
-        - message (required): Reminder message
-    Permissions: Everyone
-
-═══════════════════════════════════════════════════════════════════
-                        CURRENCY COMMANDS
-═══════════════════════════════════════════════════════════════════
-
-/balance [user]
-    Description: Check your balance or another user's balance
-    Usage: /balance @user
-    Parameters:
-        - user (optional): User to check balance for
-    Permissions: Everyone
-
-/daily
-    Description: Claim your daily reward of 100 coins
-    Usage: /daily
-    Permissions: Everyone
-
-/leaderboard
-    Description: Show the top 10 richest users in this server
-    Usage: /leaderboard
-    Permissions: Everyone
-
-/shop [category]
-    Description: Display shop items in paginated embed
-    Usage: /shop general
-    Parameters:
-        - category (optional): Filter by category
-    Permissions: Everyone
-
-/inventory [user]
-    Description: Display user inventory in paginated embed
-    Usage: /inventory @user
-    Parameters:
-        - user (optional): View another user's inventory
-    Permissions: Everyone
-
-/buy <item> [quantity]
-    Description: Purchase item from the shop
-    Usage: /buy item_12345 2
-    Parameters:
-        - item (required): Item ID to purchase
-        - quantity (optional): How many to buy (default: 1)
-    Permissions: Everyone
-
-/redeem <item> [quantity]
-    Description: Redeem item from your inventory
-    Usage: /redeem item_12345 1
-    Parameters:
-        - item (required): Item to redeem
-        - quantity (optional): How many to redeem (default: 1)
-    Permissions: Everyone
-
-/transfer <user> <amount> [reason]
-    Description: Send coins to another user
-    Usage: /transfer @user 500 "Payment for services"
-    Parameters:
-        - user (required): User to send coins to
-        - amount (required): Amount of coins to send
-        - reason (optional): Reason for the transfer
-    Permissions: Everyone
-
-/view_tasks
-    Description: View available tasks
-    Usage: /view_tasks
-    Permissions: Everyone
-
-/claim <task_id>
-    Description: Claim a task
-    Usage: /claim task_123
-    Parameters:
-        - task_id (required): ID of the task to claim
-    Permissions: Everyone
-
-/mytasks
-    Description: View your claimed tasks
-    Usage: /mytasks
-    Permissions: Everyone
-
-/transactions [user] [limit]
-    Description: View recent transaction history
-    Usage: /transactions @user 20
-    Parameters:
-        - user (optional): View another user's transactions
-        - limit (optional): Number of transactions to show (default: 10)
-    Permissions: Everyone
-
-═══════════════════════════════════════════════════════════════════
-                        TASK COMMANDS
-═══════════════════════════════════════════════════════════════════
-
-/task_submit <task_id> <proof> [attachment]
-    Description: Submit proof for a claimed task
-    Usage: /task_submit 123 "Completed the assignment"
-    Parameters:
-        - task_id (required): Task ID
-        - proof (required): Proof of completion
-        - attachment (optional): File attachment as proof
-    Permissions: Everyone
-
-/tasks
-    Description: View available tasks (alternative to /view_tasks)
-    Usage: /tasks
-    Permissions: Everyone
-
-/task_assign <task_id> <user>
-    Description: Assign a task to a user (Admin only)
-    Usage: /task_assign 123 @user
-    Parameters:
-        - task_id (required): Task ID to assign
-        - user (required): User to assign task to
-    Permissions: Administrator
-
-/task_archive
-    Description: Archive completed/expired tasks (Admin only)
-    Usage: /task_archive
-    Permissions: Administrator
-
-═══════════════════════════════════════════════════════════════════
-                    ANNOUNCEMENT COMMANDS
-═══════════════════════════════════════════════════════════════════
-
-/announce <title> <content> [channel] [mention_everyone] [pin]
-    Description: Create and post an announcement
-    Usage: /announce "Server Update" "New features added!" #announcements true false
-    Parameters:
-        - title (required): Announcement title
-        - content (required): Announcement content
-        - channel (optional): Channel to post in
-        - mention_everyone (optional): Mention @everyone
-        - pin (optional): Pin the announcement
-    Permissions: Administrator
-
-/announce-task <task_id> [channel] [pin]
-    Description: Post announcement for a task
-    Usage: /announce-task task_123 #tasks true
-    Parameters:
-        - task_id (required): Task ID to announce
-        - channel (optional): Channel to post in
-        - pin (optional): Pin the announcement
-    Permissions: Administrator
-
-/scheduleannouncement <title> <content> <delay_minutes> [channel] [mention_everyone] [pin]
-    Description: Schedule an announcement to be posted later
-    Usage: /scheduleannouncement "Event" "Starting soon!" 30 #general false true
-    Parameters:
-        - title (required): Announcement title
-        - content (required): Announcement content
-        - delay_minutes (required): Delay in minutes before posting
-        - channel (optional): Channel to post in
-        - mention_everyone (optional): Mention @everyone
-        - pin (optional): Pin when posted
-    Permissions: Administrator
-
-/create_embed <title> <description> [color] [channel]
-    Description: Create a custom embed message
-    Usage: /create_embed "Welcome" "Welcome to our server!" #FF5733 #general
-    Parameters:
-        - title (required): Embed title
-        - description (required): Embed description
-        - color (optional): Hex color code
-        - channel (optional): Channel to post in
-    Permissions: Administrator
-
-/create_rich_embed <title> <description> [field1_title] [field1_value] [field2_title] [field2_value] [color] [thumbnail_url] [channel]
-    Description: Create a rich embed with fields and customizations
-    Usage: /create_rich_embed "Info" "Details" "Field 1" "Value 1" "Field 2" "Value 2" #00FF00 https://example.com/image.png #general
-    Parameters:
-        - title (required): Embed title
-        - description (required): Main description
-        - field1_title (optional): First field title
-        - field1_value (optional): First field value
-        - field2_title (optional): Second field title
-        - field2_value (optional): Second field value
-        - color (optional): Hex color code
-        - thumbnail_url (optional): Thumbnail image URL
-        - channel (optional): Channel to post in
-    Permissions: Administrator
-
-/pin-announcement <announcement_id>
-    Description: Pin an announcement
-    Usage: /pin-announcement ann_123456
-    Parameters:
-        - announcement_id (required): Announcement ID to pin
-    Permissions: Manage Messages
-
-/unpin-announcement <announcement_id>
-    Description: Unpin an announcement
-    Usage: /unpin-announcement ann_123456
-    Parameters:
-        - announcement_id (required): Announcement ID to unpin
-    Permissions: Manage Messages
-
-═══════════════════════════════════════════════════════════════════
-                        EMBED COMMANDS
-═══════════════════════════════════════════════════════════════════
-
-/embed_create <title> <description> [color] [channel]
-    Description: Create and send a custom embed
-    Usage: /embed_create "Title" "Description" #FF0000 #general
-    Parameters:
-        - title (required): Embed title
-        - description (required): Embed description
-        - color (optional): Hex color code
-        - channel (optional): Channel to post in
-    Permissions: Administrator
-
-/embed_edit <embed_id> [title] [description] [color]
-    Description: Edit an existing embed by ID
-    Usage: /embed_edit embed_123 "New Title" "New Description" #00FF00
-    Parameters:
-        - embed_id (required): Embed ID to edit
-        - title (optional): New title
-        - description (optional): New description
-        - color (optional): New hex color code
-    Permissions: Administrator
-
-/embed_delete <embed_id>
-    Description: Delete an embed and its message
-    Usage: /embed_delete embed_123
-    Parameters:
-        - embed_id (required): Embed ID to delete
-    Permissions: Administrator
-
-/embed_list
-    Description: List all embeds in the server
-    Usage: /embed_list
-    Permissions: Administrator
-
-/announce_embed <title> <message> [channel] [mention_everyone]
-    Description: Send an announcement using embeds
-    Usage: /announce_embed "Update" "New features!" #announcements true
-    Parameters:
-        - title (required): Announcement title
-        - message (required): Announcement message
-        - channel (optional): Channel to post in
-        - mention_everyone (optional): Mention @everyone
-    Permissions: Administrator
-
-═══════════════════════════════════════════════════════════════════
-                    MODERATION COMMANDS
-═══════════════════════════════════════════════════════════════════
-
-/warn <user> <reason>
-    Description: Issue a warning to a user
-    Usage: /warn @user "Spamming in chat"
-    Parameters:
-        - user (required): User to warn
-        - reason (required): Reason for warning
-    Permissions: Moderator
-
-/mute <user> <duration> <reason>
-    Description: Temporarily mute a user
-    Usage: /mute @user 60 "Inappropriate behavior"
-    Parameters:
-        - user (required): User to mute
-        - duration (required): Duration in minutes
-        - reason (required): Reason for mute
-    Permissions: Moderator
-
-/unmute <user> [reason]
-    Description: Remove timeout/mute from a user
-    Usage: /unmute @user "Appeal accepted"
-    Parameters:
-        - user (required): User to unmute
-        - reason (optional): Reason for unmute
-    Permissions: Moderator
-
-/timeout <user> <duration> [reason]
-    Description: Timeout a user for a specified duration
-    Usage: /timeout @user 120 "Breaking rules"
-    Parameters:
-        - user (required): User to timeout
-        - duration (required): Duration in minutes
-        - reason (optional): Reason for timeout
-    Permissions: Moderator
-
-/kick <user> <reason>
-    Description: Kick a user from the server
-    Usage: /kick @user "Repeated violations"
-    Parameters:
-        - user (required): User to kick
-        - reason (required): Reason for kick
-    Permissions: Moderator
-
-/ban <user> <reason>
-    Description: Ban a user from the server
-    Usage: /ban @user "Severe rule violation"
-    Parameters:
-        - user (required): User to ban
-        - reason (required): Reason for ban
-    Permissions: Moderator
-
-/unban <user_id> [reason]
-    Description: Unban a user from the server
-    Usage: /unban 123456789012345678 "Ban appeal approved"
-    Parameters:
-        - user_id (required): User ID to unban
-        - reason (optional): Reason for unban
-    Permissions: Moderator
-
-/softban <user> [reason]
-    Description: Ban then immediately unban a user (clears messages)
-    Usage: /softban @user "Message cleanup"
-    Parameters:
-        - user (required): User to softban
-        - reason (optional): Reason for softban
-    Permissions: Moderator
-
-/pardon <user> [reason]
-    Description: Remove active strikes/warnings from a user
-    Usage: /pardon @user "Good behavior"
-    Parameters:
-        - user (required): User to pardon
-        - reason (optional): Reason for pardon
-    Permissions: Moderator
-
-/warnings <user>
-    Description: View a user's warning history
-    Usage: /warnings @user
-    Parameters:
-        - user (required): User to view warnings for
-    Permissions: Moderator
-
-/clearwarnings <user> [reason]
-    Description: Clear all warnings for a user
-    Usage: /clearwarnings @user "Fresh start"
-    Parameters:
-        - user (required): User to clear warnings for
-        - reason (optional): Reason for clearing
-    Permissions: Moderator
-
-/clear <amount> [user]
-    Description: Clear messages from a channel
-    Usage: /clear 50 @user
-    Parameters:
-        - amount (required): Number of messages to clear (max 1000)
-        - user (optional): Only clear messages from this user
-    Permissions: Moderator
-
-/slowmode <delay_seconds>
-    Description: Set slowmode delay for the current channel
-    Usage: /slowmode 10
-    Parameters:
-        - delay_seconds (required): Delay in seconds (0 to disable)
-    Permissions: Moderator
-
-/lock [reason]
-    Description: Lock the current channel (prevent messaging)
-    Usage: /lock "Emergency lockdown"
-    Parameters:
-        - reason (optional): Reason for locking
-    Permissions: Moderator
-
-/unlock [reason]
-    Description: Unlock the current channel (allow messaging)
-    Usage: /unlock "Issue resolved"
-    Parameters:
-        - reason (optional): Reason for unlocking
-    Permissions: Moderator
-
-/moderation_stats
-    Description: View moderation statistics
-    Usage: /moderation_stats
-    Permissions: Moderator
-
-/moderation_logs [page]
-    Description: View recent moderation logs
-    Usage: /moderation_logs 2
-    Parameters:
-        - page (optional): Page number (default: 1)
-    Permissions: Moderator
-
-/add_profanity <word>
-    Description: Add a word to the profanity blacklist
-    Usage: /add_profanity "badword"
-    Parameters:
-        - word (required): Word to add to blacklist
-    Permissions: Administrator
-
-/remove_profanity <word>
-    Description: Remove a word from the profanity blacklist
-    Usage: /remove_profanity "badword"
-    Parameters:
-        - word (required): Word to remove from blacklist
-    Permissions: Administrator
-
-/list_profanity [page]
-    Description: List current profanity blacklist
-    Usage: /list_profanity 1
-    Parameters:
-        - page (optional): Page number (default: 1)
-    Permissions: Administrator
-
-/add_whitelist <domain_or_regex>
-    Description: Add a domain to the link whitelist
-    Usage: /add_whitelist "youtube.com"
-    Parameters:
-        - domain_or_regex (required): Domain or regex pattern to whitelist
-    Permissions: Administrator
-
-/remove_whitelist <domain_or_regex>
-    Description: Remove a domain from the link whitelist
-    Usage: /remove_whitelist "youtube.com"
-    Parameters:
-        - domain_or_regex (required): Domain or regex pattern to remove
-    Permissions: Administrator
-
-/set_protection_level <level>
-    Description: Set protection strictness level
-    Usage: /set_protection_level strict
-    Parameters:
-        - level (required): Protection level (off, monitor, moderate, strict)
-    Permissions: Administrator
-
-═══════════════════════════════════════════════════════════════════
-                    ADMINISTRATOR COMMANDS
-═══════════════════════════════════════════════════════════════════
-
-/setprefix <new_prefix>
-    Description: Change the bot prefix for this server
-    Usage: /setprefix !
-    Parameters:
-        - new_prefix (required): New prefix (max 5 characters)
-    Permissions: Administrator
-
-/completetask <task_id> [user]
-    Description: Mark a task as completed and award reward
-    Usage: /completetask task_123 @user
-    Parameters:
-        - task_id (required): ID of the task to complete
-        - user (optional): User who completed the task
-    Permissions: Administrator
-
-/create_item <name> <description> <price> [stock] [category] [emoji]
-    Description: Create a new shop item
-    Usage: /create_item "VIP Role" "Get VIP access" 1000 10 "roles" "⭐"
-    Parameters:
-        - name (required): Item name
-        - description (required): Item description
-        - price (required): Item price in coins
-        - stock (optional): Stock quantity (-1 for unlimited, default: -1)
-        - category (optional): Item category (default: "general")
-        - emoji (optional): Item emoji (default: "🛍️")
-    Permissions: Administrator
-
-/edit_item <item_id> [name] [description] [price] [stock] [category] [emoji]
-    Description: Edit an existing shop item
-    Usage: /edit_item item_123 "New Name" "New Description" 500
-    Parameters:
-        - item_id (required): ID of item to edit
-        - name (optional): New name
-        - description (optional): New description
-        - price (optional): New price
-        - stock (optional): New stock
-        - category (optional): New category
-        - emoji (optional): New emoji
-    Permissions: Administrator
-
-/admin_give <user> <amount> [reason]
-    Description: Give currency to any user
-    Usage: /admin_give @user 5000 "Event reward"
-    Parameters:
-        - user (required): User to give currency to
-        - amount (required): Amount of currency to give
-        - reason (optional): Reason for giving currency
-    Permissions: Administrator
-
-/removebalance <user> <amount> [reason]
-    Description: Remove currency from a user's balance
-    Usage: /removebalance @user 500 "Penalty"
-    Parameters:
-        - user (required): User to remove currency from
-        - amount (required): Amount to remove
-        - reason (optional): Reason for removal
-    Permissions: Administrator
-
-/setbalance <user> <amount> [reason]
-    Description: Set a user's balance to exact amount
-    Usage: /setbalance @user 10000 "Reset"
-    Parameters:
-        - user (required): User whose balance to set
-        - amount (required): Exact balance amount to set
-        - reason (optional): Reason for setting balance
-    Permissions: Administrator
-
-/user_balance <user> <action> [amount] [reason]
-    Description: View or modify a user's balance
-    Usage: /user_balance @user add 1000 "Bonus"
-    Parameters:
-        - user (required): User to check/modify
-        - action (required): Action (check, set, add, subtract)
-        - amount (optional): Amount for modifications
-        - reason (optional): Reason for balance change
-    Permissions: Administrator
-
-/create_task <name> <description> <reward> <duration_hours> [channel] [max_claims] [category] [role_reward]
-    Description: Create a new task
-    Usage: /create_task "Daily Quest" "Complete the challenge" 500 24 #tasks 10 "Daily" @QuestRole
-    Parameters:
-        - name (required): Task name
-        - description (required): Task description
-        - reward (required): Reward amount in coins
-        - duration_hours (required): Time limit in hours
-        - channel (optional): Channel to post task in
-        - max_claims (optional): Maximum number of claims
-        - category (optional): Task category (default: "General")
-        - role_reward (optional): Role to grant upon completion
-    Permissions: Administrator
-
-/list_tasks [status] [category] [user]
-    Description: List all tasks with filtering
-    Usage: /list_tasks active Daily @user
-    Parameters:
-        - status (optional): Filter by status (active, completed, expired, cancelled, all)
-        - category (optional): Filter by category
-        - user (optional): Show tasks for specific user
-    Permissions: Administrator
-
-/list_items [category] [in_stock_only]
-    Description: List shop items with filtering
-    Usage: /list_items roles true
-    Parameters:
-        - category (optional): Filter by category
-        - in_stock_only (optional): Show only items in stock
-    Permissions: Administrator
-
-/clear_chat
-    Description: Clear all chat messages (Admin only)
-    Usage: /clear_chat
-    Permissions: Administrator
-
-/chat <message> [channel]
-    Description: Send a message as the bot
-    Usage: /chat "Hello everyone!" #general
-    Parameters:
-        - message (required): Message to send
-        - channel (optional): Channel to send in
-    Permissions: Moderator
-
-/delete_task <task_id>
-    Description: Delete a task and all associated data
-    Usage: /delete_task task_123
-    Parameters:
-        - task_id (required): ID of the task to delete
-    Permissions: Administrator
-
-/shop_delete <item_id>
-    Description: Delete a shop item
-    Usage: /shop_delete item_123
-    Parameters:
-        - item_id (required): ID of the item to delete
-    Permissions: Administrator
-
-═══════════════════════════════════════════════════════════════════
-                        AI COMMANDS
-═══════════════════════════════════════════════════════════════════
-
-/chat <message> [reset]
-    Description: Chat with AI assistant (Gemini)
-    Usage: /chat "What's the weather like?" false
-    Parameters:
-        - message (required): Your message to the AI
-        - reset (optional): Reset conversation history
-    Permissions: Everyone
-
-/clear_chat
-    Description: Clear your AI conversation history
-    Usage: /clear_chat
-    Permissions: Everyone
-
-═══════════════════════════════════════════════════════════════════
-                    PREFIX COMMANDS (Legacy)
-═══════════════════════════════════════════════════════════════════
-
+=== LEGACY PREFIX COMMANDS (cogs/general.py) ===
+Note: These are old-style prefix commands, not slash commands
 !help
-    Description: Show help menu
-    Usage: !help
-    Permissions: Everyone
-
 !ping
-    Description: Check bot latency
-    Usage: !ping
-    Permissions: Everyone
-
 !stats
-    Description: Bot statistics
-    Usage: !stats
-    Permissions: Everyone
-
 !serverinfo
-    Description: Information about this server
-    Usage: !serverinfo
-    Permissions: Everyone
-
 !botinfo
-    Description: Information about the bot
-    Usage: !botinfo
-    Permissions: Everyone
 
-═══════════════════════════════════════════════════════════════════
-                        NOTES
-═══════════════════════════════════════════════════════════════════
+========================
+TOTAL SLASH COMMANDS: 76
+========================
 
-1. All slash commands (/) are the primary command interface
-2. Some legacy prefix commands (!) are still supported
-3. Permission levels:
-   - Everyone: All server members
-   - Moderator: Users with moderation permissions
-   - Administrator: Users with administrator permissions
-4. Optional parameters are shown in [brackets]
-5. Required parameters are shown in <angle brackets>
-6. The default prefix is "!" but can be changed with /setprefix
+NOTES:
+- All commands are slash commands (/) unless noted as "Legacy"
+- Admin commands require Administrator permission
+- Some commands have additional permission requirements
+- Task and shop commands integrate with the web CMS
+- Currency system is per-server (guild-specific)
 
-═══════════════════════════════════════════════════════════════════
-                    COMMAND CATEGORIES SUMMARY
-═══════════════════════════════════════════════════════════════════
-
-General Commands: 9 commands
-Currency Commands: 13 commands
-Task Commands: 5 commands
-Announcement Commands: 7 commands
-Embed Commands: 5 commands
-Moderation Commands: 28 commands
-Administrator Commands: 13 commands
-AI Commands: 2 commands
-Legacy Prefix Commands: 5 commands
-
-TOTAL: 87 commands
-
-═══════════════════════════════════════════════════════════════════
-                        END OF COMMAND LIST
-═══════════════════════════════════════════════════════════════════
+DUPLICATE RESOLUTION:
+- Removed /view_tasks from currency.py (kept in tasks.py)
+- Removed /chat from general.py (kept AI chat in ai_cog.py)
+- Renamed /clear_chat to /clear_channel in general.py (to distinguish from AI's /clear_chat)

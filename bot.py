@@ -165,12 +165,11 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load embeds cog: {e}")
 
-        # Skip AI cog - not needed and causing command conflicts
-        # try:
-        #     await bot.load_extension('cogs.ai_cog')
-        #     logger.info("✓ AI cog loaded")
-        # except Exception as e:
-        #     logger.error(f"✗ Failed to load AI cog: {e}")
+        try:
+            await bot.load_extension('cogs.ai_cog')
+            logger.info("✓ AI cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load AI cog: {e}")
 
         try:
             await bot.load_extension('cogs.moderation')

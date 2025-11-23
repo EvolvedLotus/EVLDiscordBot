@@ -682,9 +682,9 @@ class General(commands.Cog):
         # In a production bot, you'd store this and have a background task check for expired reminders
         # This is a simplified version that doesn't actually send the reminder
 
-    @app_commands.command(name="clear_chat", description="Clear all chat messages (Admin only)")
+    @app_commands.command(name="clear_channel", description="Clear all messages in channel (Admin only)")
     @app_commands.guild_only()
-    async def clear_chat_slash(self, interaction: discord.Interaction):
+    async def clear_channel_slash(self, interaction: discord.Interaction):
         """Clear all messages in the current channel (Admin only)"""
         # Check admin permissions
         from core.permissions import is_admin_interaction
@@ -736,58 +736,8 @@ class General(commands.Cog):
             )
             await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="chat", description="Send a message as the bot")
-    @app_commands.describe(
-        message="The message to send",
-        channel="Channel to send in (default: current)"
-    )
-    @app_commands.guild_only()
-    async def chat_slash(self, interaction: discord.Interaction, message: str, channel: discord.TextChannel = None):
-        """Send a message as the bot (Moderator only)"""
-        from core.permissions import is_moderator
-        if not is_moderator(interaction):
-            await interaction.response.send_message("❌ You don't have permission to use this command!", ephemeral=True)
-            return
-
-        target_channel = channel or interaction.channel
-
-        # Validate message length
-        if len(message) > 2000:  # Discord message limit
-            await interaction.response.send_message("❌ Message too long! Maximum 2000 characters.", ephemeral=True)
-            return
-
-        try:
-            await interaction.response.defer(ephemeral=True)
-
-            # Send the message
-            sent_message = await target_channel.send(message)
-
-            embed = discord.Embed(
-                title="💬 Message Sent",
-                description="Successfully sent message as the bot.",
-                color=discord.Color.green()
-            )
-            embed.add_field(name="Channel", value=target_channel.mention, inline=True)
-            embed.add_field(name="Sent by", value=interaction.user.mention, inline=True)
-            embed.add_field(name="Message", value=message[:100] + ("..." if len(message) > 100 else ""), inline=False)
-
-            await interaction.followup.send(embed=embed, ephemeral=True)
-
-        except discord.Forbidden:
-            embed = discord.Embed(
-                title="❌ Permission Denied",
-                description="I don't have permission to send messages in that channel.",
-                color=discord.Color.red()
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
-        except Exception as e:
-            logger.error(f"Error sending chat message: {e}")
-            embed = discord.Embed(
-                title="❌ Error",
-                description="An error occurred while sending the message.",
-                color=discord.Color.red()
-            )
-            await interaction.followup.send(embed=embed, ephemeral=True)
+    # NOTE: /chat command removed - use /chat from ai_cog.py for AI conversations instead
+    # If you need to send messages as the bot, use the web CMS or create a new command like /say
 
 
 async def setup(bot):
