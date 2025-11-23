@@ -610,6 +610,67 @@ def update_balance(server_id, user_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/<server_id>/users/<user_id>/roles', methods=['GET'])
+@require_guild_access
+def get_user_roles(server_id, user_id):
+    """Get roles for a specific user in a guild"""
+    try:
+        if not _bot_instance or not _bot_instance.is_ready():
+            return jsonify({'error': 'Bot is not ready'}), 503
+        
+        guild = _bot_instance.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+        
+        member = guild.get_member(int(user_id))
+        if not member:
+            return jsonify({'error': 'Member not found'}), 404
+        
+        # Get role IDs for this user
+        role_ids = [str(role.id) for role in member.roles if role.id != guild.id]  # Exclude @everyone
+        
+        return jsonify({'roles': role_ids}), 200
+    except Exception as e:
+        logger.error(f"Error getting user roles: {e}")
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/users/<user_id>/roles', methods=['PUT'])
+@require_guild_access
+def update_user_roles(server_id, user_id):
+    """Update roles for a specific user in a guild"""
+    try:
+        if not _bot_instance or not _bot_instance.is_ready():
+            return jsonify({'error': 'Bot is not ready'}), 503
+        
+        data = request.get_json()
+        role_ids = data.get('roles', [])
+        
+        guild = _bot_instance.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+        
+        member = guild.get_member(int(user_id))
+        if not member:
+            return jsonify({'error': 'Member not found'}), 404
+        
+        # Get role objects
+        roles_to_add = []
+        for role_id in role_ids:
+            role = guild.get_role(int(role_id))
+            if role:
+                roles_to_add.append(role)
+        
+        # Update member roles (this is async, so we need to run it in the bot's event loop)
+        async def update_roles():
+            await member.edit(roles=roles_to_add, reason="Updated via CMS")
+        
+        asyncio.run_coroutine_threadsafe(update_roles(), _bot_instance.loop).result(timeout=10)
+        
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        logger.error(f"Error updating user roles: {e}")
+        return safe_error_response(e)
+
 # ========== TASK MANAGEMENT ==========
 @app.route('/api/<server_id>/tasks', methods=['GET'])
 @require_guild_access

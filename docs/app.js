@@ -2127,14 +2127,26 @@ function onServerChange() {
     currentServerId = selectedValue;
 
     if (currentServerId) {
-        // Load the current tab's data
-        const activeTab = document.querySelector('.tab-content.active');
-        if (activeTab) {
-            const tabId = activeTab.id;
-            showTab(tabId);
-        }
+        // Fetch Discord data for the selected server
+        fetchDiscordData(currentServerId).then(() => {
+            // Load the current tab's data
+            const activeTab = document.querySelector('.tab-content.active');
+            if (activeTab) {
+                const tabId = activeTab.id;
+                showTab(tabId);
+            }
+        }).catch(error => {
+            console.error('Failed to fetch Discord data:', error);
+            // Still try to load the tab even if Discord data fetch fails
+            const activeTab = document.querySelector('.tab-content.active');
+            if (activeTab) {
+                const tabId = activeTab.id;
+                showTab(tabId);
+            }
+        });
     }
 }
+
 
 
 // ========== PAGE INITIALIZATION ==========
