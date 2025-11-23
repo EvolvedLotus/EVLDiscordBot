@@ -83,5 +83,4 @@ yarn-error.log*
 # Google Credentials
 /creds
 
-# Discord API Documentation
-docs/
+# Note: docs/ folder is used for GitHub Pages CMS - DO NOT IGNORE
