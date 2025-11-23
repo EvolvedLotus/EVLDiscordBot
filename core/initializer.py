@@ -167,7 +167,7 @@ class GuildInitializer:
 
                         if not user_data or user_data.get('balance') is None:
                             # Create new user with default balance
-                            self.data_manager.ensure_user_exists(guild.id, member.id)
+                            await self.data_manager.ensure_user_exists(guild.id, member.id)
                             created_count += 1
 
                     except Exception as e:

@@ -77,41 +77,43 @@ class TaskManager:
     async def delete_task(self, guild_id: int, task_id: int) -> Dict:
         """Delete task and associated user tasks"""
         guild_id = str(guild_id)
-        # task_id is int
+        task_id = int(task_id)  # Ensure it's an int
 
         try:
-            async with self.data_manager.atomic_transaction() as conn:
-                # Verify task exists
-                task_data = await conn.fetchrow(
-                    """SELECT task_id FROM tasks
-                       WHERE task_id = $1 AND guild_id = $2""",
-                    task_id, guild_id
-                )
+            # Verify task exists using Supabase
+            task_check = self.data_manager.admin_client.table('tasks') \
+                .select('task_id') \
+                .eq('task_id', task_id) \
+                .eq('guild_id', guild_id) \
+                .execute()
 
-                if not task_data:
-                    return {'success': False, 'error': "Task not found."}
+            if not task_check.data or len(task_check.data) == 0:
+                logger.warning(f"Task {task_id} not found in guild {guild_id}")
+                return {'success': False, 'error': "Task not found."}
 
-                # Delete associated user_tasks first
-                await conn.execute(
-                    """DELETE FROM user_tasks
-                       WHERE task_id = $1 AND guild_id = $2""",
-                    task_id, guild_id
-                )
+            # Delete associated user_tasks first
+            self.data_manager.admin_client.table('user_tasks') \
+                .delete() \
+                .eq('task_id', task_id) \
+                .eq('guild_id', guild_id) \
+                .execute()
 
-                # Delete the main task
-                await conn.execute(
-                    """DELETE FROM tasks
-                       WHERE task_id = $1 AND guild_id = $2""",
-                    task_id, guild_id
-                )
+            # Delete the main task
+            self.data_manager.admin_client.table('tasks') \
+                .delete() \
+                .eq('task_id', task_id) \
+                .eq('guild_id', guild_id) \
+                .execute()
+
+            logger.info(f"✅ Deleted task {task_id} from guild {guild_id}")
 
             # Invalidate cache safely
-            if self.cache_manager:
+            if hasattr(self, 'cache_manager') and self.cache_manager:
                 self.cache_manager.invalidate(f"tasks:{guild_id}")
                 self.cache_manager.invalidate(f"user_tasks:{guild_id}*")
 
             # Emit SSE event safely
-            if self.sse_manager:
+            if hasattr(self, 'sse_manager') and self.sse_manager:
                 await self.sse_manager.broadcast_event(guild_id, {
                     'type': 'task_deleted',
                     'task_id': task_id
