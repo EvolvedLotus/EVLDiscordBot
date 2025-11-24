@@ -2130,6 +2130,14 @@ function getChannelOptions() {
     return channels.map(ch => `<option value="${ch.id}">#${ch.name}</option>`).join('');
 }
 
+function getRoleOptions() {
+    const roles = Object.values(discordDataCache.roles);
+    if (roles.length === 0) {
+        return '<option value="">No roles available</option>';
+    }
+    return roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('');
+}
+
 async function loadServers() {
     try {
         const data = await apiCall('/api/servers');

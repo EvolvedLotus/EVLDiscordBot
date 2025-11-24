@@ -961,6 +961,79 @@ def delete_embed(server_id, embed_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/<server_id>/embeds/<embed_id>/send', methods=['POST'])
+@require_guild_access
+def send_embed_to_channel(server_id, embed_id):
+    """Send an embed to a specific channel"""
+    try:
+        data = request.get_json()
+        channel_id = data.get('channel_id')
+        
+        if not channel_id:
+            return jsonify({'error': 'channel_id is required'}), 400
+        
+        if not _bot_instance or not _bot_instance.is_ready():
+            return jsonify({'error': 'Bot is not ready'}), 503
+        
+        # Get the embed data from database
+        result = data_manager.admin_client.table('embeds') \
+            .select('*') \
+            .eq('embed_id', embed_id) \
+            .eq('guild_id', str(server_id)) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            return jsonify({'error': 'Embed not found'}), 404
+        
+        embed_data = result.data[0]
+        
+        # Get the channel
+        guild = _bot_instance.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Guild not found'}), 404
+        
+        channel = guild.get_channel(int(channel_id))
+        if not channel:
+            return jsonify({'error': 'Channel not found'}), 404
+        
+        # Build the Discord embed
+        embed = discord.Embed(
+            title=embed_data.get('title'),
+            description=embed_data.get('description'),
+            color=int(embed_data.get('color', '0x5865F2').replace('#', '0x'), 16) if embed_data.get('color') else 0x5865F2
+        )
+        
+        if embed_data.get('footer'):
+            embed.set_footer(text=embed_data['footer'])
+        
+        if embed_data.get('thumbnail'):
+            embed.set_thumbnail(url=embed_data['thumbnail'])
+        
+        if embed_data.get('image'):
+            embed.set_image(url=embed_data['image'])
+        
+        # Add fields if present
+        if embed_data.get('fields'):
+            for field in embed_data['fields']:
+                embed.add_field(
+                    name=field.get('name', 'Field'),
+                    value=field.get('value', 'Value'),
+                    inline=field.get('inline', False)
+                )
+        
+        # Send the embed
+        async def send_message():
+            await channel.send(embed=embed)
+        
+        asyncio.run_coroutine_threadsafe(send_message(), _bot_instance.loop).result(timeout=10)
+        
+        logger.info(f"Embed {embed_id} sent to channel {channel_id} in guild {server_id}")
+        return jsonify({'success': True, 'message': 'Embed sent successfully'}), 200
+        
+    except Exception as e:
+        logger.error(f"Error sending embed: {e}")
+        return safe_error_response(e)
+
 @app.route('/api/<server_id>/logs', methods=['GET'])
 @require_guild_access
 def get_logs(server_id):
