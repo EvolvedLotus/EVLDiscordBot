@@ -524,6 +524,23 @@ def validate_session():
         return jsonify({'valid': True}), 200
     return jsonify({'valid': False}), 401
 
+# CMS-compatible aliases
+@app.route('/api/me', methods=['GET'])
+def get_me():
+    """Alias for /api/auth/me for CMS compatibility"""
+    return get_current_user()
+
+@app.route('/api/login', methods=['POST'])
+@limiter.limit("5 per minute")
+def login_alias():
+    """Alias for /api/auth/login for CMS compatibility"""
+    return login()
+
+@app.route('/api/logout', methods=['POST'])
+def logout_alias():
+    """Alias for /api/auth/logout for CMS compatibility"""
+    return logout()
+
 # ========== SERVER MANAGEMENT ==========
 @app.route('/api/servers', methods=['GET'])
 @require_auth

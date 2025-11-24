@@ -33,7 +33,7 @@ class GuildInitializer:
                 'currency_symbol': existing_config.get('currency_symbol', '$') if existing_config else '$',
                 'admin_roles': existing_config.get('admin_roles', []) if existing_config else [],
                 'moderator_roles': existing_config.get('moderator_roles', []) if existing_config else [],
-                'log_channel': existing_config.get('log_channel') if existing_config else None,
+                'log_channel_id': existing_config.get('log_channel_id') if existing_config else None,
                 'welcome_channel': existing_config.get('welcome_channel') if existing_config else None,
                 'task_channel_id': existing_config.get('task_channel_id') if existing_config else None,
                 'shop_channel_id': existing_config.get('shop_channel_id') if existing_config else None,

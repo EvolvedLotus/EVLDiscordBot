@@ -831,7 +831,7 @@ async def run_bot():
                 for guild in bot.guilds:
                     try:
                         config = data_manager.load_guild_data(str(guild.id), 'config')
-                        log_channel_id = config.get('log_channel')
+                        log_channel_id = config.get('log_channel_id')
 
                         if log_channel_id:
                             log_channel = guild.get_channel(int(log_channel_id))

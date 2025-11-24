@@ -50,7 +50,7 @@ class ModerationLogger:
         """Logs moderation action to configured channel"""
         try:
             config = self.protection_manager.load_protection_config(guild_id)
-            log_channel_id = config.get('log_channel')
+            log_channel_id = config.get('log_channel_id')
 
             if not log_channel_id:
                 return

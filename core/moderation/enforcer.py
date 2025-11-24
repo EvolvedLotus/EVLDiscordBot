@@ -252,7 +252,7 @@ class ProtectionEnforcer:
 
         # Log to configured channel if available
         config = self.protection_manager.load_protection_config(message.guild.id)
-        log_channel_id = config.get('log_channel')
+        log_channel_id = config.get('log_channel_id')
 
         if log_channel_id:
             try:

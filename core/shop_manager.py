@@ -900,7 +900,7 @@ class ShopManager:
 
         # Get log channel from config
         config = self.data_manager.load_guild_data(guild_id, 'config')
-        log_channel_id = config.get('log_channel') or config.get('logs_channel')
+        log_channel_id = config.get('log_channel_id')
 
         if not log_channel_id:
             return {'success': False, 'error': 'Log channel not configured'}
