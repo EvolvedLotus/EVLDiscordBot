@@ -55,16 +55,19 @@ async function fetchDiscordData(serverId) {
 
 async function updateBotStatus() {
     const statusType = document.getElementById('bot-status-type');
-    const statusMessage = document.getElementById('bot-status-text');
+    const statusMessage = document.getElementById('bot-status-message');
 
-    if (!statusType || !statusMessage) return;
+    if (!statusType || !statusMessage) {
+        console.error('Bot status elements not found');
+        return;
+    }
 
     try {
         await apiCall(`/api/${currentServerId}/bot_status`, {
             method: 'POST',
             body: JSON.stringify({
                 type: statusType.value,
-                text: statusMessage.value
+                message: statusMessage.value
             })
         });
         showNotification('Bot status updated', 'success');
@@ -72,6 +75,7 @@ async function updateBotStatus() {
         showNotification('Failed to update bot status', 'error');
     }
 }
+
 
 // Helper function to build API URLs
 function apiUrl(endpoint) {
@@ -2528,3 +2532,657 @@ if (document.readyState === 'loading') {
     // DOM is already loaded, run immediately
     initializePage();
 }
+// ========== MISSING MODAL FUNCTIONS ==========
+
+// Shop Item Modal Functions
+function showCreateShopItemModal() {
+    const modal = document.getElementById('shop-item-modal');
+    const form = document.getElementById('shop-item-form');
+    const title = document.getElementById('shop-item-modal-title');
+
+    if (!modal || !form) return;
+
+    // Reset form
+    form.reset();
+    document.getElementById('shop-item-id').value = '';
+    title.textContent = 'Add Shop Item';
+
+    // Populate category dropdown with role options if category is 'role'
+    const categorySelect = document.getElementById('shop-item-category');
+    if (categorySelect) {
+        categorySelect.addEventListener('change', function () {
+            const roleOptionsContainer = document.getElementById('shop-item-role-options');
+            if (this.value === 'role') {
+                if (!roleOptionsContainer) {
+                    // Create role options container
+                    const roleDiv = document.createElement('div');
+                    roleDiv.id = 'shop-item-role-options';
+                    roleDiv.className = 'form-group';
+                    roleDiv.innerHTML = `
+                        <label for="shop-item-role-id">Select Role *</label>
+                        <select id="shop-item-role-id" class="form-control" required>
+                            <option value="">Loading roles...</option>
+                        </select>
+                    `;
+                    categorySelect.parentElement.after(roleDiv);
+
+                    // Load roles
+                    loadRolesForShopItem();
+                }
+            } else {
+                // Remove role options if exists
+                const roleOptionsContainer = document.getElementById('shop-item-role-options');
+                if (roleOptionsContainer) {
+                    roleOptionsContainer.remove();
+                }
+            }
+        });
+    }
+
+    modal.style.display = 'block';
+}
+
+async function loadRolesForShopItem() {
+    const roleSelect = document.getElementById('shop-item-role-id');
+    if (!roleSelect || !currentServerId) return;
+
+    try {
+        await fetchDiscordData(currentServerId);
+        const roles = Object.values(discordDataCache.roles);
+
+        let html = '<option value="">Select a role...</option>';
+        roles.forEach(role => {
+            html += `<option value="${role.id}">${role.name}</option>`;
+        });
+        roleSelect.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load roles:', error);
+        roleSelect.innerHTML = '<option value="">Failed to load roles</option>';
+    }
+}
+
+function closeShopItemModal() {
+    const modal = document.getElementById('shop-item-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveShopItem(event) {
+    event.preventDefault();
+
+    const itemId = document.getElementById('shop-item-id').value;
+    const name = document.getElementById('shop-item-name').value;
+    const description = document.getElementById('shop-item-description').value;
+    const price = parseInt(document.getElementById('shop-item-price').value);
+    const category = document.getElementById('shop-item-category').value;
+    const stock = parseInt(document.getElementById('shop-item-stock').value);
+    const emoji = document.getElementById('shop-item-emoji').value;
+
+    const itemData = {
+        name,
+        description,
+        price,
+        category,
+        stock,
+        emoji
+    };
+
+    // If category is role, add role_id
+    if (category === 'role') {
+        const roleId = document.getElementById('shop-item-role-id')?.value;
+        if (!roleId) {
+            showNotification('Please select a role', 'error');
+            return;
+        }
+        itemData.role_id = roleId;
+    }
+
+    try {
+        if (itemId) {
+            // Update existing item
+            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+                method: 'PUT',
+                body: JSON.stringify(itemData)
+            });
+            showNotification('Shop item updated successfully', 'success');
+        } else {
+            // Create new item
+            await apiCall(`/api/${currentServerId}/shop`, {
+                method: 'POST',
+                body: JSON.stringify(itemData)
+            });
+            showNotification('Shop item created successfully', 'success');
+        }
+
+        closeShopItemModal();
+        loadShop();
+    } catch (error) {
+        showNotification(`Failed to save shop item: ${error.message}`, 'error');
+    }
+}
+
+// Task Modal Functions
+function showCreateTaskModal() {
+    const modal = document.getElementById('task-modal');
+    const form = document.getElementById('task-form');
+    const title = document.getElementById('task-modal-title');
+
+    if (!modal || !form) return;
+
+    // Reset form
+    form.reset();
+    document.getElementById('task-id').value = '';
+    title.textContent = 'Create Task';
+
+    modal.style.display = 'block';
+}
+
+function closeTaskModal() {
+    const modal = document.getElementById('task-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveTask(event) {
+    event.preventDefault();
+
+    const taskId = document.getElementById('task-id').value;
+    const name = document.getElementById('task-name').value;
+    const description = document.getElementById('task-description').value;
+    const reward = parseInt(document.getElementById('task-reward').value);
+    const duration = parseInt(document.getElementById('task-duration').value);
+    const maxClaims = parseInt(document.getElementById('task-max-claims').value);
+
+    const taskData = {
+        name,
+        description,
+        reward,
+        duration_hours: duration,
+        max_claims: maxClaims
+    };
+
+    try {
+        if (taskId) {
+            // Update existing task
+            await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+                method: 'PUT',
+                body: JSON.stringify(taskData)
+            });
+            showNotification('Task updated successfully', 'success');
+        } else {
+            // Create new task
+            await apiCall(`/api/${currentServerId}/tasks`, {
+                method: 'POST',
+                body: JSON.stringify(taskData)
+            });
+            showNotification('Task created successfully', 'success');
+        }
+
+        closeTaskModal();
+        loadTasks();
+    } catch (error) {
+        showNotification(`Failed to save task: ${error.message}`, 'error');
+    }
+}
+
+// Announcement Modal Functions
+function showCreateAnnouncementModal() {
+    const modal = document.getElementById('announcement-modal');
+    const form = document.getElementById('announcement-form');
+    const title = document.getElementById('announcement-modal-title');
+
+    if (!modal || !form) return;
+
+    // Reset form
+    form.reset();
+    document.getElementById('announcement-id').value = '';
+    title.textContent = 'Create Announcement';
+
+    // Load channels
+    loadChannelsForAnnouncement();
+
+    modal.style.display = 'block';
+}
+
+async function loadChannelsForAnnouncement() {
+    const channelSelect = document.getElementById('announcement-channel');
+    if (!channelSelect || !currentServerId) return;
+
+    try {
+        await fetchDiscordData(currentServerId);
+        const channels = Object.values(discordDataCache.channels);
+
+        let html = '<option value="">Select a channel...</option>';
+        channels.forEach(channel => {
+            html += `<option value="${channel.id}">#${channel.name}</option>`;
+        });
+        channelSelect.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load channels:', error);
+        channelSelect.innerHTML = '<option value="">Failed to load channels</option>';
+    }
+}
+
+function closeAnnouncementModal() {
+    const modal = document.getElementById('announcement-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveAnnouncement(event) {
+    event.preventDefault();
+
+    const announcementId = document.getElementById('announcement-id').value;
+    const title = document.getElementById('announcement-title').value;
+    const content = document.getElementById('announcement-content').value;
+    const channelId = document.getElementById('announcement-channel').value;
+    const isPinned = document.getElementById('announcement-pinned').checked;
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'error');
+        return;
+    }
+
+    const announcementData = {
+        title,
+        content,
+        channel_id: channelId,
+        is_pinned: isPinned
+    };
+
+    try {
+        if (announcementId) {
+            // Update existing announcement
+            await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
+                method: 'PUT',
+                body: JSON.stringify(announcementData)
+            });
+            showNotification('Announcement updated successfully', 'success');
+        } else {
+            // Create new announcement
+            await apiCall(`/api/${currentServerId}/announcements`, {
+                method: 'POST',
+                body: JSON.stringify(announcementData)
+            });
+            showNotification('Announcement created successfully', 'success');
+        }
+
+        closeAnnouncementModal();
+        loadAnnouncements();
+    } catch (error) {
+        showNotification(`Failed to save announcement: ${error.message}`, 'error');
+    }
+}
+
+async function deleteAnnouncement(announcementId) {
+    if (!confirm('Are you sure you want to delete this announcement?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
+            method: 'DELETE'
+        });
+        showNotification('Announcement deleted successfully', 'success');
+        loadAnnouncements();
+    } catch (error) {
+        showNotification(`Failed to delete announcement: ${error.message}`, 'error');
+    }
+}
+
+async function editAnnouncement(announcementId) {
+    try {
+        const data = await apiCall(`/api/${currentServerId}/announcements/${announcementId}`);
+        if (data && data.announcement) {
+            const announcement = data.announcement;
+
+            // Populate form
+            document.getElementById('announcement-id').value = announcement.announcement_id;
+            document.getElementById('announcement-title').value = announcement.title;
+            document.getElementById('announcement-content').value = announcement.content;
+            document.getElementById('announcement-pinned').checked = announcement.is_pinned;
+
+            // Load channels and set selected
+            await loadChannelsForAnnouncement();
+            document.getElementById('announcement-channel').value = announcement.channel_id;
+
+            // Update modal title and show
+            document.getElementById('announcement-modal-title').textContent = 'Edit Announcement';
+            document.getElementById('announcement-modal').style.display = 'block';
+        }
+    } catch (error) {
+        showNotification(`Failed to load announcement: ${error.message}`, 'error');
+    }
+}
+
+// Embed Modal Functions
+function showCreateEmbedModal() {
+    const modal = document.getElementById('embed-modal');
+    const form = document.getElementById('embed-form');
+    const title = document.getElementById('embed-modal-title');
+
+    if (!modal || !form) return;
+
+    // Reset form
+    form.reset();
+    document.getElementById('embed-id').value = '';
+    title.textContent = 'Create Embed';
+
+    modal.style.display = 'block';
+}
+
+function closeEmbedModal() {
+    const modal = document.getElementById('embed-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function saveEmbed(event) {
+    event.preventDefault();
+
+    const embedId = document.getElementById('embed-id').value;
+    const title = document.getElementById('embed-title').value;
+    const description = document.getElementById('embed-description').value;
+    const color = document.getElementById('embed-color').value;
+    const footer = document.getElementById('embed-footer').value;
+    const imageUrl = document.getElementById('embed-image-url').value;
+    const thumbnailUrl = document.getElementById('embed-thumbnail-url').value;
+
+    const embedData = {
+        title,
+        description,
+        color,
+        footer,
+        image_url: imageUrl,
+        thumbnail_url: thumbnailUrl
+    };
+
+    try {
+        if (embedId) {
+            // Update existing embed
+            await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+                method: 'PUT',
+                body: JSON.stringify(embedData)
+            });
+            showNotification('Embed updated successfully', 'success');
+        } else {
+            // Create new embed
+            await apiCall(`/api/${currentServerId}/embeds`, {
+                method: 'POST',
+                body: JSON.stringify(embedData)
+            });
+            showNotification('Embed created successfully', 'success');
+        }
+
+        closeEmbedModal();
+        loadEmbeds();
+    } catch (error) {
+        showNotification(`Failed to save embed: ${error.message}`, 'error');
+    }
+}
+
+async function saveAndSendEmbed(event) {
+    event.preventDefault();
+
+    // First save the embed
+    await saveEmbed(event);
+
+    // Then show send modal
+    const embedId = document.getElementById('embed-id').value;
+    if (embedId) {
+        showSendEmbedModal(embedId);
+    }
+}
+
+function showSendEmbedModal(embedId) {
+    const modal = document.getElementById('send-embed-modal');
+    if (!modal) return;
+
+    document.getElementById('send-embed-id').value = embedId;
+
+    // Load channels
+    loadChannelsForEmbed();
+
+    modal.style.display = 'block';
+}
+
+function closeSendEmbedModal() {
+    const modal = document.getElementById('send-embed-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function loadChannelsForEmbed() {
+    const channelSelect = document.getElementById('send-embed-channel');
+    if (!channelSelect || !currentServerId) return;
+
+    try {
+        await fetchDiscordData(currentServerId);
+        const channels = Object.values(discordDataCache.channels);
+
+        let html = '<option value="">Select a channel...</option>';
+        channels.forEach(channel => {
+            html += `<option value="${channel.id}">#${channel.name}</option>`;
+        });
+        channelSelect.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load channels:', error);
+        channelSelect.innerHTML = '<option value="">Failed to load channels</option>';
+    }
+}
+
+async function sendEmbedToChannel(event) {
+    event.preventDefault();
+
+    const embedId = document.getElementById('send-embed-id').value;
+    const channelId = document.getElementById('send-embed-channel').value;
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'error');
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+            method: 'POST',
+            body: JSON.stringify({ channel_id: channelId })
+        });
+        showNotification('Embed sent successfully', 'success');
+        closeSendEmbedModal();
+    } catch (error) {
+        showNotification(`Failed to send embed: ${error.message}`, 'error');
+    }
+}
+
+async function sendEmbed(embedId) {
+    showSendEmbedModal(embedId);
+}
+
+async function editEmbed(embedId) {
+    try {
+        const data = await apiCall(`/api/${currentServerId}/embeds/${embedId}`);
+        if (data && data.embed) {
+            const embed = data.embed;
+
+            // Populate form
+            document.getElementById('embed-id').value = embed.embed_id;
+            document.getElementById('embed-title').value = embed.title || '';
+            document.getElementById('embed-description').value = embed.description || '';
+            document.getElementById('embed-color').value = embed.color || '#5865F2';
+            document.getElementById('embed-footer').value = embed.footer || '';
+            document.getElementById('embed-image-url').value = embed.image_url || '';
+            document.getElementById('embed-thumbnail-url').value = embed.thumbnail_url || '';
+
+            // Update modal title and show
+            document.getElementById('embed-modal-title').textContent = 'Edit Embed';
+            document.getElementById('embed-modal').style.display = 'block';
+        }
+    } catch (error) {
+        showNotification(`Failed to load embed: ${error.message}`, 'error');
+    }
+}
+
+async function deleteEmbed(embedId) {
+    if (!confirm('Are you sure you want to delete this embed?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+            method: 'DELETE'
+        });
+        showNotification('Embed deleted successfully', 'success');
+        loadEmbeds();
+    } catch (error) {
+        showNotification(`Failed to delete embed: ${error.message}`, 'error');
+    }
+}
+
+// ========== CONFIG TAB SAVE FUNCTIONS ==========
+
+async function saveChannelSetting(type) {
+    const channelId = document.getElementById(`${type}-channel`)?.value;
+    const statusSpan = document.getElementById(`${type}-channel-status`);
+
+    if (!channelId) {
+        if (statusSpan) statusSpan.textContent = '❌ Please select a channel';
+        return;
+    }
+
+    const fieldMap = {
+        'welcome': 'welcome_channel',
+        'log': 'logs_channel',
+        'task': 'task_channel_id',
+        'shop': 'shop_channel_id'
+    };
+
+    const fieldName = fieldMap[type];
+    if (!fieldName) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({ [fieldName]: channelId })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} channel saved`, 'success');
+    } catch (error) {
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification(`Failed to save ${type} channel: ${error.message}`, 'error');
+    }
+}
+
+async function saveCurrencySettings() {
+    const currencyName = document.getElementById('currency-name')?.value;
+    const currencySymbol = document.getElementById('currency-symbol')?.value;
+    const statusSpan = document.getElementById('currency-settings-status');
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                currency_name: currencyName,
+                currency_symbol: currencySymbol
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification('Currency settings saved', 'success');
+    } catch (error) {
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification(`Failed to save currency settings: ${error.message}`, 'error');
+    }
+}
+
+async function saveBotBehavior() {
+    const inactivityDays = document.getElementById('inactivity-days')?.value;
+    const autoExpireTasks = document.getElementById('auto-expire-tasks')?.checked;
+    const requireTaskProof = document.getElementById('require-task-proof')?.checked;
+    const statusSpan = document.getElementById('bot-behavior-status');
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                inactivity_days: parseInt(inactivityDays),
+                auto_expire_enabled: autoExpireTasks,
+                require_proof: requireTaskProof
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification('Bot behavior settings saved', 'success');
+    } catch (error) {
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification(`Failed to save bot behavior: ${error.message}`, 'error');
+    }
+}
+
+async function saveFeatureToggle(feature) {
+    const checkbox = document.getElementById(`feature-${feature}`);
+    const statusSpan = document.getElementById(`feature-${feature}-status`);
+
+    if (!checkbox) return;
+
+    const fieldMap = {
+        'tasks': 'feature_tasks',
+        'shop': 'feature_shop',
+        'announcements': 'feature_announcements',
+        'moderation': 'feature_moderation'
+    };
+
+    const fieldName = fieldMap[feature];
+    if (!fieldName) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({ [fieldName]: checkbox.checked })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification(`${feature.charAt(0).toUpperCase() + feature.slice(1)} feature toggle saved`, 'success');
+    } catch (error) {
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification(`Failed to save feature toggle: ${error.message}`, 'error');
+    }
+}
+
+// Close modals when clicking outside
+window.onclick = function (event) {
+    const modals = ['shop-item-modal', 'task-modal', 'announcement-modal', 'embed-modal', 'send-embed-modal'];
+    modals.forEach(modalId => {
+        const modal = document.getElementById(modalId);
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+};

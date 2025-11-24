@@ -896,6 +896,67 @@ def create_announcement(server_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/\u003cserver_id\u003e/announcements/\u003cannouncement_id\u003e', methods=['GET'])
+@require_guild_access
+def get_announcement(server_id, announcement_id):
+    try:
+        result = data_manager.admin_client.table('announcements') \
+            .select('*') \
+            .eq('announcement_id', announcement_id) \
+            .eq('guild_id', str(server_id)) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            return jsonify({'error': 'Announcement not found'}), 404
+        
+        return jsonify({'announcement': result.data[0]}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/\u003cserver_id\u003e/announcements/\u003cannouncement_id\u003e', methods=['PUT'])
+@require_guild_access
+def update_announcement(server_id, announcement_id):
+    try:
+        data = request.get_json()
+        
+        # Update announcement in database
+        update_data = {}
+        if 'title' in data:
+            update_data['title'] = data['title']
+        if 'content' in data:
+            update_data['content'] = data['content']
+        if 'channel_id' in data:
+            update_data['channel_id'] = data['channel_id']
+        if 'is_pinned' in data:
+            update_data['is_pinned'] = data['is_pinned']
+        
+        result = data_manager.admin_client.table('announcements') \
+            .update(update_data) \
+            .eq('announcement_id', announcement_id) \
+            .eq('guild_id', str(server_id)) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            return jsonify({'error': 'Announcement not found'}), 404
+        
+        return jsonify({'success': True, 'announcement': result.data[0]}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/\u003cserver_id\u003e/announcements/\u003cannouncement_id\u003e', methods=['DELETE'])
+@require_guild_access
+def delete_announcement(server_id, announcement_id):
+    try:
+        result = data_manager.admin_client.table('announcements') \
+            .delete() \
+            .eq('announcement_id', announcement_id) \
+            .eq('guild_id', str(server_id)) \
+            .execute()
+        
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
 # ========== EMBEDS ==========
 @app.route('/api/<server_id>/embeds', methods=['GET'])
 @require_guild_access
