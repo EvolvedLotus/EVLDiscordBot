@@ -4,10 +4,13 @@ General utility commands that work across all servers
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 import platform
 import psutil
 import logging
+import asyncio
+import json
+import os
 from datetime import datetime, timedelta
 from core.utils import create_embed, add_embed_footer, format_number
 
@@ -19,6 +22,65 @@ class General(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.start_time = datetime.now()
+        self.reminders_file = 'data/reminders.json'
+        self.reminders = self.load_reminders()
+        self.check_reminders.start()
+
+    def cog_unload(self):
+        self.check_reminders.cancel()
+
+    def load_reminders(self):
+        if not os.path.exists('data'):
+            os.makedirs('data')
+        if not os.path.exists(self.reminders_file):
+            return []
+        try:
+            with open(self.reminders_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading reminders: {e}")
+            return []
+
+    def save_reminders(self):
+        try:
+            with open(self.reminders_file, 'w') as f:
+                json.dump(self.reminders, f, indent=4)
+        except Exception as e:
+            logger.error(f"Error saving reminders: {e}")
+
+    @tasks.loop(seconds=30)
+    async def check_reminders(self):
+        now = datetime.now().timestamp()
+        to_remove = []
+
+        for reminder in self.reminders:
+            if reminder['time'] <= now:
+                try:
+                    user = self.bot.get_user(reminder['user_id'])
+                    if not user:
+                        user = await self.bot.fetch_user(reminder['user_id'])
+                    
+                    if user:
+                        embed = discord.Embed(
+                            title="⏰ Reminder!",
+                            description=reminder['message'],
+                            color=0xf39c12,
+                            timestamp=datetime.fromtimestamp(reminder['time'])
+                        )
+                        await user.send(embed=embed)
+                except Exception as e:
+                    logger.error(f"Error sending reminder to {reminder['user_id']}: {e}")
+                
+                to_remove.append(reminder)
+        
+        if to_remove:
+            for reminder in to_remove:
+                self.reminders.remove(reminder)
+            self.save_reminders()
+
+    @check_reminders.before_loop
+    async def before_check_reminders(self):
+        await self.bot.wait_until_ready()
 
     @commands.command(name="help")
     async def help_command(self, ctx):
@@ -610,7 +672,8 @@ class General(commands.Cog):
 
         # Send the embed
         try:
-            message = await interaction.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed)
+            message = await interaction.original_response()
 
             # Add reactions
             for i in range(len(options)):
@@ -675,12 +738,15 @@ class General(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        # Store reminder (in a real implementation, you'd save this to a database)
-        # For now, we'll just log it
+        # Store reminder
+        self.reminders.append({
+            'user_id': interaction.user.id,
+            'message': message,
+            'time': reminder_time.timestamp()
+        })
+        self.save_reminders()
+        
         logger.info(f"Reminder set for {interaction.user.id}: '{message}' at {reminder_time}")
-
-        # In a production bot, you'd store this and have a background task check for expired reminders
-        # This is a simplified version that doesn't actually send the reminder
 
     @app_commands.command(name="clear_channel", description="Clear all messages in channel (Admin only)")
     @app_commands.guild_only()
