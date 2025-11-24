@@ -117,6 +117,11 @@ def require_guild_access(f):
         if not user:
             return jsonify({'success': False, 'error': 'Invalid or expired session'}), 401
 
+        # Superadmins have access to all guilds
+        if user.get('is_superadmin'):
+            request.user = user
+            return f(server_id, *args, **kwargs)
+
         # Validate user has access to this guild
         try:
             user_guilds = data_manager.get_user_guilds(user['id'])
