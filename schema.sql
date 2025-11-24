@@ -946,7 +946,7 @@ BEGIN
         total_earned = CASE WHEN p_amount > 0 THEN COALESCE(total_earned,0)+p_amount ELSE COALESCE(total_earned,0) END,
         total_spent = CASE WHEN p_amount < 0 THEN COALESCE(total_spent,0)+ABS(p_amount) ELSE COALESCE(total_spent,0) END,
         updated_at = v_timestamp
-    WHERE user_id = p_user_id AND guild_id = p_guild_id;
+    WHERE users.user_id = p_user_id AND users.guild_id = p_guild_id;
     
     RETURN QUERY SELECT p_transaction_id, p_user_id, p_guild_id, p_amount, p_balance_before, p_balance_after, p_transaction_type, p_description, p_metadata, v_timestamp;
 END;

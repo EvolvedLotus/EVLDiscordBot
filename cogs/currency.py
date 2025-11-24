@@ -687,7 +687,7 @@ class Currency(commands.Cog):
             # Get updated user data
             user_result = self.data_manager.supabase.table('users').select('*').eq('user_id', user_id).eq('guild_id', guild_id).execute()
             if not user_result.data or len(user_result.data) == 0:
-                self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
+                await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
                 user_result = self.data_manager.supabase.table('users').select('*').eq('user_id', user_id).eq('guild_id', guild_id).execute()
                 if not user_result.data or len(user_result.data) == 0:
                     await interaction.response.send_message("Unable to create user account. Please try again.", ephemeral=True)
@@ -1265,7 +1265,7 @@ class Currency(commands.Cog):
             guild_id = interaction.guild.id
 
             # Ensure user exists
-            self.data_manager.ensure_user_exists(guild_id, user.id)
+            await self.data_manager.ensure_user_exists(guild_id, user.id)
 
             # Add balance
             result = self._add_balance(

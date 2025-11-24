@@ -54,10 +54,14 @@ class ProtectionManager:
             if success:
                 self._cache[guild_id] = protection_config.copy()
                 # Broadcast SSE event
-                self.data_manager.broadcast_event('moderation_config_update', {
-                    'guild_id': guild_id,
-                    'config': protection_config
-                })
+                try:
+                    from core.sse_manager import sse_manager
+                    sse_manager.broadcast_event('moderation_config_update', {
+                        'guild_id': guild_id,
+                        'config': protection_config
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to broadcast SSE event: {e}")
                 logger.info(f"Updated protection config for guild {guild_id}")
 
             return success
