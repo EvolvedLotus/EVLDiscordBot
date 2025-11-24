@@ -370,7 +370,7 @@ window.saveChannelSetting = async function (type) {
         return;
     }
 
-    // Map frontend type to backend field name
+    // Map frontend type to backend field name (matches updated schema.sql)
     const fieldMap = {
         'welcome': 'welcome_channel_id',
         'log': 'log_channel_id',

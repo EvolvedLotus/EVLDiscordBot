@@ -18,9 +18,9 @@ currency_symbol TEXT DEFAULT '$',
 admin_roles TEXT[] DEFAULT '{}',
 moderator_roles TEXT[] DEFAULT '{}',
 
--- Channel IDs
-log_channel TEXT,
-welcome_channel TEXT,
+-- Channel IDs (standardized with _id suffix)
+log_channel_id TEXT,
+welcome_channel_id TEXT,
 task_channel_id TEXT,
 shop_channel_id TEXT,
 
@@ -40,7 +40,7 @@ bot_status_type TEXT DEFAULT 'watching',  -- Activity type: playing, streaming, 
 -- Metadata
 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-last_sync TIMESTAMP WITH TIME ZONE DEFAULT NOW(),  -- ADD THIS LINE
+last_sync TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
 is_active BOOLEAN DEFAULT true,
 left_at TIMESTAMP WITH TIME ZONE
 );
@@ -835,17 +835,54 @@ CREATE TABLE IF NOT EXISTS moderation_actions (
 );
 
 -- =====================================================
--- UPDATE GUILDS TABLE (Add Channel Tracking)
+-- MIGRATION: Standardize Channel Field Names
 -- =====================================================
-ALTER TABLE guilds
-ADD COLUMN IF NOT EXISTS logs_channel TEXT,
-ADD COLUMN IF NOT EXISTS last_channel_sync TIMESTAMP WITH TIME ZONE DEFAULT NOW();
+-- This handles existing databases by renaming old columns to new standard
+-- Uses DO block for compatibility with all PostgreSQL versions
 
--- Update comments
+DO $$
+BEGIN
+    -- Rename welcome_channel to welcome_channel_id if it exists
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'guilds' AND column_name = 'welcome_channel'
+    ) THEN
+        ALTER TABLE guilds RENAME COLUMN welcome_channel TO welcome_channel_id;
+    END IF;
+    
+    -- Rename log_channel to log_channel_id if it exists
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'guilds' AND column_name = 'log_channel'
+    ) THEN
+        ALTER TABLE guilds RENAME COLUMN log_channel TO log_channel_id;
+    END IF;
+    
+    -- Drop logs_channel if it exists (duplicate)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'guilds' AND column_name = 'logs_channel'
+    ) THEN
+        ALTER TABLE guilds DROP COLUMN logs_channel;
+    END IF;
+    
+    -- Drop last_channel_sync if it exists (unused)
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'guilds' AND column_name = 'last_channel_sync'
+    ) THEN
+        ALTER TABLE guilds DROP COLUMN last_channel_sync;
+    END IF;
+END $$;
+
+-- =====================================================
+-- UPDATE GUILDS TABLE (Channel Field Comments)
+-- =====================================================
+-- Update comments to reflect standardized naming
 COMMENT ON COLUMN guilds.task_channel_id IS 'Channel for task postings';
 COMMENT ON COLUMN guilds.shop_channel_id IS 'Channel for shop item listings';
-COMMENT ON COLUMN guilds.welcome_channel IS 'Channel for welcome messages';
-COMMENT ON COLUMN guilds.logs_channel IS 'Channel for moderation/action logs';
+COMMENT ON COLUMN guilds.welcome_channel_id IS 'Channel for welcome messages';
+COMMENT ON COLUMN guilds.log_channel_id IS 'Channel for moderation/action logs';
 
 -- =====================================================
 -- INDEXES FOR NEW TABLES
