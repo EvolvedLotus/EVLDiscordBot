@@ -3499,3 +3499,216 @@ tr.selected {
     border-radius: 4px;
     color: var(--text-primary);
 }
+
+/* ============= EMOJI PICKER ============= */
+
+.emoji-picker-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+}
+
+.emoji-picker-content {
+    background-color: var(--surface);
+    border-radius: 12px;
+    padding: 0;
+    width: 90%;
+    max-width: 500px;
+    max-height: 600px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.emoji-picker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.emoji-picker-header h3 {
+    margin: 0;
+    font-size: 1.3rem;
+    color: var(--text-primary);
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.close-btn:hover {
+    background-color: var(--danger-color);
+    color: white;
+}
+
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
+    padding: 20px;
+    overflow-y: auto;
+    max-height: 400px;
+}
+
+.emoji-btn {
+    background: var(--surface-light);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 1.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.emoji-btn:hover {
+    background-color: var(--primary-color);
+    transform: scale(1.1);
+    border-color: var(--primary-color);
+}
+
+.emoji-picker-footer {
+    padding: 20px;
+    border-top: 2px solid var(--border-color);
+    display: flex;
+    gap: 10px;
+}
+
+.emoji-picker-footer input {
+    flex: 1;
+    padding: 10px 15px;
+    border: 2px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 1rem;
+    background-color: var(--surface-light);
+    color: var(--text-primary);
+}
+
+.emoji-picker-footer input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.emoji-picker-btn {
+    margin-top: 8px;
+    padding: 8px 16px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.emoji-picker-btn:hover {
+    background-color: var(--secondary-color);
+    transform: translateY(-1px);
+}
+
+/* ============= MARKDOWN TOOLBAR ============= */
+
+.markdown-toolbar {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+    padding: 10px;
+    background-color: var(--surface-light);
+    border-radius: 6px;
+    flex-wrap: wrap;
+}
+
+.markdown-btn {
+    padding: 6px 12px;
+    background-color: var(--surface);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s;
+    color: var(--text-primary);
+}
+
+.markdown-btn:hover {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+/* ============= TOAST NOTIFICATIONS ============= */
+
+.toast {
+    padding: 16px 20px;
+    background-color: var(--surface);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    min-width: 300px;
+    max-width: 500px;
+    opacity: 0;
+    transform: translateX(400px);
+    transition: all 0.3s ease;
+    border-left: 4px solid var(--primary-color);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast.success {
+    border-left-color: var(--success-color);
+}
+
+.toast.error {
+    border-left-color: var(--danger-color);
+}
+
+.toast.warning {
+    border-left-color: var(--warning-color);
+}
+
+.toast.info {
+    border-left-color: var(--primary-color);
+}
+
+/* ============= STATUS TEXT ============= */
+
+.status-text {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+.status-text.success {
+    color: var(--success-color);
+}
+
+.status-text.error {
+    color: var(--danger-color);
+}
