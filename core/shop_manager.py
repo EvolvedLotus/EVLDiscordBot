@@ -133,14 +133,25 @@ class ShopManager:
             timestamp = int(time.time())
             item_id = f"{slug}_{timestamp}"
 
+        # Safe conversions
+        try:
+            price = int(data.get('price') or 0)
+        except (ValueError, TypeError):
+            price = 0
+            
+        try:
+            stock = int(data.get('stock') or -1)
+        except (ValueError, TypeError):
+            stock = -1
+
         return self.add_item(
             guild_id=guild_id,
             item_id=item_id,
             name=data.get('name'),
             description=data.get('description'),
-            price=int(data.get('price', 0)),
+            price=price,
             category=data.get('category', 'general'),
-            stock=int(data.get('stock', -1)),
+            stock=stock,
             emoji=data.get('emoji', '🛍️'),
             role_requirement=data.get('role_requirement'),
             metadata=data.get('metadata')

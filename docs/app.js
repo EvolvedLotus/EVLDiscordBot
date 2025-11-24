@@ -20,25 +20,25 @@ async function fetchDiscordData(serverId) {
         console.log('Fetching Discord data for server:', serverId);
 
         // Fetch in parallel
-        const [users, channels, roles] = await Promise.all([
+        const [usersData, channelsData, rolesData] = await Promise.all([
             apiCall(`/api/${serverId}/users`),
             apiCall(`/api/${serverId}/channels`),
             apiCall(`/api/${serverId}/roles`)
         ]);
 
-        if (users) {
+        if (usersData && usersData.users) {
             discordDataCache.users = {};
-            users.forEach(u => discordDataCache.users[u.user_id] = u);
+            usersData.users.forEach(u => discordDataCache.users[u.user_id] = u);
         }
 
-        if (channels) {
+        if (channelsData && channelsData.channels) {
             discordDataCache.channels = {};
-            channels.forEach(c => discordDataCache.channels[c.id] = c);
+            channelsData.channels.forEach(c => discordDataCache.channels[c.id] = c);
         }
 
-        if (roles) {
+        if (rolesData && rolesData.roles) {
             discordDataCache.roles = {};
-            roles.forEach(r => discordDataCache.roles[r.id] = r);
+            rolesData.roles.forEach(r => discordDataCache.roles[r.id] = r);
         }
 
         console.log('Discord data cached:', {
@@ -50,6 +50,26 @@ async function fetchDiscordData(serverId) {
     } catch (error) {
         console.error('Failed to fetch Discord data:', error);
         showNotification('Failed to load Discord data', 'error');
+    }
+}
+
+async function updateBotStatus() {
+    const statusType = document.getElementById('bot-status-type');
+    const statusMessage = document.getElementById('bot-status-text');
+
+    if (!statusType || !statusMessage) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/bot_status`, {
+            method: 'POST',
+            body: JSON.stringify({
+                type: statusType.value,
+                text: statusMessage.value
+            })
+        });
+        showNotification('Bot status updated', 'success');
+    } catch (error) {
+        showNotification('Failed to update bot status', 'error');
     }
 }
 
