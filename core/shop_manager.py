@@ -121,6 +121,21 @@ class ShopManager:
         shop_items = currency_data.get('shop_items', {})
         return shop_items.get(item_id)
 
+    def create_item(self, guild_id: int, data: dict) -> dict:
+        """Wrapper for add_item to handle dictionary input from API"""
+        return self.add_item(
+            guild_id=guild_id,
+            item_id=data.get('item_id'),
+            name=data.get('name'),
+            description=data.get('description'),
+            price=int(data.get('price', 0)),
+            category=data.get('category', 'general'),
+            stock=int(data.get('stock', -1)),
+            emoji=data.get('emoji', '🛍️'),
+            role_requirement=data.get('role_requirement'),
+            metadata=data.get('metadata')
+        )
+
     def add_item(
         self,
         guild_id: int,

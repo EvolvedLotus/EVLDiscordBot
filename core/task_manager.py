@@ -30,8 +30,17 @@ class TaskManager:
         """Set SSE manager instance"""
         self.sse_manager = sse_manager
 
-    async def create_task(self, guild_id, name, description, reward, duration_hours, max_claims=None):
+    async def create_task(self, guild_id, name, description=None, reward=None, duration_hours=None, max_claims=None):
         """Create new task with atomic task_id generation"""
+
+        # Handle dictionary input (from API)
+        if isinstance(name, dict):
+            data = name
+            name = data.get('name')
+            description = data.get('description')
+            reward = int(data.get('reward', 0))
+            duration_hours = int(data.get('duration_hours', 24))
+            max_claims = int(data.get('max_claims')) if data.get('max_claims') else None
 
         # VALIDATION
         if reward <= 0:
@@ -64,15 +73,31 @@ class TaskManager:
             # Calculate expiration
             expires_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
 
-            # Insert task
-            await conn.execute(
-                """INSERT INTO tasks (task_id, guild_id, name, description, reward,
-                                      duration_hours, max_claims, current_claims, status, expires_at)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 'active', $8)""",
-                task_id, guild_id, name, description, reward, duration_hours, max_claims, expires_at
-            )
-
-        return task_id
+        task_id = int(task_id)
+        
+        try:
+            updates = {}
+            if 'name' in data: updates['name'] = data['name']
+            if 'description' in data: updates['description'] = data['description']
+            if 'reward' in data: updates['reward'] = int(data['reward'])
+            if 'duration_hours' in data: updates['duration_hours'] = int(data['duration_hours'])
+            if 'max_claims' in data: updates['max_claims'] = int(data['max_claims']) if data['max_claims'] else None
+            if 'status' in data: updates['status'] = data['status']
+            
+            if not updates:
+                return {'success': False, 'error': 'No updates provided'}
+                
+            # Update in database
+            self.data_manager.admin_client.table('tasks') \
+                .update(updates) \
+                .eq('task_id', task_id) \
+                .eq('guild_id', guild_id) \
+                .execute()
+                
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Failed to update task {task_id}: {e}")
+            raise e
 
     async def delete_task(self, guild_id: int, task_id: int) -> Dict:
         """Delete task and associated user tasks"""

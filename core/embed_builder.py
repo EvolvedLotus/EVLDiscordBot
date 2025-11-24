@@ -276,3 +276,25 @@ class EmbedBuilder:
 
         embed.set_footer(text="Success")
         return embed
+
+    def create_embed(self, guild_id: int, data: dict) -> dict:
+        """
+        Create embed from API data.
+        This method is called by backend.py's create_embed endpoint.
+        """
+        # Validate data
+        is_valid, error = self.validate_embed_data(data)
+        if not is_valid:
+            raise ValueError(f"Invalid embed data: {error}")
+            
+        # Generate ID if not present
+        import uuid
+        if 'embed_id' not in data:
+            data['embed_id'] = str(uuid.uuid4())
+            
+        # Ensure timestamp
+        if 'created_at' not in data:
+            data['created_at'] = datetime.utcnow().isoformat()
+            
+        # Return the data (it will be stored by the caller or used to send a message)
+        return data

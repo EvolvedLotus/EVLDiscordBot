@@ -58,6 +58,28 @@ class TransactionManager:
 
             self.indexes[guild_id] = indexes
 
+    def adjust_balance(self, guild_id: int, user_id: int, amount: int, reason: str = "Admin adjustment"):
+        """
+        Adjust user balance and log transaction.
+        Used by admin API.
+        """
+        # Get current balance
+        currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
+        users = currency_data.get('users', {})
+        user_data = users.get(str(user_id), {})
+        current_balance = user_data.get('balance', 0)
+        
+        # Log transaction (which updates balance atomically via RPC)
+        return self.log_transaction(
+            guild_id=guild_id,
+            user_id=user_id,
+            amount=amount,
+            balance_before=current_balance,
+            balance_after=current_balance + amount,
+            transaction_type='admin_adjustment',
+            description=reason
+        )
+
     def log_transaction(
         self,
         guild_id: int,

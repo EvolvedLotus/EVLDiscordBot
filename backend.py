@@ -28,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Flask app
-app = Flask(__name__, static_folder='web', static_url_path='')
+app = Flask(__name__, static_folder='docs', static_url_path='')
 
 # Environment detection
 IS_PRODUCTION = (
@@ -691,7 +691,15 @@ def get_tasks(server_id):
 def create_task(server_id):
     try:
         data = request.get_json()
-        task = task_manager.create_task(server_id, data)
+        
+        # Run async create_task in event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            task = loop.run_until_complete(task_manager.create_task(server_id, data))
+        finally:
+            loop.close()
+            
         return jsonify(task), 201
     except Exception as e:
         return safe_error_response(e)
@@ -701,8 +709,16 @@ def create_task(server_id):
 def update_task(server_id, task_id):
     try:
         data = request.get_json()
-        task_manager.update_task(server_id, task_id, data)
-        return jsonify({'success': True}), 200
+        
+        # Run async update_task in event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            result = loop.run_until_complete(task_manager.update_task(int(server_id), int(task_id), data))
+        finally:
+            loop.close()
+            
+        return jsonify(result), 200
     except Exception as e:
         return safe_error_response(e)
 
@@ -1324,15 +1340,15 @@ def test_stream():
 # ========== STATIC FILES ==========
 @app.route('/')
 def serve_dashboard():
-    return send_from_directory('web', 'index.html')
+    return send_from_directory('docs', 'index.html')
 
 @app.route('/script.js')
 def serve_script():
-    return send_from_directory('web', 'script.js')
+    return send_from_directory('docs', 'app.js')
 
 @app.route('/styles.css')
 def serve_styles():
-    return send_from_directory('web', 'styles.css')
+    return send_from_directory('docs', 'styles.css')
 
 @app.route('/favicon.ico')
 def serve_favicon():

@@ -759,40 +759,6 @@ async function loadServerSettings() {
     } catch (error) {
         console.error('Error loading config:', error);
     }
-}
-
-async function updateBotStatus() {
-    if (!currentServerId) return;
-    const message = document.getElementById('bot-status-message').value;
-    const type = document.getElementById('bot-status-type').value;
-    const presence = document.getElementById('bot-presence').value;
-    const url = document.getElementById('streaming-url').value;
-
-    try {
-        await apiCall(`/api/${currentServerId}/bot_status`, {
-            method: 'POST',
-            body: JSON.stringify({
-                message,
-                type,
-                presence,
-                streaming_url: url
-            })
-        });
-        showNotification('Bot status updated!', 'success');
-    } catch (error) {
-        showNotification('Failed to update status', 'error');
-    }
-}
-
-// Discord Data Cache for displaying names instead of IDs
-let discordDataCache = {
-    users: {},
-    channels: {},
-    roles: {}
-};
-
-// Fetch and cache Discord data
-async function fetchDiscordData(serverId) {
     try {
         const [users, channels, roles] = await Promise.all([
             apiCall(`/api/${serverId}/users`),
