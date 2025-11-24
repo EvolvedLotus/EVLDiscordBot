@@ -575,6 +575,15 @@ async function loadDashboard() {
         const statusData = await apiCall('/api/status');
         const serverConfig = await apiCall(`/api/${currentServerId}/config`);
 
+        // Get server name from select dropdown if config doesn't have it
+        let serverName = serverConfig.server_name || 'Unknown Server';
+        if (!serverConfig.server_name) {
+            const serverSelect = document.getElementById('server-select');
+            if (serverSelect && serverSelect.selectedOptions.length > 0) {
+                serverName = serverSelect.selectedOptions[0].textContent;
+            }
+        }
+
         content.innerHTML = `
             <div class="dashboard-grid">
                 <div class="stat-card">
@@ -584,11 +593,11 @@ async function loadDashboard() {
                 </div>
                 <div class="stat-card">
                     <h3>Server Name</h3>
-                    <div class="stat-value">${serverConfig.server_name || 'Unknown'}</div>
+                    <div class="stat-value">${serverName}</div>
                 </div>
                 <div class="stat-card">
                     <h3>Currency</h3>
-                    <div class="stat-value">${serverConfig.currency_symbol} ${serverConfig.currency_name}</div>
+                    <div class="stat-value">${serverConfig.currency_symbol || '💰'} ${serverConfig.currency_name || 'Coins'}</div>
                 </div>
             </div>
         `;
@@ -1718,6 +1727,228 @@ async function deleteShopItem(itemId) {
     }
 }
 
+async function saveShopItem(event) {
+    if (event) event.preventDefault();
+
+    const itemId = document.getElementById('shop-item-id')?.value;
+    const name = document.getElementById('shop-item-name').value;
+    const description = document.getElementById('shop-item-description').value;
+    const price = document.getElementById('shop-item-price').value;
+    const category = document.getElementById('shop-item-category').value;
+    const stock = document.getElementById('shop-item-stock').value;
+    const emoji = document.getElementById('shop-item-emoji').value;
+    const roleId = document.getElementById('shop-item-role')?.value;
+
+    if (!name || !price) {
+        showNotification('Please fill all required fields', 'warning');
+        return;
+    }
+
+    const payload = {
+        name,
+        description,
+        price: parseInt(price),
+        category,
+        stock: parseInt(stock),
+        emoji: emoji || '🎁',
+        role_id: (category === 'role' && roleId) ? roleId : null
+    };
+
+    try {
+        if (itemId) {
+            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Shop item updated', 'success');
+        } else {
+            await apiCall(`/api/${currentServerId}/shop`, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Shop item created', 'success');
+        }
+        closeModal();
+        loadShop();
+    } catch (error) {
+        console.error('Save shop item error:', error);
+        showNotification('Failed to save shop item: ' + error.message, 'error');
+    }
+}
+
+// ========== CONFIG TAB SAVE FUNCTIONS ==========
+
+async function saveChannelSetting(type) {
+    const channelId = document.getElementById(`${type}-channel`)?.value;
+    const statusSpan = document.getElementById(`${type}-channel-status`);
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'warning');
+        return;
+    }
+
+    try {
+        const fieldMap = {
+            'welcome': 'welcome_channel',
+            'log': 'logs_channel',
+            'task': 'task_channel_id',
+            'shop': 'shop_channel_id'
+        };
+
+        const payload = {
+            [fieldMap[type]]: channelId
+        };
+
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} channel saved`, 'success');
+    } catch (error) {
+        console.error('Save channel setting error:', error);
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification('Failed to save channel setting', 'error');
+    }
+}
+
+async function saveCurrencySettings() {
+    const currencyName = document.getElementById('currency-name')?.value;
+    const currencySymbol = document.getElementById('currency-symbol')?.value;
+    const statusSpan = document.getElementById('currency-settings-status');
+
+    if (!currencyName || !currencySymbol) {
+        showNotification('Please fill all currency fields', 'warning');
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                currency_name: currencyName,
+                currency_symbol: currencySymbol
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification('Currency settings saved', 'success');
+    } catch (error) {
+        console.error('Save currency settings error:', error);
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification('Failed to save currency settings', 'error');
+    }
+}
+
+async function saveBotBehavior() {
+    const inactivityDays = document.getElementById('inactivity-days')?.value;
+    const autoExpireTasks = document.getElementById('auto-expire-tasks')?.checked;
+    const requireTaskProof = document.getElementById('require-task-proof')?.checked;
+    const statusSpan = document.getElementById('bot-behavior-status');
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                inactivity_days: parseInt(inactivityDays),
+                auto_expire_enabled: autoExpireTasks,
+                require_proof: requireTaskProof
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification('Bot behavior settings saved', 'success');
+    } catch (error) {
+        console.error('Save bot behavior error:', error);
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification('Failed to save bot behavior settings', 'error');
+    }
+}
+
+async function saveFeatureToggle(feature) {
+    const checkbox = document.getElementById(`feature-${feature}`);
+    const statusSpan = document.getElementById(`feature-${feature}-status`);
+
+    if (!checkbox) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                [`feature_${feature}`]: checkbox.checked
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification(`${feature.charAt(0).toUpperCase() + feature.slice(1)} feature ${checkbox.checked ? 'enabled' : 'disabled'}`, 'success');
+    } catch (error) {
+        console.error('Save feature toggle error:', error);
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification('Failed to save feature toggle', 'error');
+    }
+}
+
+async function saveBotStatus() {
+    const statusType = document.getElementById('bot-status-type')?.value;
+    const statusMessage = document.getElementById('bot-status-message')?.value;
+
+    if (!statusType || !statusMessage) {
+        showNotification('Please fill all bot status fields', 'warning');
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/bot_status`, {
+            method: 'POST',
+            body: JSON.stringify({
+                type: statusType,
+                message: statusMessage
+            })
+        });
+        showNotification('Bot status updated', 'success');
+    } catch (error) {
+        console.error('Save bot status error:', error);
+        showNotification('Failed to update bot status', 'error');
+    }
+}
+
 // ========== TASK ACTIONS ==========
 
 function showCreateTaskModal() {
@@ -1891,6 +2122,73 @@ async function deleteAnnouncement(announcementId) {
     } catch (error) {
         showNotification('Failed to delete announcement: ' + error.message, 'error');
     }
+}
+
+async function editAnnouncement(announcementId) {
+    showNotification('Edit announcement functionality coming soon!', 'info');
+}
+
+// ========== EMBED ACTIONS ==========
+
+async function sendEmbed(embedId) {
+    // Show a modal to select the channel
+    const modal = createModal('Send Embed', `
+<form id="send-embed-form" onsubmit="return false;">
+    <div class="form-group">
+        <label>Select Channel</label>
+        <select id="send-embed-channel" class="form-control">
+            ${getChannelOptions()}
+        </select>
+    </div>
+    <div class="button-group">
+        <button type="button" onclick="confirmSendEmbed('${embedId}')" class="btn-success">Send</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+</form>
+    `);
+
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+}
+
+async function confirmSendEmbed(embedId) {
+    const channelId = document.getElementById('send-embed-channel')?.value;
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'warning');
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+            method: 'POST',
+            body: JSON.stringify({ channel_id: channelId })
+        });
+        showNotification('Embed sent successfully', 'success');
+        closeModal();
+    } catch (error) {
+        console.error('Send embed error:', error);
+        showNotification('Failed to send embed: ' + error.message, 'error');
+    }
+}
+
+async function deleteEmbed(embedId) {
+    if (!confirm('Are you sure you want to delete this embed?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+            method: 'DELETE'
+        });
+        showNotification('Embed deleted', 'success');
+        loadEmbeds();
+    } catch (error) {
+        console.error('Delete embed error:', error);
+        showNotification('Failed to delete embed: ' + error.message, 'error');
+    }
+}
+
+async function editEmbed(embedId) {
+    showNotification('Edit embed functionality coming soon!', 'info');
 }
 
 // ========== HELPER FUNCTIONS ==========

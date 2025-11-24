@@ -569,6 +569,50 @@ def update_server_config(server_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/<server_id>/bot_status', methods=['POST'])
+@require_guild_access
+def update_bot_status(server_id):
+    """Update bot status for a specific guild"""
+    try:
+        data = request.get_json()
+        status_type = data.get('type', 'playing')
+        status_message = data.get('message', '')
+        
+        if not status_message:
+            return jsonify({'error': 'Status message is required'}), 400
+        
+        # Save to database
+        config_data = {
+            'bot_status_type': status_type,
+            'bot_status_message': status_message
+        }
+        success = data_manager.save_guild_data(server_id, 'config', config_data)
+        
+        if not success:
+            return jsonify({'error': 'Failed to save bot status'}), 500
+        
+        # Update bot status if bot is connected
+        if _bot_instance and _bot_instance.is_ready():
+            async def update_status():
+                activity_type_map = {
+                    'playing': discord.ActivityType.playing,
+                    'watching': discord.ActivityType.watching,
+                    'listening': discord.ActivityType.listening,
+                    'streaming': discord.ActivityType.streaming
+                }
+                activity_type = activity_type_map.get(status_type, discord.ActivityType.playing)
+                activity = discord.Activity(type=activity_type, name=status_message)
+                await _bot_instance.change_presence(activity=activity)
+            
+            # Run the async function in the bot's event loop
+            asyncio.run_coroutine_threadsafe(update_status(), _bot_instance.loop).result(timeout=5)
+        
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        logger.error(f"Error updating bot status: {e}")
+        return safe_error_response(e)
+
+
 @app.route('/api/<server_id>/channels', methods=['GET'])
 @require_guild_access
 def get_channels(server_id):
