@@ -6,12 +6,12 @@
     --success-color: #3BA55D;
     --danger-color: #ED4245;
     --warning-color: #FAA81A;
-    --background: #36393F;
-    --surface: #2F3136;
-    --surface-light: #40444B;
-    --text-primary: #FFFFFF;
-    --text-secondary: #B9BBBE;
-    --border-color: #202225;
+    --background: #F2F3F5;
+    --surface: #FFFFFF;
+    --surface-light: #F2F3F5;
+    --text-primary: #2E3338;
+    --text-secondary: #5E6772;
+    --border-color: #E3E5E8;
 }
 
 /* Login Screen Styles */

@@ -410,9 +410,9 @@ async function addBalance() {
     const reason = document.getElementById('balance-reason').value;
 
     try {
-        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance/add`, {
-            method: 'POST',
-            body: JSON.stringify({ amount: parseInt(amount), reason })
+        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance`, {
+            method: 'PUT',
+            body: JSON.stringify({ amount: parseInt(amount) })
         });
         showNotification('Balance added successfully', 'success');
         loadUsers();
@@ -427,9 +427,9 @@ async function removeBalance() {
     const reason = document.getElementById('balance-reason').value;
 
     try {
-        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance/remove`, {
-            method: 'POST',
-            body: JSON.stringify({ amount: parseInt(amount), reason })
+        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance`, {
+            method: 'PUT',
+            body: JSON.stringify({ amount: -parseInt(amount) })
         });
         showNotification('Balance removed successfully', 'success');
         loadUsers();

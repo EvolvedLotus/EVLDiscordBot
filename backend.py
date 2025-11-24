@@ -794,7 +794,42 @@ def get_announcements(server_id):
 def create_announcement(server_id):
     try:
         data = request.get_json()
-        announcement = announcement_manager.create_announcement(server_id, data)
+        
+        # Extract required parameters
+        title = data.get('title')
+        content = data.get('content')
+        channel_id = data.get('channel_id')
+        
+        # Get author info from session
+        user = request.user
+        author_id = user.get('id', 'admin-env-user')
+        author_name = user.get('username', 'Admin')
+        
+        # Optional parameters
+        announcement_type = data.get('type', 'general')
+        embed_color = data.get('embed_color', '#5865F2')
+        auto_pin = data.get('pinned', False)
+        
+        # Run async create_announcement
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            announcement = loop.run_until_complete(
+                announcement_manager.create_announcement(
+                    guild_id=server_id,
+                    title=title,
+                    content=content,
+                    channel_id=channel_id,
+                    author_id=author_id,
+                    author_name=author_name,
+                    announcement_type=announcement_type,
+                    embed_color=embed_color,
+                    auto_pin=auto_pin
+                )
+            )
+        finally:
+            loop.close()
+            
         return jsonify(announcement), 201
     except Exception as e:
         return safe_error_response(e)
