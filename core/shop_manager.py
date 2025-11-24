@@ -123,9 +123,19 @@ class ShopManager:
 
     def create_item(self, guild_id: int, data: dict) -> dict:
         """Wrapper for add_item to handle dictionary input from API"""
+        item_id = data.get('item_id')
+        if not item_id:
+            # Generate ID from name or timestamp
+            name = data.get('name', 'item')
+            slug = "".join(c for c in name.lower() if c.isalnum() or c in ('-', '_')).strip()
+            if not slug:
+                slug = 'item'
+            timestamp = int(time.time())
+            item_id = f"{slug}_{timestamp}"
+
         return self.add_item(
             guild_id=guild_id,
-            item_id=data.get('item_id'),
+            item_id=item_id,
             name=data.get('name'),
             description=data.get('description'),
             price=int(data.get('price', 0)),

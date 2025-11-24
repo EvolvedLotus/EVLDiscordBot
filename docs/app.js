@@ -7,6 +7,52 @@ const API_BASE_URL = window.location.hostname === 'localhost'
 let currentServerId = '';
 let currentUser = null;
 
+let discordDataCache = {
+    users: {},
+    channels: {},
+    roles: {}
+};
+
+async function fetchDiscordData(serverId) {
+    if (!serverId) return;
+
+    try {
+        console.log('Fetching Discord data for server:', serverId);
+
+        // Fetch in parallel
+        const [users, channels, roles] = await Promise.all([
+            apiCall(`/api/${serverId}/users`),
+            apiCall(`/api/${serverId}/channels`),
+            apiCall(`/api/${serverId}/roles`)
+        ]);
+
+        if (users) {
+            discordDataCache.users = {};
+            users.forEach(u => discordDataCache.users[u.user_id] = u);
+        }
+
+        if (channels) {
+            discordDataCache.channels = {};
+            channels.forEach(c => discordDataCache.channels[c.id] = c);
+        }
+
+        if (roles) {
+            discordDataCache.roles = {};
+            roles.forEach(r => discordDataCache.roles[r.id] = r);
+        }
+
+        console.log('Discord data cached:', {
+            users: Object.keys(discordDataCache.users).length,
+            channels: Object.keys(discordDataCache.channels).length,
+            roles: Object.keys(discordDataCache.roles).length
+        });
+
+    } catch (error) {
+        console.error('Failed to fetch Discord data:', error);
+        showNotification('Failed to load Discord data', 'error');
+    }
+}
+
 // Helper function to build API URLs
 function apiUrl(endpoint) {
     return `${API_BASE_URL}${endpoint}`;
