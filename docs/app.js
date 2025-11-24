@@ -153,7 +153,204 @@ function loadTransactionsTab() { loadTransactions(); }
 function loadPermissionsTab() { console.log('Permissions tab - coming soon'); }
 function loadRolesTab() { console.log('Roles tab - coming soon'); }
 function loadModerationTab() { console.log('Moderation tab - coming soon'); }
-function loadConfigTab() { loadServerSettings(); }
+async function loadConfigTab() {
+    if (!currentServerId) return;
+    const content = document.getElementById('config-content');
+    if (!content) return;
+
+    try {
+        // Fetch Discord data and config
+        await fetchDiscordData(currentServerId);
+        const config = await apiCall(`/api/${currentServerId}/config`);
+
+        // Populate channel dropdowns
+        const channels = Object.values(discordDataCache.channels);
+        const channelOptions = channels.map(ch =>
+            `<option value="${ch.id}">${ch.name}</option>`
+        ).join('');
+
+        // Build the config form
+        let html = `
+            <div class="settings-grid">
+                <!-- Channel Settings -->
+                <div class="section-card">
+                    <h3>📢 Channel Configuration</h3>
+                    
+                    <div class="form-group">
+                        <label for="welcome-channel">Welcome Channel:</label>
+                        <select id="welcome-channel" class="form-control">
+                            <option value="">None</option>
+                            ${channelOptions}
+                        </select>
+                        <button onclick="saveChannelSetting('welcome')" class="btn-primary btn-small">Save</button>
+                        <span id="welcome-channel-status" class="status-text"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="log-channel">Log Channel:</label>
+                        <select id="log-channel" class="form-control">
+                            <option value="">None</option>
+                            ${channelOptions}
+                        </select>
+                        <button onclick="saveChannelSetting('log')" class="btn-primary btn-small">Save</button>
+                        <span id="log-channel-status" class="status-text"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="task-channel">Task Channel:</label>
+                        <select id="task-channel" class="form-control">
+                            <option value="">None</option>
+                            ${channelOptions}
+                        </select>
+                        <button onclick="saveChannelSetting('task')" class="btn-primary btn-small">Save</button>
+                        <span id="task-channel-status" class="status-text"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="shop-channel">Shop Channel:</label>
+                        <select id="shop-channel" class="form-control">
+                            <option value="">None</option>
+                            ${channelOptions}
+                        </select>
+                        <button onclick="saveChannelSetting('shop')" class="btn-primary btn-small">Save</button>
+                        <span id="shop-channel-status" class="status-text"></span>
+                    </div>
+                </div>
+
+                <!-- Currency Settings -->
+                <div class="section-card">
+                    <h3>💰 Currency Settings</h3>
+                    
+                    <div class="form-group">
+                        <label for="currency-name">Currency Name:</label>
+                        <input type="text" id="currency-name" class="form-control" placeholder="Coins">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="currency-symbol">Currency Symbol:</label>
+                        <input type="text" id="currency-symbol" class="form-control" placeholder="💰" maxlength="10">
+                    </div>
+
+                    <button onclick="saveCurrencySettings()" class="btn-primary">Save Currency Settings</button>
+                    <span id="currency-settings-status" class="status-text"></span>
+                </div>
+
+                <!-- Bot Behavior -->
+                <div class="section-card">
+                    <h3>🤖 Bot Behavior</h3>
+                    
+                    <div class="form-group">
+                        <label for="inactivity-days">Inactivity Days:</label>
+                        <input type="number" id="inactivity-days" class="form-control" min="1" max="365">
+                        <small>Days before marking users inactive</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="auto-expire-tasks">
+                            Auto-expire tasks
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="require-task-proof">
+                            Require task proof
+                        </label>
+                    </div>
+
+                    <button onclick="saveBotBehavior()" class="btn-primary">Save Behavior Settings</button>
+                    <span id="bot-behavior-status" class="status-text"></span>
+                </div>
+
+                <!-- Feature Toggles -->
+                <div class="section-card">
+                    <h3>⚡ Feature Toggles</h3>
+                    
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="feature-tasks">
+                            Enable Tasks
+                        </label>
+                        <button onclick="saveFeatureToggle('tasks')" class="btn-primary btn-small">Save</button>
+                        <span id="feature-tasks-status" class="status-text"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="feature-shop">
+                            Enable Shop
+                        </label>
+                        <button onclick="saveFeatureToggle('shop')" class="btn-primary btn-small">Save</button>
+                        <span id="feature-shop-status" class="status-text"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="feature-announcements">
+                            Enable Announcements
+                        </label>
+                        <button onclick="saveFeatureToggle('announcements')" class="btn-primary btn-small">Save</button>
+                        <span id="feature-announcements-status" class="status-text"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="feature-moderation">
+                            Enable Moderation
+                        </label>
+                        <button onclick="saveFeatureToggle('moderation')" class="btn-primary btn-small">Save</button>
+                        <span id="feature-moderation-status" class="status-text"></span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        content.innerHTML = html;
+
+        // Populate values from config
+        if (config) {
+            // Set channel values
+            if (config.welcome_channel) document.getElementById('welcome-channel').value = config.welcome_channel;
+            if (config.logs_channel) document.getElementById('log-channel').value = config.logs_channel;
+            if (config.task_channel_id) document.getElementById('task-channel').value = config.task_channel_id;
+            if (config.shop_channel_id) document.getElementById('shop-channel').value = config.shop_channel_id;
+
+            // Set currency values
+            document.getElementById('currency-name').value = config.currency_name || 'Coins';
+            document.getElementById('currency-symbol').value = config.currency_symbol || '💰';
+
+            // Set bot behavior
+            document.getElementById('inactivity-days').value = config.inactivity_days || 30;
+            document.getElementById('auto-expire-tasks').checked = config.auto_expire_enabled !== false;
+            document.getElementById('require-task-proof').checked = config.require_proof !== false;
+
+            // Set feature toggles
+            document.getElementById('feature-tasks').checked = config.feature_tasks !== false;
+            document.getElementById('feature-shop').checked = config.feature_shop !== false;
+            document.getElementById('feature-announcements').checked = config.feature_announcements !== false;
+            document.getElementById('feature-moderation').checked = config.feature_moderation !== false;
+        }
+
+        // Show bot status section
+        const botStatusSection = document.getElementById('bot-status-section');
+        if (botStatusSection) {
+            botStatusSection.style.display = 'block';
+            if (config.bot_status_message) {
+                document.getElementById('bot-status-message').value = config.bot_status_message;
+            }
+            if (config.bot_status_type) {
+                document.getElementById('bot-status-type').value = config.bot_status_type;
+            }
+        }
+
+        showNotification('Configuration loaded', 'success');
+    } catch (error) {
+        console.error('Failed to load configuration:', error);
+        content.innerHTML = '<div class="error">Failed to load configuration</div>';
+        showNotification('Failed to load configuration', 'error');
+    }
+}
 function loadSettingsTab() { console.log('Settings tab - coming soon'); }
 function loadLogsTab() { console.log('Logs tab - coming soon'); }
 
