@@ -1408,101 +1408,10 @@ function closeModal() {
     });
 }
 
-function getChannelOptions() {
-    const channels = Object.values(discordDataCache.channels);
-    return channels.map(ch => `<option value="${ch.id}">${ch.name}</option>`).join('');
-}
 
-function getRoleOptions() {
-    const roles = Object.values(discordDataCache.roles);
-    return roles.map(role => `<option value="${role.id}">${role.name}</option>`).join('');
-}
 
-// ========== ANNOUNCEMENT ACTIONS ==========
+// Old announcement code removed
 
-function showCreateAnnouncementModal() {
-    const modal = createModal('Create Announcement', `
-        <form id="announcement-form" onsubmit="return false;">
-            <div class="form-group">
-                <label>Title</label>
-                <input type="text" id="announcement-title" class="form-control" required>
-            </div>
-            <div class="form-group">
-                <label>Content</label>
-                <textarea id="announcement-content" class="form-control" rows="5" required></textarea>
-            </div>
-            <div class="form-group">
-                <label>Channel</label>
-                <select id="announcement-channel" class="form-control" required>
-                    ${getChannelOptions()}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="announcement-pin">
-                    Pin this announcement
-                </label>
-            </div>
-            <div class="button-group">
-                <button type="button" onclick="createAnnouncement()" class="btn-success">Create</button>
-                <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
-            </div>
-        </form>
-    `);
-
-    document.body.appendChild(modal);
-    modal.style.display = 'block';
-}
-
-async function createAnnouncement() {
-    const title = document.getElementById('announcement-title').value;
-    const content = document.getElementById('announcement-content').value;
-    const channelId = document.getElementById('announcement-channel').value;
-    const isPinned = document.getElementById('announcement-pin').checked;
-
-    if (!title || !content || !channelId) {
-        showNotification('Please fill all required fields', 'warning');
-        return;
-    }
-
-    try {
-        await apiCall(`/api/${currentServerId}/announcements`, {
-            method: 'POST',
-            body: JSON.stringify({
-                title,
-                content,
-                channel_id: channelId,
-                pinned: isPinned
-            })
-        });
-
-        showNotification('Announcement created successfully!', 'success');
-        closeModal();
-        loadAnnouncements();
-    } catch (error) {
-        showNotification('Failed to create announcement: ' + error.message, 'error');
-    }
-}
-
-async function editAnnouncement(announcementId) {
-    // TODO: Implement edit functionality
-    showNotification('Edit functionality coming soon', 'info');
-}
-
-async function deleteAnnouncement(announcementId) {
-    if (!confirm('Are you sure you want to delete this announcement?')) return;
-
-    try {
-        await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
-            method: 'DELETE'
-        });
-
-        showNotification('Announcement deleted', 'success');
-        loadAnnouncements();
-    } catch (error) {
-        showNotification('Failed to delete announcement: ' + error.message, 'error');
-    }
-}
 
 // ========== EMBED ACTIONS ==========
 
@@ -1538,7 +1447,7 @@ async function editEmbed(embedId) {
 }
 
 async function saveEmbed(event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
 
     const embedId = document.getElementById('embed-id').value;
     const embedData = {
@@ -1551,6 +1460,7 @@ async function saveEmbed(event) {
     };
 
     try {
+        let savedId = embedId;
         if (embedId) {
             // Update existing embed
             await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
@@ -1560,17 +1470,35 @@ async function saveEmbed(event) {
             showNotification('Embed updated successfully', 'success');
         } else {
             // Create new embed
-            await apiCall(`/api/${currentServerId}/embeds`, {
+            const response = await apiCall(`/api/${currentServerId}/embeds`, {
                 method: 'POST',
                 body: JSON.stringify(embedData)
             });
+            if (response && response.embed && response.embed.id) {
+                savedId = response.embed.id;
+            } else if (response && response.id) {
+                savedId = response.id;
+            }
             showNotification('Embed created successfully', 'success');
         }
 
         closeEmbedModal();
         loadEmbeds();
+        return savedId;
     } catch (error) {
         showNotification(`Failed to save embed: ${error.message}`, 'error');
+        return null;
+    }
+}
+
+async function saveAndSendEmbed(event) {
+    if (event) event.preventDefault();
+    const savedId = await saveEmbed(null);
+    if (savedId) {
+        // Wait a brief moment for the modal to close and list to refresh
+        setTimeout(() => {
+            sendEmbed(savedId);
+        }, 500);
     }
 }
 
@@ -1625,6 +1553,344 @@ function closeSendEmbedModal() {
 
 async function refreshEmbeds() {
     loadEmbeds();
+}
+
+
+// ========== SETTINGS ACTIONS ==========
+
+async function saveChannelSetting(settingType) {
+    const selectId = `${settingType}-channel`;
+    const channelId = document.getElementById(selectId).value;
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                [`${settingType}_channel_id`]: channelId
+            })
+        });
+        showNotification(`${settingType.charAt(0).toUpperCase() + settingType.slice(1)} channel updated`, 'success');
+    } catch (error) {
+        showNotification(`Failed to update ${settingType} channel: ${error.message}`, 'error');
+    }
+}
+
+async function saveCurrencySettings() {
+    const currencyName = document.getElementById('currency-name').value;
+    const currencySymbol = document.getElementById('currency-symbol').value;
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                currency_name: currencyName,
+                currency_symbol: currencySymbol
+            })
+        });
+        showNotification('Currency settings updated', 'success');
+    } catch (error) {
+        showNotification('Failed to update currency settings: ' + error.message, 'error');
+    }
+}
+
+async function saveBotBehavior() {
+    const inactivityDays = document.getElementById('inactivity-days').value;
+    const autoExpireTasks = document.getElementById('auto-expire-tasks').checked;
+    const requireTaskProof = document.getElementById('require-task-proof').checked;
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                inactivity_days: parseInt(inactivityDays),
+                auto_expire_tasks: autoExpireTasks,
+                require_task_proof: requireTaskProof
+            })
+        });
+        showNotification('Bot behavior settings updated', 'success');
+    } catch (error) {
+        showNotification('Failed to update bot behavior: ' + error.message, 'error');
+    }
+}
+
+async function saveFeatureToggle(feature) {
+    const isEnabled = document.getElementById(`enable-${feature}`).checked;
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                [`enable_${feature}`]: isEnabled
+            })
+        });
+        showNotification(`${feature.charAt(0).toUpperCase() + feature.slice(1)} feature ${isEnabled ? 'enabled' : 'disabled'}`, 'success');
+    } catch (error) {
+        showNotification(`Failed to toggle ${feature}: ${error.message}`, 'error');
+    }
+}
+
+async function saveBotStatus() {
+    const statusMessage = document.getElementById('bot-status-message').value;
+    const statusType = document.getElementById('bot-status-type').value;
+
+    try {
+        await apiCall(`/api/${currentServerId}/bot_status`, {
+            method: 'POST',
+            body: JSON.stringify({
+                status_message: statusMessage,
+                status_type: statusType
+            })
+        });
+        showNotification('Bot status updated', 'success');
+    } catch (error) {
+        showNotification('Failed to update bot status: ' + error.message, 'error');
+    }
+}
+
+// ========== SHOP ACTIONS ==========
+
+async function saveShopItem(event) {
+    if (event) event.preventDefault();
+
+    const itemId = document.getElementById('shop-item-id').value;
+    const name = document.getElementById('shop-item-name').value;
+    const description = document.getElementById('shop-item-description').value;
+    const price = document.getElementById('shop-item-price').value;
+    const stock = document.getElementById('shop-item-stock').value;
+    const category = document.getElementById('shop-item-category').value;
+    const emoji = document.getElementById('shop-item-emoji').value;
+    const roleId = document.getElementById('shop-item-role').value;
+
+    if (!name || !price) {
+        showNotification('Name and Price are required', 'warning');
+        return;
+    }
+
+    const payload = {
+        name,
+        description,
+        price: parseInt(price),
+        stock: parseInt(stock),
+        category,
+        emoji
+    };
+
+    if (category === 'role') {
+        if (!roleId) {
+            showNotification('Please select a role for this item', 'warning');
+            return;
+        }
+        payload.metadata = { role_id: roleId };
+    }
+
+    try {
+        if (itemId) {
+            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Item updated', 'success');
+        } else {
+            await apiCall(`/api/${currentServerId}/shop`, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Item created', 'success');
+        }
+        closeModal();
+        loadShop();
+    } catch (error) {
+        showNotification('Failed to save item: ' + error.message, 'error');
+    }
+}
+
+async function deleteShopItem(itemId) {
+    if (!confirm('Are you sure you want to delete this item?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+            method: 'DELETE'
+        });
+        showNotification('Item deleted', 'success');
+        loadShop();
+    } catch (error) {
+        showNotification('Failed to delete item: ' + error.message, 'error');
+    }
+}
+
+// ========== TASK ACTIONS ==========
+
+function showCreateTaskModal() {
+    const modal = createModal('Create Task', `
+        <form id="task-form" onsubmit="return false;">
+            <input type="hidden" id="task-id">
+            <div class="form-group">
+                <label>Task Name</label>
+                <input type="text" id="task-name" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="task-description" class="form-control" rows="3" required></textarea>
+            </div>
+            <div class="form-group">
+                <label>Reward Amount</label>
+                <input type="number" id="task-reward" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Category</label>
+                <select id="task-category" class="form-control">
+                    <option value="General">General</option>
+                    <option value="Daily">Daily</option>
+                    <option value="Weekly">Weekly</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Required Role (Optional)</label>
+                <select id="task-role" class="form-control">
+                    <option value="">None</option>
+                    ${getRoleOptions()}
+                </select>
+            </div>
+            <div class="button-group">
+                <button type="button" onclick="saveTask()" class="btn-success">Save</button>
+                <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+            </div>
+        </form>
+    `);
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+}
+
+async function editTask(taskId) {
+    try {
+        const data = await apiCall(`/api/${currentServerId}/tasks`);
+        const task = data.tasks.find(t => t.id === taskId);
+
+        if (!task) {
+            showNotification('Task not found', 'error');
+            return;
+        }
+
+        showCreateTaskModal();
+        document.getElementById('task-id').value = task.id;
+        document.getElementById('task-name').value = task.name;
+        document.getElementById('task-description').value = task.description;
+        document.getElementById('task-reward').value = task.reward;
+        document.getElementById('task-category').value = task.category;
+        if (task.required_role_id) {
+            document.getElementById('task-role').value = task.required_role_id;
+        }
+
+        // Update title
+        document.querySelector('.modal-header h2').textContent = 'Edit Task';
+    } catch (error) {
+        showNotification('Failed to load task details: ' + error.message, 'error');
+    }
+}
+
+async function saveTask() {
+    const taskId = document.getElementById('task-id').value;
+    const name = document.getElementById('task-name').value;
+    const description = document.getElementById('task-description').value;
+    const reward = document.getElementById('task-reward').value;
+    const category = document.getElementById('task-category').value;
+    const roleId = document.getElementById('task-role').value;
+
+    if (!name || !description || !reward) {
+        showNotification('Please fill all required fields', 'warning');
+        return;
+    }
+
+    const payload = {
+        name,
+        description,
+        reward: parseInt(reward),
+        category,
+        required_role_id: roleId || null
+    };
+
+    try {
+        if (taskId) {
+            await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Task updated', 'success');
+        } else {
+            await apiCall(`/api/${currentServerId}/tasks`, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Task created', 'success');
+        }
+        closeModal();
+        loadTasks();
+    } catch (error) {
+        showNotification('Failed to save task: ' + error.message, 'error');
+    }
+}
+
+async function deleteTask(taskId) {
+    if (!confirm('Are you sure you want to delete this task?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+            method: 'DELETE'
+        });
+        showNotification('Task deleted', 'success');
+        loadTasks();
+    } catch (error) {
+        showNotification('Failed to delete task: ' + error.message, 'error');
+    }
+}
+
+// ========== ANNOUNCEMENT ACTIONS ==========
+
+async function saveAnnouncement(event) {
+    if (event) event.preventDefault();
+
+    const title = document.getElementById('announcement-title').value;
+    const content = document.getElementById('announcement-content').value;
+    const channelId = document.getElementById('announcement-channel').value;
+    const isPinned = document.getElementById('announcement-pinned').checked;
+
+    if (!title || !content || !channelId) {
+        showNotification('Please fill all required fields', 'warning');
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/announcements`, {
+            method: 'POST',
+            body: JSON.stringify({
+                title,
+                content,
+                channel_id: channelId,
+                pinned: isPinned
+            })
+        });
+
+        showNotification('Announcement sent successfully!', 'success');
+        closeModal();
+        loadAnnouncements();
+    } catch (error) {
+        showNotification('Failed to send announcement: ' + error.message, 'error');
+    }
+}
+
+async function deleteAnnouncement(announcementId) {
+    if (!confirm('Are you sure you want to delete this announcement?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
+            method: 'DELETE'
+        });
+
+        showNotification('Announcement deleted', 'success');
+        loadAnnouncements();
+    } catch (error) {
+        showNotification('Failed to delete announcement: ' + error.message, 'error');
+    }
 }
 
 // ========== HELPER FUNCTIONS ==========
