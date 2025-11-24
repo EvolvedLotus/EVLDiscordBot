@@ -541,17 +541,16 @@ async function loadUsers(page = 1) {
     list.innerHTML = '<div class="loading">Loading users...</div>';
 
     try {
-        const data = await apiCall(`/api/${currentServerId}/users`);
+        // Pass page and limit to API for server-side pagination
+        const data = await apiCall(`/api/${currentServerId}/users?page=${page}&limit=${USERS_PER_PAGE}`);
+
         if (data.users && data.users.length > 0) {
-            // Calculate pagination
-            const totalUsers = data.users.length;
+            // Use total from API response
+            const totalUsers = data.total || data.users.length;
             const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
-            const startIndex = (page - 1) * USERS_PER_PAGE;
-            const endIndex = Math.min(startIndex + USERS_PER_PAGE, totalUsers);
-            const paginatedUsers = data.users.slice(startIndex, endIndex);
 
             let html = '<table class="data-table"><thead><tr><th>User</th><th>Balance</th><th>Level</th><th>XP</th><th>Actions</th></tr></thead><tbody>';
-            paginatedUsers.forEach(user => {
+            data.users.forEach(user => {
                 html += `
                     <tr>
                         <td>${user.username || user.user_id}</td>
