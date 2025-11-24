@@ -278,9 +278,182 @@
         </div>
     </div>
 
-    <!-- Modals (dynamically created by JavaScript) -->
+    <!-- Shop Item Modal -->
+    <div id="shop-item-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeShopItemModal()">&times;</span>
+            <h2 id="shop-item-modal-title">Add Shop Item</h2>
+            <form id="shop-item-form" onsubmit="saveShopItem(event)">
+                <input type="hidden" id="shop-item-id">
+                <div class="form-group">
+                    <label for="shop-item-name">Item Name *</label>
+                    <input type="text" id="shop-item-name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="shop-item-description">Description</label>
+                    <textarea id="shop-item-description" class="form-control" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="shop-item-price">Price *</label>
+                    <input type="number" id="shop-item-price" class="form-control" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="shop-item-category">Category</label>
+                    <select id="shop-item-category" class="form-control">
+                        <option value="general">General</option>
+                        <option value="role">Role</option>
+                        <option value="cosmetic">Cosmetic</option>
+                        <option value="boost">Boost</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="shop-item-stock">Stock (-1 for unlimited)</label>
+                    <input type="number" id="shop-item-stock" class="form-control" value="-1">
+                </div>
+                <div class="form-group">
+                    <label for="shop-item-emoji">Emoji</label>
+                    <input type="text" id="shop-item-emoji" class="form-control" placeholder="🛍️">
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn-success">Save Item</button>
+                    <button type="button" onclick="closeShopItemModal()" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-    <script src="./app.js?v=8"></script>
+    <!-- Task Modal -->
+    <div id="task-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeTaskModal()">&times;</span>
+            <h2 id="task-modal-title">Create Task</h2>
+            <form id="task-form" onsubmit="saveTask(event)">
+                <input type="hidden" id="task-id">
+                <div class="form-group">
+                    <label for="task-name">Task Name *</label>
+                    <input type="text" id="task-name" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="task-description">Description *</label>
+                    <textarea id="task-description" class="form-control" rows="3" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="task-reward">Reward *</label>
+                    <input type="number" id="task-reward" class="form-control" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="task-duration">Duration (hours)</label>
+                    <input type="number" id="task-duration" class="form-control" min="1" value="24">
+                </div>
+                <div class="form-group">
+                    <label for="task-max-claims">Max Claims (-1 for unlimited)</label>
+                    <input type="number" id="task-max-claims" class="form-control" value="-1">
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn-success">Save Task</button>
+                    <button type="button" onclick="closeTaskModal()" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Announcement Modal -->
+    <div id="announcement-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeAnnouncementModal()">&times;</span>
+            <h2 id="announcement-modal-title">Create Announcement</h2>
+            <form id="announcement-form" onsubmit="saveAnnouncement(event)">
+                <input type="hidden" id="announcement-id">
+                <div class="form-group">
+                    <label for="announcement-title">Title *</label>
+                    <input type="text" id="announcement-title" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcement-content">Content *</label>
+                    <textarea id="announcement-content" class="form-control" rows="4" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="announcement-channel">Channel *</label>
+                    <select id="announcement-channel" class="form-control" required>
+                        <option value="">Select a channel...</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="announcement-pinned">
+                        Pin this announcement
+                    </label>
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn-success">Save Announcement</button>
+                    <button type="button" onclick="closeAnnouncementModal()" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Embed Modal -->
+    <div id="embed-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeEmbedModal()">&times;</span>
+            <h2 id="embed-modal-title">Create Embed</h2>
+            <form id="embed-form" onsubmit="saveEmbed(event)">
+                <input type="hidden" id="embed-id">
+                <div class="form-group">
+                    <label for="embed-title">Title</label>
+                    <input type="text" id="embed-title" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="embed-description">Description</label>
+                    <textarea id="embed-description" class="form-control" rows="4"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="embed-color">Color (hex)</label>
+                    <input type="color" id="embed-color" class="form-control" value="#5865F2">
+                </div>
+                <div class="form-group">
+                    <label for="embed-footer">Footer</label>
+                    <input type="text" id="embed-footer" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label for="embed-image-url">Image URL</label>
+                    <input type="url" id="embed-image-url" class="form-control" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label for="embed-thumbnail-url">Thumbnail URL</label>
+                    <input type="url" id="embed-thumbnail-url" class="form-control" placeholder="https://...">
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn-success">Save Embed</button>
+                    <button type="button" onclick="closeEmbedModal()" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Send Embed Modal -->
+    <div id="send-embed-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeSendEmbedModal()">&times;</span>
+            <h2>Send Embed</h2>
+            <form id="send-embed-form" onsubmit="sendEmbedToChannel(event)">
+                <input type="hidden" id="send-embed-id">
+                <div class="form-group">
+                    <label for="send-embed-channel">Select Channel *</label>
+                    <select id="send-embed-channel" class="form-control" required>
+                        <option value="">Select a channel...</option>
+                    </select>
+                </div>
+                <div class="button-group">
+                    <button type="submit" class="btn-success">Send Embed</button>
+                    <button type="button" onclick="closeSendEmbedModal()" class="btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="./app.js?v=9"></script>
 </body>
 
 </html>
