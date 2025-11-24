@@ -550,7 +550,7 @@ def get_servers():
 @require_guild_access
 def get_server_config(server_id):
     try:
-        config = data_manager.get_guild_config(server_id)
+        config = data_manager.load_guild_data(server_id, 'config')
         return jsonify(config), 200
     except Exception as e:
         return safe_error_response(e)
@@ -560,8 +560,12 @@ def get_server_config(server_id):
 def update_server_config(server_id):
     try:
         data = request.get_json()
-        data_manager.update_guild_config(server_id, data)
-        return jsonify({'success': True}), 200
+        # Use save_guild_data with 'config' type
+        success = data_manager.save_guild_data(server_id, 'config', data)
+        if success:
+            return jsonify({'success': True}), 200
+        else:
+            return jsonify({'error': 'Failed to update config'}), 500
     except Exception as e:
         return safe_error_response(e)
 
@@ -569,8 +573,19 @@ def update_server_config(server_id):
 @require_guild_access
 def get_channels(server_id):
     try:
-        channels = data_manager.get_guild_channels(server_id)
-        return jsonify({'channels': channels}), 200
+        if _bot_instance:
+            guild = _bot_instance.get_guild(int(server_id))
+            if guild:
+                channels = [
+                    {'id': str(c.id), 'name': c.name, 'type': str(c.type), 'position': c.position} 
+                    for c in guild.channels
+                ]
+                # Sort by position
+                channels.sort(key=lambda x: x['position'])
+                return jsonify({'channels': channels}), 200
+        
+        # Fallback if bot not ready or guild not found
+        return jsonify({'channels': []}), 200
     except Exception as e:
         return safe_error_response(e)
 
@@ -578,8 +593,18 @@ def get_channels(server_id):
 @require_guild_access
 def get_roles(server_id):
     try:
-        roles = data_manager.get_guild_roles(server_id)
-        return jsonify({'roles': roles}), 200
+        if _bot_instance:
+            guild = _bot_instance.get_guild(int(server_id))
+            if guild:
+                roles = [
+                    {'id': str(r.id), 'name': r.name, 'color': str(r.color), 'position': r.position} 
+                    for r in guild.roles
+                ]
+                # Sort by position (reverse)
+                roles.sort(key=lambda x: x['position'], reverse=True)
+                return jsonify({'roles': roles}), 200
+                
+        return jsonify({'roles': []}), 200
     except Exception as e:
         return safe_error_response(e)
 
@@ -692,15 +717,23 @@ def create_task(server_id):
     try:
         data = request.get_json()
         
-        # Run async create_task in event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            task = loop.run_until_complete(task_manager.create_task(server_id, data))
-        finally:
-            loop.close()
+        if _bot_instance and _bot_instance.loop:
+            future = asyncio.run_coroutine_threadsafe(
+                task_manager.create_task(server_id, data),
+                _bot_instance.loop
+            )
+            task = future.result(timeout=10)
+            return jsonify(task), 201
+        else:
+            # Fallback for when bot is not connected (e.g. unit tests)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                task = loop.run_until_complete(task_manager.create_task(server_id, data))
+            finally:
+                loop.close()
+            return jsonify(task), 201
             
-        return jsonify(task), 201
     except Exception as e:
         return safe_error_response(e)
 
@@ -710,15 +743,22 @@ def update_task(server_id, task_id):
     try:
         data = request.get_json()
         
-        # Run async update_task in event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(task_manager.update_task(int(server_id), int(task_id), data))
-        finally:
-            loop.close()
+        if _bot_instance and _bot_instance.loop:
+            future = asyncio.run_coroutine_threadsafe(
+                task_manager.update_task(int(server_id), int(task_id), data),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=10)
+            return jsonify(result), 200
+        else:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(task_manager.update_task(int(server_id), int(task_id), data))
+            finally:
+                loop.close()
+            return jsonify(result), 200
             
-        return jsonify(result), 200
     except Exception as e:
         return safe_error_response(e)
 
@@ -726,13 +766,19 @@ def update_task(server_id, task_id):
 @require_guild_access
 def delete_task(server_id, task_id):
     try:
-        # Run async delete_task in event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            result = loop.run_until_complete(task_manager.delete_task(int(server_id), int(task_id)))
-        finally:
-            loop.close()
+        if _bot_instance and _bot_instance.loop:
+            future = asyncio.run_coroutine_threadsafe(
+                task_manager.delete_task(int(server_id), int(task_id)),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=10)
+        else:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(task_manager.delete_task(int(server_id), int(task_id)))
+            finally:
+                loop.close()
         
         if not result.get('success', False):
             return jsonify({'error': result.get('error', 'Failed to delete task')}), 400
@@ -826,11 +872,9 @@ def create_announcement(server_id):
         embed_color = data.get('embed_color', '#5865F2')
         auto_pin = data.get('pinned', False)
         
-        # Run async create_announcement
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            announcement = loop.run_until_complete(
+        # Use bot loop for async operations
+        if _bot_instance and _bot_instance.loop:
+            future = asyncio.run_coroutine_threadsafe(
                 announcement_manager.create_announcement(
                     guild_id=server_id,
                     title=title,
@@ -841,12 +885,14 @@ def create_announcement(server_id):
                     announcement_type=announcement_type,
                     embed_color=embed_color,
                     auto_pin=auto_pin
-                )
+                ),
+                _bot_instance.loop
             )
-        finally:
-            loop.close()
+            announcement = future.result(timeout=10)
+            return jsonify(announcement), 201
+        else:
+            return jsonify({'error': 'Bot is not ready'}), 503
             
-        return jsonify(announcement), 201
     except Exception as e:
         return safe_error_response(e)
 
@@ -865,8 +911,25 @@ def get_embeds(server_id):
 def create_embed(server_id):
     try:
         data = request.get_json()
-        embed = embed_builder.create_embed(server_id, data)
-        return jsonify(embed), 201
+        embed_data = embed_builder.create_embed(server_id, data)
+        
+        # Save to database
+        data_manager.admin_client.table('embeds').upsert({
+            'embed_id': embed_data['embed_id'],
+            'guild_id': str(server_id),
+            'title': embed_data.get('title'),
+            'description': embed_data.get('description'),
+            'color': embed_data.get('color'),
+            'fields': embed_data.get('fields', []),
+            'footer': embed_data.get('footer'),
+            'thumbnail': embed_data.get('thumbnail_url'),
+            'image': embed_data.get('image_url'),
+            'channel_id': embed_data.get('channel_id'),
+            'created_by': request.user.get('id', 'unknown'),
+            'created_at': embed_data['created_at']
+        }).execute()
+        
+        return jsonify(embed_data), 201
     except Exception as e:
         return safe_error_response(e)
 

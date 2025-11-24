@@ -1472,7 +1472,7 @@ async function createAnnouncement() {
                 title,
                 content,
                 channel_id: channelId,
-                is_pinned: isPinned
+                pinned: isPinned
             })
         });
 
@@ -1505,493 +1505,6 @@ async function deleteAnnouncement(announcementId) {
 }
 
 // ========== EMBED ACTIONS ==========
-
-function showCreateEmbedModal() {
-    const modal = createModal('Create Embed', `
-        <form id="embed-form" onsubmit="return false;">
-            <div class="form-group">
-                <label>Title</label>
-                <input type="text" id="embed-title" class="form-control">
-            </div>
-            <div class="form-group">
-                <label>Description</label>
-                <textarea id="embed-description" class="form-control" rows="4"></textarea>
-            </div>
-            <div class="form-group">
-                <label>Color (hex)</label>
-                <input type="color" id="embed-color" class="form-control" value="#5865F2">
-            </div>
-            <div class="form-group">
-                <label>Channel</label>
-                <select id="embed-channel" class="form-control">
-                    ${getChannelOptions()}
-                </select>
-            </div>
-            <div class="button-group">
-                <button type="button" onclick="createEmbed()" class="btn-success">Create</button>
-                <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
-            </div>
-        </form>
-    `);
-
-    document.body.appendChild(modal);
-    modal.style.display = 'block';
-}
-
-async function createEmbed() {
-    const title = document.getElementById('embed-title').value;
-    const description = document.getElementById('embed-description').value;
-    const color = document.getElementById('embed-color').value;
-    const channelId = document.getElementById('embed-channel').value;
-
-    try {
-        await apiCall(`/api/${currentServerId}/embeds`, {
-            method: 'POST',
-            body: JSON.stringify({
-                title,
-                description,
-                color,
-                channel_id: channelId
-            })
-        });
-
-        showNotification('Embed created successfully!', 'success');
-        closeModal();
-        loadEmbeds();
-    } catch (error) {
-        showNotification('Failed to create embed: ' + error.message, 'error');
-    }
-}
-
-async function editEmbed(embedId) {
-    showNotification('Edit functionality coming soon', 'info');
-}
-
-async function sendEmbed(embedId) {
-    if (!confirm('Send this embed to Discord?')) return;
-
-    try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
-            method: 'POST'
-        });
-
-        showNotification('Embed sent!', 'success');
-    } catch (error) {
-        showNotification('Failed to send embed: ' + error.message, 'error');
-    }
-}
-
-async function deleteEmbed(embedId) {
-    if (!confirm('Are you sure you want to delete this embed?')) return;
-
-    try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
-            method: 'DELETE'
-        });
-
-        showNotification('Embed deleted', 'success');
-        loadEmbeds();
-    } catch (error) {
-        showNotification('Failed to delete embed: ' + error.message, 'error');
-    }
-}
-
-// ========== CHANNEL SETTINGS ACTIONS ==========
-
-async function saveChannelSetting(type) {
-    const channelMap = {
-        'welcome': 'welcome-channel',
-        'log': 'log-channel',
-        'task': 'task-channel',
-        'shop': 'shop-channel'
-    };
-
-    const selectId = channelMap[type];
-    const channelId = document.getElementById(selectId).value;
-    const statusId = `${selectId}-status`;
-
-    try {
-        const updateData = {};
-        if (type === 'welcome') updateData.welcome_channel = channelId;
-        if (type === 'log') updateData.log_channel = channelId;
-        if (type === 'task') updateData.task_channel_id = channelId;
-        if (type === 'shop') updateData.shop_channel_id = channelId;
-
-        await apiCall(`/api/${currentServerId}/config`, {
-            method: 'PUT',
-            body: JSON.stringify(updateData)
-        });
-
-        document.getElementById(statusId).textContent = '✓ Saved';
-        document.getElementById(statusId).style.color = 'var(--success-color)';
-
-        setTimeout(() => {
-            document.getElementById(statusId).textContent = '';
-        }, 2000);
-
-        showNotification('Channel setting saved', 'success');
-    } catch (error) {
-        document.getElementById(statusId).textContent = '✗ Failed';
-        document.getElementById(statusId).style.color = 'var(--danger-color)';
-        showNotification('Failed to save: ' + error.message, 'error');
-    }
-}
-
-async function saveCurrencySettings() {
-    const currencyName = document.getElementById('currency-name').value;
-    const currencySymbol = document.getElementById('currency-symbol').value;
-
-    try {
-        await apiCall(`/api/${currentServerId}/config`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                currency_name: currencyName,
-                currency_symbol: currencySymbol
-            })
-        });
-
-        document.getElementById('currency-settings-status').textContent = '✓ Saved';
-        document.getElementById('currency-settings-status').style.color = 'var(--success-color)';
-
-        setTimeout(() => {
-            document.getElementById('currency-settings-status').textContent = '';
-        }, 2000);
-
-        showNotification('Currency settings saved', 'success');
-    } catch (error) {
-        showNotification('Failed to save: ' + error.message, 'error');
-    }
-}
-
-async function saveFeatureToggle(feature) {
-    const checkbox = document.getElementById(`feature-${feature}`);
-    const statusId = `feature-${feature}-status`;
-
-    try {
-        const updateData = {};
-        updateData[`feature_${feature}`] = checkbox.checked;
-
-        await apiCall(`/api/${currentServerId}/config`, {
-            method: 'PUT',
-            body: JSON.stringify(updateData)
-        });
-
-        document.getElementById(statusId).textContent = '✓ Saved';
-        document.getElementById(statusId).style.color = 'var(--success-color)';
-
-        setTimeout(() => {
-            document.getElementById(statusId).textContent = '';
-        }, 2000);
-
-        showNotification(`${feature} feature ${checkbox.checked ? 'enabled' : 'disabled'}`, 'success');
-    } catch (error) {
-        showNotification('Failed to save: ' + error.message, 'error');
-    }
-}
-
-async function saveBotBehavior() {
-    const inactivityDays = document.getElementById('inactivity-days').value;
-    const autoExpireTasks = document.getElementById('auto-expire-tasks').checked;
-    const requireTaskProof = document.getElementById('require-task-proof').checked;
-
-    try {
-        await apiCall(`/api/${currentServerId}/config`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                inactivity_days: parseInt(inactivityDays),
-                auto_expire_enabled: autoExpireTasks,
-                require_proof: requireTaskProof
-            })
-        });
-
-        document.getElementById('bot-behavior-status').textContent = '✓ Saved';
-        document.getElementById('bot-behavior-status').style.color = 'var(--success-color)';
-
-        setTimeout(() => {
-            document.getElementById('bot-behavior-status').textContent = '';
-        }, 2000);
-
-        showNotification('Bot behavior settings saved', 'success');
-    } catch (error) {
-        showNotification('Failed to save: ' + error.message, 'error');
-    }
-}
-
-// ========== TRANSACTION FILTERS ==========
-
-function showTransactionFilters() {
-    const filters = document.getElementById('transaction-filters');
-    if (filters) {
-        filters.style.display = filters.style.display === 'none' ? 'block' : 'none';
-    }
-}
-
-function hideTransactionFilters() {
-    const filters = document.getElementById('transaction-filters');
-    if (filters) {
-        filters.style.display = 'none';
-    }
-}
-
-function applyFilters() {
-    // TODO: Implement filter logic
-    showNotification('Filters applied', 'info');
-}
-
-function clearFilters() {
-    // TODO: Implement clear filters
-    showNotification('Filters cleared', 'info');
-}
-
-async function exportTransactions() {
-    showNotification('Export functionality coming soon', 'info');
-}
-
-async function archiveOldTransactions() {
-    if (!confirm('Archive transactions older than 30 days?')) return;
-    showNotification('Archive functionality coming soon', 'info');
-}
-
-// ========== SHOP ITEM MANAGEMENT ==========
-
-function showCreateShopItemModal() {
-    document.getElementById('shop-item-modal-title').textContent = 'Add Shop Item';
-    document.getElementById('shop-item-form').reset();
-    document.getElementById('shop-item-id').value = '';
-    document.getElementById('shop-item-modal').style.display = 'block';
-}
-
-async function editShopItem(itemId) {
-    try {
-        const data = await apiCall(`/api/${currentServerId}/shop`);
-        const item = data.items.find(i => i.item_id === itemId);
-
-        if (!item) {
-            showNotification('Item not found', 'error');
-            return;
-        }
-
-        document.getElementById('shop-item-modal-title').textContent = 'Edit Shop Item';
-        document.getElementById('shop-item-id').value = itemId;
-        document.getElementById('shop-item-name').value = item.name || '';
-        document.getElementById('shop-item-description').value = item.description || '';
-        document.getElementById('shop-item-price').value = item.price || 0;
-        document.getElementById('shop-item-category').value = item.category || 'general';
-        document.getElementById('shop-item-stock').value = item.stock !== undefined ? item.stock : -1;
-        document.getElementById('shop-item-emoji').value = item.emoji || '';
-        document.getElementById('shop-item-modal').style.display = 'block';
-    } catch (error) {
-        showNotification(`Failed to load item: ${error.message}`, 'error');
-    }
-}
-
-async function saveShopItem(event) {
-    event.preventDefault();
-
-    const itemId = document.getElementById('shop-item-id').value;
-    const itemData = {
-        item_id: itemId || document.getElementById('shop-item-name').value.toLowerCase().replace(/\s+/g, '_'),
-        name: document.getElementById('shop-item-name').value,
-        description: document.getElementById('shop-item-description').value,
-        price: parseInt(document.getElementById('shop-item-price').value),
-        category: document.getElementById('shop-item-category').value,
-        stock: parseInt(document.getElementById('shop-item-stock').value),
-        emoji: document.getElementById('shop-item-emoji').value || '🛍️'
-    };
-
-    try {
-        if (itemId) {
-            // Update existing item
-            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
-                method: 'PUT',
-                body: JSON.stringify(itemData)
-            });
-            showNotification('Shop item updated successfully', 'success');
-        } else {
-            // Create new item
-            await apiCall(`/api/${currentServerId}/shop`, {
-                method: 'POST',
-                body: JSON.stringify(itemData)
-            });
-            showNotification('Shop item created successfully', 'success');
-        }
-
-        closeShopItemModal();
-        loadShop();
-    } catch (error) {
-        showNotification(`Failed to save shop item: ${error.message}`, 'error');
-    }
-}
-
-function closeShopItemModal() {
-    document.getElementById('shop-item-modal').style.display = 'none';
-}
-
-// ========== TASK MANAGEMENT ==========
-
-function showCreateTaskModal() {
-    document.getElementById('task-modal-title').textContent = 'Create Task';
-    document.getElementById('task-form').reset();
-    document.getElementById('task-id').value = '';
-    document.getElementById('task-modal').style.display = 'block';
-}
-
-async function editTask(taskId) {
-    try {
-        const data = await apiCall(`/api/${currentServerId}/tasks`);
-        const task = Object.values(data.tasks).find(t => t.task_id === taskId);
-
-        if (!task) {
-            showNotification('Task not found', 'error');
-            return;
-        }
-
-        document.getElementById('task-modal-title').textContent = 'Edit Task';
-        document.getElementById('task-id').value = taskId;
-        document.getElementById('task-name').value = task.name || '';
-        document.getElementById('task-description').value = task.description || '';
-        document.getElementById('task-reward').value = task.reward || 0;
-        document.getElementById('task-duration').value = task.duration_hours || 24;
-        document.getElementById('task-max-claims').value = task.max_claims !== undefined ? task.max_claims : -1;
-        document.getElementById('task-modal').style.display = 'block';
-    } catch (error) {
-        showNotification(`Failed to load task: ${error.message}`, 'error');
-    }
-}
-
-async function saveTask(event) {
-    event.preventDefault();
-
-    const taskId = document.getElementById('task-id').value;
-    const taskData = {
-        name: document.getElementById('task-name').value,
-        description: document.getElementById('task-description').value,
-        reward: parseInt(document.getElementById('task-reward').value),
-        duration_hours: parseInt(document.getElementById('task-duration').value),
-        max_claims: parseInt(document.getElementById('task-max-claims').value)
-    };
-
-    try {
-        if (taskId) {
-            // Update existing task
-            await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
-                method: 'PUT',
-                body: JSON.stringify(taskData)
-            });
-            showNotification('Task updated successfully', 'success');
-        } else {
-            // Create new task
-            await apiCall(`/api/${currentServerId}/tasks`, {
-                method: 'POST',
-                body: JSON.stringify(taskData)
-            });
-            showNotification('Task created successfully', 'success');
-        }
-
-        closeTaskModal();
-        loadTasks();
-    } catch (error) {
-        showNotification(`Failed to save task: ${error.message}`, 'error');
-    }
-}
-
-function closeTaskModal() {
-    document.getElementById('task-modal').style.display = 'none';
-}
-
-// ========== ANNOUNCEMENT MANAGEMENT ==========
-
-async function showCreateAnnouncementModal() {
-    document.getElementById('announcement-modal-title').textContent = 'Create Announcement';
-    document.getElementById('announcement-form').reset();
-    document.getElementById('announcement-id').value = '';
-
-    // Load channels
-    await loadChannelsForSelect('announcement-channel');
-
-    document.getElementById('announcement-modal').style.display = 'block';
-}
-
-async function editAnnouncement(announcementId) {
-    try {
-        const data = await apiCall(`/api/${currentServerId}/announcements`);
-        const announcement = data.announcements.find(a => a.id === announcementId);
-
-        if (!announcement) {
-            showNotification('Announcement not found', 'error');
-            return;
-        }
-
-        document.getElementById('announcement-modal-title').textContent = 'Edit Announcement';
-        document.getElementById('announcement-id').value = announcementId;
-        document.getElementById('announcement-title').value = announcement.title || '';
-        document.getElementById('announcement-content').value = announcement.content || '';
-        document.getElementById('announcement-pinned').checked = announcement.pinned || false;
-
-        // Load channels
-        await loadChannelsForSelect('announcement-channel');
-        document.getElementById('announcement-channel').value = announcement.channel_id || '';
-
-        document.getElementById('announcement-modal').style.display = 'block';
-    } catch (error) {
-        showNotification(`Failed to load announcement: ${error.message}`, 'error');
-    }
-}
-
-async function saveAnnouncement(event) {
-    event.preventDefault();
-
-    const announcementId = document.getElementById('announcement-id').value;
-    const announcementData = {
-        title: document.getElementById('announcement-title').value,
-        content: document.getElementById('announcement-content').value,
-        channel_id: document.getElementById('announcement-channel').value,
-        pinned: document.getElementById('announcement-pinned').checked
-    };
-
-    try {
-        if (announcementId) {
-            // Update existing announcement
-            await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
-                method: 'PUT',
-                body: JSON.stringify(announcementData)
-            });
-            showNotification('Announcement updated successfully', 'success');
-        } else {
-            // Create and send new announcement
-            await apiCall(`/api/${currentServerId}/announcements`, {
-                method: 'POST',
-                body: JSON.stringify(announcementData)
-            });
-            showNotification('Announcement sent successfully', 'success');
-        }
-
-        closeAnnouncementModal();
-        loadAnnouncements();
-    } catch (error) {
-        showNotification(`Failed to save announcement: ${error.message}`, 'error');
-    }
-}
-
-function closeAnnouncementModal() {
-    document.getElementById('announcement-modal').style.display = 'none';
-}
-
-async function deleteAnnouncement(announcementId) {
-    if (!confirm('Are you sure you want to delete this announcement?')) return;
-
-    try {
-        await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
-            method: 'DELETE'
-        });
-        showNotification('Announcement deleted successfully', 'success');
-        loadAnnouncements();
-    } catch (error) {
-        showNotification(`Failed to delete announcement: ${error.message}`, 'error');
-    }
-}
-
-// ========== EMBED MANAGEMENT ==========
 
 async function showCreateEmbedModal() {
     document.getElementById('embed-modal-title').textContent = 'Create Embed';
@@ -2032,7 +1545,7 @@ async function saveEmbed(event) {
         title: document.getElementById('embed-title').value,
         description: document.getElementById('embed-description').value,
         color: document.getElementById('embed-color').value,
-        footer: document.getElementById('embed-footer').value,
+        footer_text: document.getElementById('embed-footer').value,
         image_url: document.getElementById('embed-image-url').value,
         thumbnail_url: document.getElementById('embed-thumbnail-url').value
     };
@@ -2229,77 +1742,114 @@ function closeModal() {
 
 function showCreateShopItemModal() {
     const modal = createModal('Create Shop Item', `
-        <form id="shop-item-form" onsubmit="return false;">
-            <input type="hidden" id="shop-item-id">
-            <div class="form-group">
-                <label>Item Name</label>
-                <input type="text" id="shop-item-name" class="form-control" required>
-            </div>
-            <div class="form-group">
-                <label>Description</label>
-                <textarea id="shop-item-description" class="form-control" rows="3"></textarea>
-            </div>
-            <div class="form-group">
-                <label>Price</label>
-                <input type="number" id="shop-item-price" class="form-control" required>
-            </div>
-            <div class="form-group">
-                <label>Category</label>
-                <select id="shop-item-category" class="form-control">
-                    <option value="general">General</option>
-                    <option value="consumable">Consumable</option>
-                    <option value="role">Role</option>
-                    <option value="collectible">Collectible</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Stock (-1 for unlimited)</label>
-                <input type="number" id="shop-item-stock" class="form-control" value="-1">
-            </div>
-            <div class="form-group">
-                <label>Emoji (optional)</label>
-                <input type="text" id="shop-item-emoji" class="form-control" placeholder="🎁">
-            </div>
-            <div class="button-group">
-                <button type="button" onclick="saveShopItem(event)" class="btn-success">Save</button>
-                <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
-            </div>
-        </form>
+<form id="shop-item-form" onsubmit="return false;">
+    <input type="hidden" id="shop-item-id">
+    <div class="form-group">
+        <label>Item Name</label>
+        <input type="text" id="shop-item-name" class="form-control" required>
+    </div>
+    <div class="form-group">
+        <label>Description</label>
+        <textarea id="shop-item-description" class="form-control" rows="3"></textarea>
+    </div>
+    <div class="form-group">
+        <label>Price</label>
+        <input type="number" id="shop-item-price" class="form-control" required>
+    </div>
+    <div class="form-group">
+        <label>Category</label>
+        <select id="shop-item-category" class="form-control" onchange="toggleRoleSelect()">
+            <option value="general">General</option>
+            <option value="consumable">Consumable</option>
+            <option value="role">Role</option>
+            <option value="collectible">Collectible</option>
+        </select>
+    </div>
+    
+    <!-- Role Selection (Hidden by default) -->
+    <div class="form-group" id="role-select-group" style="display: none;">
+        <label>Select Role</label>
+        <select id="shop-item-role" class="form-control">
+            ${getRoleOptions()}
+        </select>
+        <small>The role to give when purchased.</small>
+    </div>
+
+    <div class="form-group">
+        <label>Stock (-1 for unlimited)</label>
+        <input type="number" id="shop-item-stock" class="form-control" value="-1">
+    </div>
+    <div class="form-group">
+        <label>Emoji</label>
+        <div class="emoji-picker-container">
+            <input type="text" id="shop-item-emoji" class="form-control" placeholder="🎁 or select ->">
+            <select class="form-control" style="width: 100px;" onchange="document.getElementById('shop-item-emoji').value = this.value">
+                <option value="">Pick...</option>
+                <option value="🎁">🎁</option>
+                <option value="👕">👕</option>
+                <option value="🎩">🎩</option>
+                <option value="👑">👑</option>
+                <option value="⚔️">⚔️</option>
+                <option value="🛡️">🛡️</option>
+                <option value="🧪">🧪</option>
+                <option value="📜">📜</option>
+                <option value="💎">💎</option>
+                <option value="💰">💰</option>
+                <option value="🏷️">🏷️</option>
+                <option value="📦">📦</option>
+            </select>
+        </div>
+    </div>
+    <div class="button-group">
+        <button type="button" onclick="saveShopItem(event)" class="btn-success">Save</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+</form>
     `);
 
     document.body.appendChild(modal);
     modal.style.display = 'block';
 }
 
+function toggleRoleSelect() {
+    const category = document.getElementById('shop-item-category').value;
+    const roleGroup = document.getElementById('role-select-group');
+    if (category === 'role') {
+        roleGroup.style.display = 'block';
+    } else {
+        roleGroup.style.display = 'none';
+    }
+}
+
 function showCreateAnnouncementModal() {
     const modal = createModal('Create Announcement', `
-        <form id="announcement-form" onsubmit="return false;">
-            <input type="hidden" id="announcement-id">
-            <div class="form-group">
-                <label>Title</label>
-                <input type="text" id="announcement-title" class="form-control" required>
-            </div>
-            <div class="form-group">
-                <label>Content</label>
-                <textarea id="announcement-content" class="form-control" rows="5" required></textarea>
-            </div>
-            <div class="form-group">
-                <label>Channel</label>
-                <select id="announcement-channel" class="form-control">
-                    ${getChannelOptions()}
-                </select>
-            </div>
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="announcement-pinned">
-                    Pin this announcement
-                </label>
-            </div>
-            <div class="button-group">
-                <button type="button" onclick="saveAnnouncement(event)" class="btn-success">Send</button>
-                <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
-            </div>
-        </form>
+<form id="announcement-form" onsubmit="return false;">
+    <input type="hidden" id="announcement-id">
+    <div class="form-group">
+        <label>Title</label>
+        <input type="text" id="announcement-title" class="form-control" required>
+    </div>
+    <div class="form-group">
+        <label>Content</label>
+        <textarea id="announcement-content" class="form-control" rows="5" required></textarea>
+    </div>
+    <div class="form-group">
+        <label>Channel</label>
+        <select id="announcement-channel" class="form-control">
+            ${getChannelOptions()}
+        </select>
+    </div>
+    <div class="form-group">
+        <label>
+            <input type="checkbox" id="announcement-pinned">
+            Pin this announcement
+        </label>
+    </div>
+    <div class="button-group">
+        <button type="button" onclick="saveAnnouncement(event)" class="btn-success">Send</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+</form>
     `);
 
     document.body.appendChild(modal);
