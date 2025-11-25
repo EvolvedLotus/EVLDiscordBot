@@ -6,12 +6,20 @@
     --success-color: #3BA55D;
     --danger-color: #ED4245;
     --warning-color: #FAA81A;
-    --background: #F2F3F5;
-    --surface: #FFFFFF;
-    --surface-light: #F2F3F5;
-    --text-primary: #2E3338;
-    --text-secondary: #5E6772;
-    --border-color: #E3E5E8;
+    --background: #36393f;
+    --surface: #2f3136;
+    --surface-light: #40444b;
+    --text-primary: #dcddde;
+    --text-secondary: #b9bbbe;
+    --border-color: #202225;
+}
+
+body {
+    font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background-color: var(--background);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 0;
 }
 
 /* Login Screen Styles */
