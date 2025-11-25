@@ -39,6 +39,7 @@ class TaskChannelMonitor:
     @tasks.loop(minutes=5)  # Check every 5 minutes
     async def monitor_task_channels(self):
         """Check all guilds and ensure task messages are posted"""
+        logger.info("🔄 Task channel monitor loop running...")
         try:
             # Get all active guilds
             guilds_data = self.data_manager.admin_client.table('guilds').select('*').eq('is_active', True).execute()
