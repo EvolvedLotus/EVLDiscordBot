@@ -2255,11 +2255,15 @@ async function handleLogin(event) {
 
         const data = await response.json();
 
-        if (response.ok && data.user) {
-            // Store user data
+        if (data.success) {
             currentUser = data.user;
 
-            // Hide login screen and show dashboard
+            // Set user role for superadmin (username/password login)
+            if (typeof window.currentUserRole !== 'undefined') {
+                window.currentUserRole = 'superadmin';
+            }
+
+            // Hide login, show dashboard
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('main-dashboard').style.display = 'flex';
 
@@ -3064,6 +3068,11 @@ async function saveChannelSetting(type) {
             }, 3000);
         }
         showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} channel saved`, 'success');
+
+        // Reload config to ensure persistence
+        setTimeout(() => {
+            loadConfigTab();
+        }, 500);
     } catch (error) {
         if (statusSpan) {
             statusSpan.textContent = '❌ Failed';
