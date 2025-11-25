@@ -88,12 +88,26 @@ async function loadServers() {
 
         if (data && data.servers && serverSelect) {
             serverSelect.innerHTML = '<option value="">-- Select a server --</option>';
+
+            if (data.servers.length === 0) {
+                serverSelect.innerHTML = '<option value="">No servers available</option>';
+                showNotification('You don\'t have access to any servers', 'warning');
+                return;
+            }
+
             data.servers.forEach(server => {
                 const option = document.createElement('option');
                 option.value = server.id;
                 option.textContent = server.name;
                 serverSelect.appendChild(option);
             });
+
+            // Auto-select first server if only one available or if none selected
+            if (data.servers.length > 0 && !currentServerId) {
+                serverSelect.value = data.servers[0].id;
+                currentServerId = data.servers[0].id;
+                await onServerChange();
+            }
         }
     } catch (error) {
         console.error('Failed to load servers:', error);

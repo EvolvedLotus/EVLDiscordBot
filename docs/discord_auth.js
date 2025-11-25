@@ -118,8 +118,9 @@ async function handleDiscordCallback() {
         // Clean URL (remove OAuth params)
         window.history.replaceState({}, document.title, window.location.pathname);
 
-        // Show dashboard
+        // Load servers first, then show dashboard
         showNotification(`Welcome, ${data.user.username}!`, 'success');
+        await loadServers();
         showDashboard();
 
     } catch (error) {
