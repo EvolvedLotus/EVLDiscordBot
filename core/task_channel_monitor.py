@@ -13,6 +13,113 @@ import asyncio
 logger = logging.getLogger(__name__)
 
 
+class GlobalTaskClaimView(discord.ui.View):
+    """View for claiming global tasks (like ad claim task)"""
+    
+    def __init__(self, task_key: str):
+        super().__init__(timeout=None)
+        self.task_key = task_key
+    
+    @discord.ui.button(
+        label="Claim Task",
+        style=discord.ButtonStyle.green,
+        custom_id="claim_global_task",
+        emoji="✋"
+    )
+    async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle global task claim button click"""
+        try:
+            await interaction.response.defer(ephemeral=True)
+            
+            # Get ad_claim_manager from backend
+            try:
+                import backend
+                ad_claim_manager = backend.ad_claim_manager
+            except Exception as e:
+                logger.error(f"Error importing ad_claim_manager: {e}")
+                await interaction.followup.send(
+                    "❌ Ad claim system is not available. Please contact an administrator.",
+                    ephemeral=True
+                )
+                return
+            
+            if not ad_claim_manager:
+                await interaction.followup.send(
+                    "❌ Ad claim system is not available. Please contact an administrator.",
+                    ephemeral=True
+                )
+                return
+            
+            user_id = str(interaction.user.id)
+            guild_id = str(interaction.guild.id)
+            
+            # Create ad session
+            result = ad_claim_manager.create_ad_session(
+                user_id=user_id,
+                guild_id=guild_id
+            )
+            
+            if not result.get('success'):
+                await interaction.followup.send(
+                    f"❌ Failed to create ad session: {result.get('error', 'Unknown error')}",
+                    ephemeral=True
+                )
+                return
+            
+            # Get the viewer URL
+            session_id = result['session_id']
+            
+            # Construct the full URL
+            import os
+            base_url = os.getenv('BACKEND_URL', 'http://localhost:5000')
+            viewer_url = f"{base_url}/ad-viewer.html?session={session_id}"
+            
+            # Create embed with instructions
+            embed = discord.Embed(
+                title="🎁 Claim Your Free Points!",
+                description="Click the button below to watch an ad and earn **10 points**!",
+                color=discord.Color.purple()
+            )
+            
+            embed.add_field(
+                name="How it works:",
+                value=(
+                    "1️⃣ Click the **Watch Ad** button below\n"
+                    "2️⃣ Wait for the ad to load and display\n"
+                    "3️⃣ Click **Claim Reward** after viewing\n"
+                    "4️⃣ Get **10 points** added to your balance!"
+                ),
+                inline=False
+            )
+            
+            embed.set_footer(
+                text="Disclaimer: Ads are from third-party networks. We don't control their content."
+            )
+            
+            # Create button view with URL
+            from cogs.ad_claim import AdClaimView
+            view = AdClaimView(viewer_url)
+            
+            await interaction.followup.send(
+                embed=embed,
+                view=view,
+                ephemeral=True
+            )
+            
+            logger.info(f"Created ad session {session_id} for user {user_id} in guild {guild_id}")
+            
+        except Exception as e:
+            logger.error(f"Error in global task claim: {e}", exc_info=True)
+            try:
+                await interaction.followup.send(
+                    "❌ An error occurred. Please try again later.",
+                    ephemeral=True
+                )
+            except Exception:
+                pass
+
+
+
 class TaskChannelMonitor:
     """Monitors task channel and maintains task messages"""
     
@@ -240,8 +347,13 @@ class TaskChannelMonitor:
                     )
             
             # Create view with claim button
-            from cogs.tasks import TaskClaimView
-            view = TaskClaimView(task['task_id'])
+            if is_global and task.get('task_key') == 'ad_claim_task':
+                # For ad claim task, use custom view that handles ad session creation
+                view = GlobalTaskClaimView(task.get('task_key'))
+            else:
+                # Regular tasks use the standard claim button
+                from cogs.tasks import TaskClaimView
+                view = TaskClaimView(task['task_id'])
             
             # Post message
             message = await channel.send(embed=embed, view=view)
