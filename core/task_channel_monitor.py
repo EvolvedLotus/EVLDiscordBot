@@ -262,9 +262,27 @@ class TaskChannelMonitor:
     async def ensure_task_posted(self, guild: discord.Guild, channel: discord.TextChannel, task: dict):
         """Ensure a task is posted in the channel, repost if deleted"""
         try:
-            message_id = task.get('message_id')
             task_id = task.get('task_id')
             is_global = task.get('is_global', False)
+            
+            # Get message_id - for global tasks, fetch from database
+            message_id = None
+            if is_global:
+                # Fetch from global_task_messages table
+                try:
+                    result = self.data_manager.admin_client.table('global_task_messages') \
+                        .select('message_id') \
+                        .eq('guild_id', str(guild.id)) \
+                        .eq('task_key', task.get('task_key')) \
+                        .execute()
+                    
+                    if result.data and len(result.data) > 0:
+                        message_id = result.data[0].get('message_id')
+                except Exception as e:
+                    logger.error(f"Error fetching global task message ID: {e}")
+            else:
+                # For regular tasks, it's in the task dict
+                message_id = task.get('message_id')
             
             # Try to fetch existing message
             message_exists = False
@@ -272,14 +290,16 @@ class TaskChannelMonitor:
                 try:
                     await channel.fetch_message(int(message_id))
                     message_exists = True
+                    logger.debug(f"Task {task_id} message already exists")
                 except discord.NotFound:
                     message_exists = False
+                    logger.info(f"Task {task_id} message not found, will repost")
                 except Exception as e:
                     logger.error(f"Error fetching message {message_id}: {e}")
             
             # If message doesn't exist, post it
             if not message_exists:
-                logger.info(f"Reposting task {task_id} to channel {channel.id}")
+                logger.info(f"Posting task {task_id} to channel {channel.id}")
                 await self.post_task_message(guild, channel, task)
                 
         except Exception as e:
