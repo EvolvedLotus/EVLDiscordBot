@@ -166,16 +166,15 @@ class AdClaimManager:
             Dict with reward status
         """
         try:
-            # Use transaction manager to add currency
-            result = self.transaction_manager.add_currency(
-                user_id=user_id,
-                guild_id=guild_id,
+            # Use transaction manager to adjust balance
+            result = self.transaction_manager.adjust_balance(
+                user_id=int(user_id),
+                guild_id=int(guild_id),
                 amount=amount,
-                description=f"Watched ad - Session {session_id[:8]}",
-                transaction_type='ad_reward'
+                reason=f"Watched ad - Session {session_id[:8]}"
             )
             
-            if result['success']:
+            if result.get('success'):
                 # Update ad_views record
                 self.data_manager.admin_client.table('ad_views') \
                     .update({
@@ -195,8 +194,14 @@ class AdClaimManager:
                     .execute()
                 
                 logger.info(f"Granted {amount} currency to user {user_id} for ad view {session_id}")
-            
-            return result
+                
+                return {
+                    'success': True,
+                    'new_balance': result.get('new_balance'),
+                    'transaction_id': result.get('transaction_id')
+                }
+            else:
+                return result
             
         except Exception as e:
             logger.error(f"Error granting reward: {e}")
