@@ -1,4 +1,4 @@
-DISCORD BOT COMMAND LIST
+DISCORD BOT COMMAnND LIST
 ========================
 This file contains all Discord slash commands that are actually defined in the codebase.
 Last updated: 2025-11-23
