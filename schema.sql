@@ -1259,6 +1259,25 @@ CREATE TABLE IF NOT EXISTS global_task_claims (
 );
 
 -- =====================================================
+-- GLOBAL TASK MESSAGES TABLE (Discord Message Tracking)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS global_task_messages (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    task_key TEXT NOT NULL,
+    
+    -- Discord message info
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    
+    -- Timestamps
+    posted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    last_checked TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    
+    UNIQUE(guild_id, task_key)
+);
+
+-- =====================================================
 -- INDEXES FOR AD TRACKING
 -- =====================================================
 CREATE INDEX IF NOT EXISTS idx_ad_views_user ON ad_views(user_id);

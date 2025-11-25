@@ -108,6 +108,24 @@ async def run_bot():
         bot.task_manager = TaskManager(data_manager, bot.transaction_manager)
         bot.task_manager.set_cache_manager(bot.cache_manager)
         bot.shop_manager = ShopManager(data_manager, bot.transaction_manager)
+        
+        # Initialize ad claim manager
+        try:
+            from core.ad_claim_manager import AdClaimManager
+            bot.ad_claim_manager = AdClaimManager(data_manager, bot.transaction_manager)
+            logger.info("✓ Ad claim manager initialized")
+        except Exception as e:
+            logger.error(f"✗ Failed to initialize ad claim manager: {e}")
+            bot.ad_claim_manager = None
+        
+        # Initialize task channel monitor
+        try:
+            from core.task_channel_monitor import TaskChannelMonitor
+            bot.task_channel_monitor = TaskChannelMonitor(bot, data_manager, bot.ad_claim_manager)
+            logger.info("✓ Task channel monitor initialized")
+        except Exception as e:
+            logger.error(f"✗ Failed to initialize task channel monitor: {e}")
+            bot.task_channel_monitor = None
 
         # Set global references for backend
         set_bot_instance(bot)
@@ -300,6 +318,14 @@ async def run_bot():
                     logger.error(f"❌ Startup sync failed: {sync_result.get('error', 'Unknown error')}")
             except Exception as e:
                 logger.error(f"❌ Error during startup sync: {e}", exc_info=True)
+
+            # Start task channel monitor
+            if bot.task_channel_monitor:
+                try:
+                    await bot.task_channel_monitor.start_monitoring()
+                    logger.info("✅ Task channel monitor started")
+                except Exception as e:
+                    logger.error(f"❌ Failed to start task channel monitor: {e}")
 
             logger.info("=" * 60)
             logger.info("🎉 BOT IS FULLY READY AND OPERATIONAL")

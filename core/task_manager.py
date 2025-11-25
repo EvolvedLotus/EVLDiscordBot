@@ -648,15 +648,16 @@ class TaskManager:
 
     def get_tasks(self, guild_id: int) -> List[Dict]:
         """
-        Get all tasks for a guild (Admin view).
+        Get all tasks for a guild (Admin view), including global tasks.
         
         Args:
             guild_id: Guild ID
             
         Returns:
-            List of task dictionaries
+            List of task dictionaries (regular + global)
         """
         try:
+            # Get regular tasks
             tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
             tasks = tasks_data.get('tasks', {})
             
@@ -664,10 +665,36 @@ class TaskManager:
             for task_id, task in tasks.items():
                 # Ensure task_id is in the dict
                 task['task_id'] = task_id
+                task['is_global'] = False
                 tasks_list.append(task)
+            
+            # Get global tasks from Supabase
+            try:
+                global_tasks_result = self.data_manager.admin_client.table('global_tasks').select('*').eq('is_active', True).execute()
                 
+                for global_task in global_tasks_result.data:
+                    # Convert global task format to regular task format
+                    tasks_list.append({
+                        'task_id': global_task['task_key'],
+                        'name': global_task.get('name', global_task.get('title', 'Unnamed Task')),
+                        'description': global_task.get('description', ''),
+                        'reward': global_task['reward'],
+                        'status': 'active',
+                        'is_global': True,
+                        'is_repeatable': global_task.get('is_repeatable', False),
+                        'cooldown_minutes': global_task.get('cooldown_minutes', 0),
+                        'disclaimer': global_task.get('disclaimer'),
+                        'task_key': global_task['task_key'],
+                        'created_at': global_task.get('created_at', ''),
+                        'icon_emoji': global_task.get('icon_emoji', '🌍'),
+                        'button_text': global_task.get('button_text', 'Claim Here')
+                    })
+            except Exception as e:
+                logger.error(f"Error fetching global tasks: {e}")
+            
             # Sort by creation date if available, or ID
-            tasks_list.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+            # Put global tasks at the top
+            tasks_list.sort(key=lambda x: (not x.get('is_global', False), x.get('created_at', '')), reverse=True)
             
             return tasks_list
         except Exception as e:
