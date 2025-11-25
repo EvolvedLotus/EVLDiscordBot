@@ -122,7 +122,13 @@ def require_guild_access(f):
             request.user = user
             return f(server_id, *args, **kwargs)
 
-        # Validate user has access to this guild
+        # For Discord OAuth users, check allowed_guild_ids
+        allowed_guilds = user.get('allowed_guild_ids', [])
+        if allowed_guilds and server_id in allowed_guilds:
+            request.user = user
+            return f(server_id, *args, **kwargs)
+
+        # Fallback: Try to get user guilds from database
         try:
             user_guilds = data_manager.get_user_guilds(user['id'])
             if server_id not in [str(g.get('guild_id', g)) for g in user_guilds]:
@@ -202,12 +208,14 @@ try:
     from core.audit_manager import AuditManager
     from core.sync_manager import SyncManager
     from core.sse_manager import sse_manager
+    from core.discord_oauth import DiscordOAuthManager
 
     # Initialize managers
     data_manager = DataManager()
     cache_manager = CacheManager()
     audit_manager = AuditManager(data_manager)
     auth_manager = AuthManager(data_manager, os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me'))
+    discord_oauth_manager = DiscordOAuthManager(data_manager, auth_manager)
     transaction_manager = TransactionManager(data_manager, audit_manager, cache_manager)
     task_manager = TaskManager(data_manager, transaction_manager)
     shop_manager = ShopManager(data_manager, transaction_manager)
@@ -530,6 +538,7 @@ def get_me():
     """Alias for /api/auth/me for CMS compatibility"""
     return get_current_user()
 
+
 @app.route('/api/login', methods=['POST'])
 @limiter.limit("5 per minute")
 def login_alias():
@@ -541,23 +550,185 @@ def logout_alias():
     """Alias for /api/auth/logout for CMS compatibility"""
     return logout()
 
+# ========== DISCORD OAUTH2 AUTHENTICATION ==========
+@app.route('/api/auth/discord/url', methods=['GET'])
+def get_discord_auth_url():
+    """Get Discord OAuth2 authorization URL"""
+    try:
+        # Generate CSRF state token
+        import secrets
+        state = secrets.token_urlsafe(32)
+        
+        # Store state in session for validation
+        session['oauth_state'] = state
+        
+        auth_url = discord_oauth_manager.get_authorization_url(state)
+        
+        return jsonify({
+            'success': True,
+            'url': auth_url,
+            'state': state
+        }), 200
+    except Exception as e:
+        logger.error(f"Error generating Discord auth URL: {e}")
+        return safe_error_response(e)
+
+@app.route('/api/auth/discord/callback', methods=['POST'])
+@limiter.limit("10 per minute")
+def discord_oauth_callback():
+    """Handle Discord OAuth2 callback"""
+    try:
+        data = request.json
+        code = data.get('code')
+        state = data.get('state')
+        
+        if not code:
+            return jsonify({'success': False, 'error': 'Missing authorization code'}), 400
+        
+        # Validate state (CSRF protection)
+        stored_state = session.get('oauth_state')
+        if state and stored_state and state != stored_state:
+            logger.warning(f"OAuth state mismatch: {state} != {stored_state}")
+            return jsonify({'success': False, 'error': 'Invalid state parameter'}), 400
+        
+        # Clear state from session
+        session.pop('oauth_state', None)
+        
+        # Authenticate user with Discord
+        client_ip = get_remote_address()
+        
+        # Run async authentication
+        if _bot_instance and _bot_instance.loop:
+            future = asyncio.run_coroutine_threadsafe(
+                discord_oauth_manager.authenticate_discord_user(code, client_ip),
+                _bot_instance.loop
+            )
+            result = future.result(timeout=15)
+        else:
+            # Fallback for when bot is not connected
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    discord_oauth_manager.authenticate_discord_user(code, client_ip)
+                )
+            finally:
+                loop.close()
+        
+        if not result:
+            return jsonify({'success': False, 'error': 'Discord authentication failed'}), 500
+        
+        if result.get('error'):
+            return jsonify({
+                'success': False,
+                'error': result.get('message', 'Authentication failed')
+            }), 400
+        
+        # Set session cookie
+        response = jsonify({
+            'success': True,
+            'user': {
+                'id': result['user']['id'],
+                'username': result['user']['username'],
+                'discord_avatar': result['user'].get('discord_avatar'),
+                'is_superadmin': False,
+                'role': 'server_owner',
+                'guilds': result.get('guilds', [])
+            }
+        })
+        
+        # Cookie settings
+        cookie_kwargs = {
+            'httponly': True,
+            'secure': IS_PRODUCTION,
+            'max_age': 86400   # 24 hours
+        }
+        
+        if IS_PRODUCTION:
+            cookie_kwargs['samesite'] = 'None'
+        else:
+            cookie_kwargs['samesite'] = 'Lax'
+        
+        response.set_cookie('session_token', result['session_token'], **cookie_kwargs)
+        
+        logger.info(f"✅ Discord OAuth login successful: {result['user']['username']}")
+        
+        return response
+        
+    except Exception as e:
+        logger.exception(f"Discord OAuth callback error: {e}")
+        return safe_error_response(e)
+
+@app.route('/api/auth/discord/sync-guilds', methods=['POST'])
+@require_auth
+def sync_discord_guilds():
+    """Re-sync user's Discord guild ownership"""
+    try:
+        user = request.user
+        
+        if user.get('login_type') != 'discord':
+            return jsonify({'error': 'Only Discord users can sync guilds'}), 400
+        
+        # Run async guild sync
+        if _bot_instance and _bot_instance.loop:
+            future = asyncio.run_coroutine_threadsafe(
+                discord_oauth_manager.sync_user_guilds(user['id']),
+                _bot_instance.loop
+            )
+            success = future.result(timeout=10)
+        else:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                success = loop.run_until_complete(
+                    discord_oauth_manager.sync_user_guilds(user['id'])
+                )
+            finally:
+                loop.close()
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Guilds synced successfully'}), 200
+        else:
+            return jsonify({'success': False, 'error': 'Failed to sync guilds'}), 500
+            
+    except Exception as e:
+        logger.error(f"Error syncing Discord guilds: {e}")
+        return safe_error_response(e)
+
+
 # ========== SERVER MANAGEMENT ==========
 @app.route('/api/servers', methods=['GET'])
 @require_auth
 def get_servers():
     try:
+        user = request.user
+        
         # Fetch all guilds with details from database
         result = data_manager.admin_client.table('guilds').select('*').execute()
         
         servers = []
         for guild in result.data:
-            servers.append({
-                'id': guild['guild_id'],
-                'name': guild['server_name'],
-                'member_count': guild['member_count'],
-                'icon_url': guild.get('icon_url'),
-                'is_active': guild.get('is_active', True)
-            })
+            guild_id = guild['guild_id']
+            
+            # Filter based on user permissions
+            # Superadmins see all servers
+            if user.get('is_superadmin'):
+                include_server = True
+            # Discord OAuth users only see their allowed guilds
+            elif user.get('allowed_guild_ids'):
+                include_server = guild_id in user.get('allowed_guild_ids', [])
+            else:
+                # Fallback: include all (for backwards compatibility)
+                include_server = True
+            
+            if include_server:
+                servers.append({
+                    'id': guild_id,
+                    'name': guild['server_name'],
+                    'member_count': guild['member_count'],
+                    'icon_url': guild.get('icon_url'),
+                    'is_active': guild.get('is_active', True)
+                })
             
         return jsonify({'servers': servers}), 200
     except Exception as e:
