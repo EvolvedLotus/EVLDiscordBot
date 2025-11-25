@@ -75,28 +75,42 @@ class TaskManager:
 
         task_id = int(task_id)
         
+        # Create task in database
+        task_data = {
+            'task_id': task_id,
+            'guild_id': str(guild_id),
+            'name': name,
+            'description': description or '',
+            'reward': reward,
+            'duration_hours': duration_hours,
+            'max_claims': max_claims,
+            'current_claims': 0,
+            'status': 'active',
+            'created_at': datetime.now(timezone.utc).isoformat(),
+            'expires_at': expires_at.isoformat()
+        }
+        
         try:
-            updates = {}
-            if 'name' in data: updates['name'] = data['name']
-            if 'description' in data: updates['description'] = data['description']
-            if 'reward' in data: updates['reward'] = int(data['reward'])
-            if 'duration_hours' in data: updates['duration_hours'] = int(data['duration_hours'])
-            if 'max_claims' in data: updates['max_claims'] = int(data['max_claims']) if data['max_claims'] else None
-            if 'status' in data: updates['status'] = data['status']
+            # Insert into Supabase
+            result = self.data_manager.admin_client.table('tasks').insert(task_data).execute()
             
-            if not updates:
-                return {'success': False, 'error': 'No updates provided'}
-                
-            # Update in database
-            self.data_manager.admin_client.table('tasks') \
-                .update(updates) \
-                .eq('task_id', task_id) \
-                .eq('guild_id', guild_id) \
-                .execute()
-                
-            return {'success': True}
+            logger.info(f"✅ Created task {task_id} in guild {guild_id}")
+            
+            # Invalidate cache
+            if hasattr(self, 'cache_manager') and self.cache_manager:
+                self.cache_manager.invalidate(f"tasks:{guild_id}")
+            
+            # Emit SSE event
+            if hasattr(self, 'sse_manager') and self.sse_manager:
+                await self.sse_manager.broadcast_event(guild_id, {
+                    'type': 'task_created',
+                    'task_id': task_id,
+                    'task': task_data
+                })
+            
+            return task_data
         except Exception as e:
-            logger.error(f"Failed to update task {task_id}: {e}")
+            logger.error(f"Failed to create task: {e}")
             raise e
 
     async def delete_task(self, guild_id: int, task_id: int) -> Dict:

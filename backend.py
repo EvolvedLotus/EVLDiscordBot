@@ -577,8 +577,15 @@ def get_server_config(server_id):
 def update_server_config(server_id):
     try:
         data = request.get_json()
-        # Use save_guild_data with 'config' type
-        success = data_manager.save_guild_data(server_id, 'config', data)
+        
+        # Load current config to merge with updates
+        current_config = data_manager.load_guild_data(server_id, 'config')
+        
+        # Merge the updates into current config
+        current_config.update(data)
+        
+        # Save merged config
+        success = data_manager.save_guild_data(server_id, 'config', current_config)
         if success:
             return jsonify({'success': True}), 200
         else:
