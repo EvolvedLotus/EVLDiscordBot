@@ -67,8 +67,16 @@ class AdClaimCog(commands.Cog, name="Ad Claims"):
             session_id = result['session_id']
             
             # Construct the full URL
-            base_url = os.getenv('BACKEND_URL', 'http://localhost:5000')
-            viewer_url = f"{base_url}/ad-viewer.html?session={session_id}"
+            # Try BACKEND_URL first, then Railway's public domain, then localhost
+            backend_url = os.getenv('BACKEND_URL')
+            if not backend_url:
+                railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN') or os.getenv('RAILWAY_STATIC_URL')
+                if railway_domain:
+                    backend_url = f"https://{railway_domain}"
+                else:
+                    backend_url = 'http://localhost:5000'
+            
+            viewer_url = f"{backend_url}/ad-viewer.html?session={session_id}"
             
             # Create embed with instructions
             embed = discord.Embed(
