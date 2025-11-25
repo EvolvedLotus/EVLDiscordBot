@@ -1771,26 +1771,6 @@ def create_ad_session(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/ad-claim/verify', methods=['POST'])
-def verify_ad_view():
-    """Verify an ad view and grant reward"""
-    try:
-        data = request.get_json()
-        session_id = data.get('session_id')
-        
-        if not session_id:
-            return jsonify({'error': 'Missing session_id'}), 400
-        
-        # Verify the ad view
-        result = ad_claim_manager.verify_ad_view(session_id, data)
-        
-        if result['success']:
-            return jsonify(result), 200
-        else:
-            return jsonify(result), 400
-            
-    except Exception as e:
-        return safe_error_response(e)
 
 @app.route('/api/<server_id>/ad-claim/stats/<user_id>', methods=['GET'])
 @require_guild_access

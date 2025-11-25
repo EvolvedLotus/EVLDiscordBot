@@ -167,19 +167,20 @@ class AdClaimManager:
         """
         try:
             # Use transaction manager to adjust balance
-            result = self.transaction_manager.adjust_balance(
+            transaction = self.transaction_manager.adjust_balance(
                 user_id=int(user_id),
                 guild_id=int(guild_id),
                 amount=amount,
                 reason=f"Watched ad - Session {session_id[:8]}"
             )
             
-            if result.get('success'):
+            # Check if transaction was created successfully (has an 'id' field)
+            if transaction and transaction.get('id'):
                 # Update ad_views record
                 self.data_manager.admin_client.table('ad_views') \
                     .update({
                         'reward_granted': True,
-                        'transaction_id': result.get('transaction_id')
+                        'transaction_id': transaction.get('id')
                     }) \
                     .eq('ad_session_id', session_id) \
                     .execute()
@@ -197,14 +198,18 @@ class AdClaimManager:
                 
                 return {
                     'success': True,
-                    'new_balance': result.get('new_balance'),
-                    'transaction_id': result.get('transaction_id')
+                    'new_balance': transaction.get('balance_after'),
+                    'transaction_id': transaction.get('id')
                 }
             else:
-                return result
+                logger.error(f"Transaction failed for ad reward: {transaction}")
+                return {
+                    'success': False,
+                    'error': 'Failed to create transaction'
+                }
             
         except Exception as e:
-            logger.error(f"Error granting reward: {e}")
+            logger.error(f"Error granting reward: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
