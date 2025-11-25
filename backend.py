@@ -209,6 +209,7 @@ try:
     from core.sync_manager import SyncManager
     from core.sse_manager import sse_manager
     from core.discord_oauth import DiscordOAuthManager
+    from core.ad_claim_manager import AdClaimManager
 
     # Initialize managers
     data_manager = DataManager()
@@ -223,6 +224,7 @@ try:
     embed_builder = EmbedBuilder()
     embed_manager = EmbedManager(data_manager)
     sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
+    ad_claim_manager = AdClaimManager(data_manager, transaction_manager)
 
     logger.info("✅ All managers initialized")
 except ImportError as e:
@@ -1728,6 +1730,110 @@ def test_stream():
         return jsonify({'success': True, 'message': f'Test event "{event_type}" broadcasted'}), 200
     except Exception as e:
         return safe_error_response(e)
+
+# ========== AD CLAIM SYSTEM (PERMANENT GLOBAL TASK) ==========
+@app.route('/api/<server_id>/ad-claim/create-session', methods=['POST'])
+@require_guild_access
+def create_ad_session(server_id):
+    """Create a new ad viewing session for a user"""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return jsonify({'error': 'Missing user_id'}), 400
+        
+        # Get client info for fraud prevention
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        user_agent = request.headers.get('User-Agent')
+        
+        # Create ad session
+        result = ad_claim_manager.create_ad_session(
+            user_id=user_id,
+            guild_id=server_id,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        
+        return jsonify(result), 201
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/ad-claim/verify', methods=['POST'])
+def verify_ad_view():
+    """Verify an ad view and grant reward"""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({'error': 'Missing session_id'}), 400
+        
+        # Verify the ad view
+        result = ad_claim_manager.verify_ad_view(session_id, data)
+        
+        if result['success']:
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/ad-claim/stats/<user_id>', methods=['GET'])
+@require_guild_access
+def get_ad_stats(server_id, user_id):
+    """Get ad viewing statistics for a user"""
+    try:
+        result = ad_claim_manager.get_user_ad_stats(user_id, server_id)
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/global-tasks', methods=['GET'])
+def get_global_tasks():
+    """Get all active global tasks (including ad claim task)"""
+    try:
+        tasks = ad_claim_manager.get_all_global_tasks()
+        return jsonify({'tasks': tasks}), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/global-tasks/<task_key>', methods=['GET'])
+def get_global_task(task_key):
+    """Get a specific global task by key"""
+    try:
+        task = ad_claim_manager.get_global_task(task_key)
+        
+        if task:
+            return jsonify(task), 200
+        else:
+            return jsonify({'error': 'Task not found'}), 404
+            
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/monetag/postback', methods=['POST'])
+def monetag_postback():
+    """Handle Monetag ad view postback"""
+    try:
+        data = request.get_json() or request.form.to_dict()
+        
+        logger.info(f"Received Monetag postback: {data}")
+        
+        # Process the postback
+        result = ad_claim_manager.handle_monetag_postback(data)
+        
+        # Monetag expects a 200 OK response
+        return jsonify(result), 200
+        
+    except Exception as e:
+        logger.error(f"Error processing Monetag postback: {e}")
+        # Still return 200 to Monetag to prevent retries
+        return jsonify({'success': False, 'error': str(e)}), 200
 
 # ========== STATIC FILES ==========
 @app.route('/')

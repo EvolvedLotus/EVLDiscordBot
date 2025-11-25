@@ -1177,6 +1177,163 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- =====================================================
+-- AD VIEWS TABLE (Monetag Ad Tracking)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS ad_views (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    
+    -- Ad details
+    ad_type TEXT DEFAULT 'monetag_interstitial',
+    ad_session_id TEXT UNIQUE NOT NULL,
+    
+    -- Verification
+    is_verified BOOLEAN DEFAULT false,
+    verified_at TIMESTAMP WITH TIME ZONE,
+    ip_address TEXT,
+    user_agent TEXT,
+    
+    -- Reward tracking
+    reward_amount INTEGER DEFAULT 10,
+    reward_granted BOOLEAN DEFAULT false,
+    transaction_id TEXT,
+    
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+
+-- =====================================================
+-- GLOBAL TASKS TABLE (Cross-Server Permanent Tasks)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS global_tasks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    task_key TEXT UNIQUE NOT NULL,  -- e.g., 'ad_claim_task'
+    
+    -- Task details
+    name TEXT NOT NULL,
+    description TEXT,
+    reward INTEGER NOT NULL CHECK (reward > 0),
+    
+    -- Task type
+    task_type TEXT DEFAULT 'ad_claim' CHECK (task_type IN ('ad_claim', 'daily', 'special')),
+    
+    -- Configuration
+    is_active BOOLEAN DEFAULT true,
+    is_repeatable BOOLEAN DEFAULT true,  -- Can be claimed multiple times
+    cooldown_minutes INTEGER DEFAULT 0,  -- Cooldown between claims (0 = no cooldown)
+    
+    -- Display
+    icon_emoji TEXT DEFAULT '🎁',
+    button_text TEXT DEFAULT 'Claim Here',
+    disclaimer TEXT,
+    
+    -- Metadata
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- =====================================================
+-- GLOBAL TASK CLAIMS TABLE (User Claims for Global Tasks)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS global_task_claims (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    task_key TEXT NOT NULL,
+    
+    -- Claim details
+    claimed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Ad session link (for ad_claim tasks)
+    ad_session_id TEXT,
+    
+    -- Reward tracking
+    reward_amount INTEGER NOT NULL,
+    reward_granted BOOLEAN DEFAULT false,
+    
+    -- Metadata
+    metadata JSONB DEFAULT '{}'
+);
+
+-- =====================================================
+-- INDEXES FOR AD TRACKING
+-- =====================================================
+CREATE INDEX IF NOT EXISTS idx_ad_views_user ON ad_views(user_id);
+CREATE INDEX IF NOT EXISTS idx_ad_views_guild ON ad_views(guild_id);
+CREATE INDEX IF NOT EXISTS idx_ad_views_session ON ad_views(ad_session_id);
+CREATE INDEX IF NOT EXISTS idx_ad_views_verified ON ad_views(is_verified, verified_at);
+CREATE INDEX IF NOT EXISTS idx_ad_views_created ON ad_views(created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_global_tasks_active ON global_tasks(is_active);
+CREATE INDEX IF NOT EXISTS idx_global_tasks_type ON global_tasks(task_type);
+
+CREATE INDEX IF NOT EXISTS idx_global_task_claims_user ON global_task_claims(user_id, guild_id);
+CREATE INDEX IF NOT EXISTS idx_global_task_claims_task ON global_task_claims(task_key);
+CREATE INDEX IF NOT EXISTS idx_global_task_claims_session ON global_task_claims(ad_session_id);
+CREATE INDEX IF NOT EXISTS idx_global_task_claims_claimed ON global_task_claims(claimed_at DESC);
+
+-- =====================================================
+-- TRIGGERS FOR AD TRACKING TABLES
+-- =====================================================
+DROP TRIGGER IF EXISTS update_global_tasks_updated_at ON global_tasks;
+CREATE TRIGGER update_global_tasks_updated_at
+BEFORE UPDATE ON global_tasks
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- =====================================================
+-- ROW LEVEL SECURITY FOR AD TRACKING
+-- =====================================================
+ALTER TABLE ad_views ENABLE ROW LEVEL SECURITY;
+ALTER TABLE global_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE global_task_claims ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access" ON ad_views;
+CREATE POLICY "Service role full access" ON ad_views FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Service role full access" ON global_tasks;
+CREATE POLICY "Service role full access" ON global_tasks FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Service role full access" ON global_task_claims;
+CREATE POLICY "Service role full access" ON global_task_claims FOR ALL USING (true);
+
+-- =====================================================
+-- INSERT DEFAULT GLOBAL AD CLAIM TASK
+-- =====================================================
+INSERT INTO global_tasks (
+    task_key,
+    name,
+    description,
+    reward,
+    task_type,
+    is_active,
+    is_repeatable,
+    cooldown_minutes,
+    icon_emoji,
+    button_text,
+    disclaimer
+) VALUES (
+    'ad_claim_task',
+    'Claim For 10 Free Points',
+    'Watch these ads for 10 points',
+    10,
+    'ad_claim',
+    true,
+    true,
+    0,
+    '🎁',
+    'Claim Here',
+    'Please note that the ads displayed are from third-party networks (like Monetag). We have no control over the content of these advertisements and are not affiliated with, nor do we endorse, any claims made within them.'
+) ON CONFLICT (task_key) DO UPDATE SET
+    name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    reward = EXCLUDED.reward,
+    disclaimer = EXCLUDED.disclaimer,
+    updated_at = NOW();
+
+-- =====================================================
 -- USAGE INSTRUCTIONS
 -- =====================================================
 -- 
@@ -1191,5 +1348,9 @@ $$ LANGUAGE plpgsql;
 --
 -- To validate overall integrity:
 --   SELECT * FROM validate_balance_integrity();
+--
+-- To view ad statistics:
+--   SELECT user_id, COUNT(*) as total_views, SUM(CASE WHEN is_verified THEN 1 ELSE 0 END) as verified_views
+--   FROM ad_views GROUP BY user_id ORDER BY total_views DESC;
 --
 -- =====================================================
