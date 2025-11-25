@@ -151,7 +151,7 @@ class TaskChannelMonitor:
             self.monitoring = False
             logger.info("⏹️ Task channel monitoring stopped")
     
-    @tasks.loop(minutes=5)  # Check every 5 minutes
+    @tasks.loop(minutes=60)  # Check every hour
     async def monitor_task_channels(self):
         """Check all guilds and ensure task messages are posted"""
         logger.info("🔄 Task channel monitor loop running...")

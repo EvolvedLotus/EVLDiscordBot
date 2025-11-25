@@ -378,41 +378,64 @@ async function loadConfigTab() {
 
         content.innerHTML = html;
 
-        // Populate values from config
-        if (config) {
-            // Set channel values
-            if (config.welcome_channel) document.getElementById('welcome-channel').value = config.welcome_channel;
-            if (config.logs_channel) document.getElementById('log-channel').value = config.logs_channel;
-            if (config.task_channel_id) document.getElementById('task-channel').value = config.task_channel_id;
-            if (config.shop_channel_id) document.getElementById('shop-channel').value = config.shop_channel_id;
+        // Wait for DOM to be ready, then populate values
+        setTimeout(() => {
+            if (config) {
+                // Set channel values
+                const welcomeChannel = document.getElementById('welcome-channel');
+                const logChannel = document.getElementById('log-channel');
+                const taskChannel = document.getElementById('task-channel');
+                const shopChannel = document.getElementById('shop-channel');
 
-            // Set currency values
-            document.getElementById('currency-name').value = config.currency_name || 'Coins';
-            document.getElementById('currency-symbol').value = config.currency_symbol || '💰';
+                if (welcomeChannel && config.welcome_channel) welcomeChannel.value = config.welcome_channel;
+                if (logChannel && config.logs_channel) logChannel.value = config.logs_channel;
+                if (taskChannel && config.task_channel_id) taskChannel.value = config.task_channel_id;
+                if (shopChannel && config.shop_channel_id) shopChannel.value = config.shop_channel_id;
 
-            // Set bot behavior
-            document.getElementById('inactivity-days').value = config.inactivity_days || 30;
-            document.getElementById('auto-expire-tasks').checked = config.auto_expire_enabled !== false;
-            document.getElementById('require-task-proof').checked = config.require_proof !== false;
+                // Set currency values
+                const currencyName = document.getElementById('currency-name');
+                const currencySymbol = document.getElementById('currency-symbol');
+                if (currencyName) currencyName.value = config.currency_name || 'Coins';
+                if (currencySymbol) currencySymbol.value = config.currency_symbol || '💰';
 
-            // Set feature toggles
-            document.getElementById('feature-tasks').checked = config.feature_tasks !== false;
-            document.getElementById('feature-shop').checked = config.feature_shop !== false;
-            document.getElementById('feature-announcements').checked = config.feature_announcements !== false;
-            document.getElementById('feature-moderation').checked = config.feature_moderation !== false;
-        }
+                // Set bot behavior
+                const inactivityDays = document.getElementById('inactivity-days');
+                const autoExpireTasks = document.getElementById('auto-expire-tasks');
+                const requireTaskProof = document.getElementById('require-task-proof');
 
-        // Show bot status section
-        const botStatusSection = document.getElementById('bot-status-section');
-        if (botStatusSection) {
-            botStatusSection.style.display = 'block';
-            if (config.bot_status_message) {
-                document.getElementById('bot-status-message').value = config.bot_status_message;
+                if (inactivityDays) inactivityDays.value = config.inactivity_days || 30;
+                if (autoExpireTasks) autoExpireTasks.checked = config.auto_expire_enabled !== false;
+                if (requireTaskProof) requireTaskProof.checked = config.require_proof !== false;
+
+                // Set feature toggles
+                const featureTasks = document.getElementById('feature-tasks');
+                const featureShop = document.getElementById('feature-shop');
+                const featureAnnouncements = document.getElementById('feature-announcements');
+                const featureModeration = document.getElementById('feature-moderation');
+
+                if (featureTasks) featureTasks.checked = config.feature_tasks !== false;
+                if (featureShop) featureShop.checked = config.feature_shop !== false;
+                if (featureAnnouncements) featureAnnouncements.checked = config.feature_announcements !== false;
+                if (featureModeration) featureModeration.checked = config.feature_moderation !== false;
+
+                // Set bot status values
+                const botStatusMessage = document.getElementById('bot-status-message');
+                const botStatusType = document.getElementById('bot-status-type');
+
+                if (botStatusMessage && config.bot_status_message) {
+                    botStatusMessage.value = config.bot_status_message;
+                }
+                if (botStatusType && config.bot_status_type) {
+                    botStatusType.value = config.bot_status_type;
+                }
             }
-            if (config.bot_status_type) {
-                document.getElementById('bot-status-type').value = config.bot_status_type;
+
+            // Show bot status section (only hide for server owners)
+            const botStatusSection = document.getElementById('bot-status-section');
+            if (botStatusSection) {
+                botStatusSection.style.display = 'block';
             }
-        }
+        }, 100);
 
         showNotification('Configuration loaded', 'success');
     } catch (error) {
