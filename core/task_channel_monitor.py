@@ -418,7 +418,7 @@ class TaskChannelMonitor:
                 'channel_id': str(channel_id),
                 'message_id': str(message_id),
                 'posted_at': datetime.now(timezone.utc).isoformat()
-            }).execute()
+            }, on_conflict='guild_id,task_key').execute()
         except Exception as e:
             logger.error(f"Error storing global task message: {e}")
     

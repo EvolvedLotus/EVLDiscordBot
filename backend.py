@@ -1846,6 +1846,45 @@ def monetag_postback():
         # Still return 200 to Monetag to prevent retries
         return jsonify({'success': False, 'error': str(e)}), 200
 
+# ========== AD CLAIM ENDPOINTS ==========
+@app.route('/api/ad-claim/verify', methods=['POST'])
+def verify_ad_claim():
+    """Verify an ad view and grant reward"""
+    try:
+        data = request.json
+        session_id = data.get('session_id')
+        
+        if not session_id:
+            return jsonify({
+                'success': False,
+                'error': 'Session ID is required'
+            }), 400
+        
+        # Use ad_claim_manager to verify the ad view
+        result = ad_claim_manager.verify_ad_view(session_id)
+        
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'verified': True,
+                'reward_amount': result.get('reward_amount', 10),
+                'new_balance': result.get('new_balance', 0),
+                'transaction_id': result.get('transaction_id')
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Verification failed')
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Error verifying ad claim: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': 'An error occurred while verifying the ad view'
+        }), 500
+
+
 # ========== STATIC FILES ==========
 @app.route('/')
 def serve_dashboard():
