@@ -19,18 +19,12 @@ class AdClaimCog(commands.Cog, name="Ad Claims"):
     def __init__(self, bot):
         self.bot = bot
         self.data_manager = bot.data_manager
-        self.ad_claim_manager = None
+        self.ad_claim_manager = getattr(bot, 'ad_claim_manager', None)
         
-        # Import ad_claim_manager from backend
-        try:
-            import backend
-            if hasattr(backend, 'ad_claim_manager'):
-                self.ad_claim_manager = backend.ad_claim_manager
-                logger.info("✅ AdClaimCog initialized with ad_claim_manager")
-            else:
-                logger.warning("⚠️ ad_claim_manager not found in backend")
-        except Exception as e:
-            logger.error(f"Error importing ad_claim_manager: {e}")
+        if self.ad_claim_manager:
+            logger.info("✅ AdClaimCog initialized with ad_claim_manager from bot")
+        else:
+            logger.warning("⚠️ ad_claim_manager not found on bot instance")
     
     @app_commands.command(name="claim-ad", description="Watch an ad to earn 10 points!")
     async def claim_ad(self, interaction: discord.Interaction):
