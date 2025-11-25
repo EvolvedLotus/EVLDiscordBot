@@ -1,6 +1,6 @@
 /* ========================================
    EVL Discord Bot CMS - Discord-Style Theme
-   Complete CSS with all functionality preserved
+   Sidebar Width: 240px for full text visibility
    ======================================== */
 
 :root {
@@ -33,8 +33,8 @@
     --border-primary: #202225;
     --border-secondary: #4e5058;
 
-    /* Sidebar */
-    --sidebar-width: 72px;
+    /* Sidebar - Wider for full text */
+    --sidebar-width: 240px;
 
     /* Transitions */
     --transition-fast: 0.15s ease;
@@ -120,7 +120,7 @@ body {
     overflow: hidden;
 }
 
-/* Sidebar - Compact 72px */
+/* Sidebar - 240px width */
 .sidebar {
     width: var(--sidebar-width);
     height: 100vh;
@@ -137,22 +137,29 @@ body {
 }
 
 .sidebar::-webkit-scrollbar {
-    width: 0px;
-    display: none;
+    width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background-color: var(--bg-tertiary);
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background-color: var(--border-secondary);
+    border-radius: 4px;
 }
 
 .sidebar-header {
     height: 60px;
-    width: 72px;
+    width: 100%;
     background-color: var(--bg-tertiary);
-    padding: 0;
+    padding: 0 20px;
     border-bottom: 1px solid var(--bg-quaternary);
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 12px;
     cursor: pointer;
     transition: background var(--transition-fast);
-    position: relative;
 }
 
 .sidebar-header:hover {
@@ -160,92 +167,81 @@ body {
 }
 
 .sidebar-header h1 {
-    font-size: 36px;
+    font-size: 24px;
     margin: 0;
 }
 
-.sidebar-header::after {
-    content: attr(title);
-    position: absolute;
-    left: 80px;
+.sidebar-header .version {
+    font-size: 12px;
+    color: var(--text-muted);
     background-color: var(--bg-quaternary);
-    padding: 8px 12px;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity var(--transition-normal);
-    z-index: 1001;
-}
-
-.sidebar-header:hover::after {
-    opacity: 1;
+    padding: 2px 8px;
+    border-radius: 4px;
 }
 
 .server-selector {
-    height: 60px;
-    width: 72px;
-    padding: 0;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--bg-quaternary);
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background var(--transition-fast);
-    position: relative;
+    margin-bottom: 8px;
 }
 
-.server-selector:hover {
-    background-color: var(--bg-hover);
+.server-selector label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
 }
 
 .server-selector select {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background-color: var(--discord-blurple);
+    width: 100%;
+    padding: 10px 12px;
+    background-color: var(--bg-tertiary);
     color: var(--text-primary);
-    border: none;
-    font-size: 20px;
-    font-weight: 700;
-    text-align: center;
+    border: 1px solid var(--border-secondary);
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
-    appearance: none;
+    transition: all var(--transition-fast);
+}
+
+.server-selector select:hover {
+    border-color: var(--discord-blurple);
+}
+
+.server-selector select:focus {
+    outline: none;
+    border-color: var(--discord-blurple);
+    box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.2);
 }
 
 .nav-menu {
     flex: 1;
-    padding: 16px 0;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
 .tab-button {
-    width: 72px;
-    height: 48px;
-    padding: 0;
+    width: 100%;
+    height: 42px;
+    padding: 0 16px;
     background-color: transparent;
     color: var(--text-muted);
     border: none;
-    border-radius: 0;
+    border-radius: 6px;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
+    gap: 12px;
     cursor: pointer;
     transition: all var(--transition-fast);
-    position: relative;
-    font-size: 10px;
+    font-size: 15px;
     font-weight: 500;
-    letter-spacing: 0.2px;
-    line-height: 1;
-    gap: 4px;
+    text-align: left;
 }
 
 .tab-button:hover {
@@ -257,30 +253,30 @@ body {
     background-color: var(--bg-active);
     color: var(--text-primary);
     font-weight: 600;
-    border-left: 4px solid var(--discord-blurple);
 }
 
 .tab-button::before {
     content: attr(data-icon);
-    font-size: 24px;
-    display: block;
+    font-size: 20px;
+    display: inline-block;
+    width: 24px;
+    text-align: center;
 }
 
 .sidebar-footer {
-    padding: 0;
+    padding: 16px 20px;
     border-top: 1px solid var(--border-primary);
     background-color: var(--bg-secondary);
 }
 
 .bot-status {
-    height: 56px;
-    width: 72px;
-    padding: 0;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 4px;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background-color: var(--bg-tertiary);
+    border-radius: 6px;
 }
 
 .status-indicator {
@@ -300,7 +296,7 @@ body {
 }
 
 .status-text {
-    font-size: 9px;
+    font-size: 13px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
@@ -308,25 +304,26 @@ body {
 }
 
 .sidebar-footer button {
-    height: 48px;
-    width: 72px;
-    padding: 0;
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-top: 1px solid var(--border-primary);
+    gap: 8px;
     cursor: pointer;
-    transition: background var(--transition-fast);
+    transition: all var(--transition-fast);
     background-color: transparent;
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
+    border: 1px solid rgba(237, 66, 69, 0.3);
+    border-radius: 6px;
     color: var(--discord-red);
-    font-size: 20px;
+    font-size: 14px;
+    font-weight: 600;
 }
 
 .sidebar-footer button:hover {
     background-color: rgba(237, 66, 69, 0.2);
+    border-color: var(--discord-red);
 }
 
 /* Main Content */
