@@ -90,17 +90,36 @@ class TaskChannelMonitor:
     async def get_active_tasks(self, guild_id: str):
         """Get all active regular tasks for a guild"""
         try:
-            result = self.data_manager.admin_client.table('tasks').select('*').eq('guild_id', guild_id).eq('status', 'active').execute()
+            # Use file-based storage (same as task_manager)
+            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
+            if not tasks_data:
+                return []
             
-            tasks = []
-            for task in result.data:
+            tasks = tasks_data.get('tasks', {})
+            active_tasks = []
+            
+            for task_id, task in tasks.items():
+                # Skip non-active tasks
+                if task.get('status') != 'active':
+                    continue
+                
                 # Check if not expired
                 if task.get('expires_at'):
-                    expires_at = datetime.fromisoformat(task['expires_at'].replace('Z', '+00:00'))
-                    if expires_at > datetime.now(timezone.utc):
-                        tasks.append({**task, 'is_global': False})
+                    expires_at = task['expires_at']
+                    if isinstance(expires_at, str):
+                        expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                    
+                    if expires_at <= datetime.now(timezone.utc):
+                        continue  # Skip expired
+                
+                # Add task with ID
+                active_tasks.append({
+                    **task,
+                    'task_id': task_id,
+                    'is_global': False
+                })
             
-            return tasks
+            return active_tasks
         except Exception as e:
             logger.error(f"Error getting active tasks: {e}")
             return []
@@ -229,14 +248,19 @@ class TaskChannelMonitor:
             # Update database with message ID
             if is_global:
                 # For global tasks, store message ID per guild
-                # We'll need to create a global_task_messages table for this
                 await self.store_global_task_message(guild.id, task['task_key'], channel.id, message.id)
             else:
-                # Update regular task
-                self.data_manager.admin_client.table('tasks').update({
-                    'message_id': str(message.id),
-                    'channel_id': str(channel.id)
-                }).eq('guild_id', str(guild.id)).eq('task_id', task['task_id']).execute()
+                # Update regular task in file-based storage
+                try:
+                    tasks_data = self.data_manager.load_guild_data(str(guild.id), 'tasks')
+                    if tasks_data and 'tasks' in tasks_data:
+                        task_id = task['task_id']
+                        if task_id in tasks_data['tasks']:
+                            tasks_data['tasks'][task_id]['message_id'] = str(message.id)
+                            tasks_data['tasks'][task_id]['channel_id'] = str(channel.id)
+                            self.data_manager.save_guild_data(str(guild.id), 'tasks', tasks_data)
+                except Exception as e:
+                    logger.error(f"Error saving task message ID to file storage: {e}")
             
             logger.info(f"✅ Posted task {task['task_id']} to channel {channel.id} (message {message.id})")
             
@@ -283,15 +307,18 @@ class TaskChannelMonitor:
         except Exception as e:
             logger.error(f"Error handling task created: {e}")
     
-    async def on_task_deleted(self, guild_id: str, task_id: int):
+    async def on_task_deleted(self, guild_id: str, task_id: str):
         """Called when a task is deleted"""
         try:
-            # Get task data to find message
-            task_data = self.data_manager.admin_client.table('tasks').select('*').eq('guild_id', guild_id).eq('task_id', task_id).single().execute()
+            # Get task data from file-based storage
+            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
+            if not tasks_data or 'tasks' not in tasks_data:
+                return
             
-            if task_data.data and task_data.data.get('message_id'):
-                message_id = task_data.data['message_id']
-                channel_id = task_data.data.get('channel_id')
+            task = tasks_data['tasks'].get(task_id)
+            if task and task.get('message_id'):
+                message_id = task['message_id']
+                channel_id = task.get('channel_id')
                 
                 if channel_id:
                     guild = self.bot.get_guild(int(guild_id))

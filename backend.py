@@ -1334,8 +1334,19 @@ def update_bot_status(server_id):
         current_config['bot_status_message'] = status_message
         current_config['bot_status_type'] = status_type
 
-        # Save config
+        # Save config (file-based)
         data_manager.save_guild_data(server_id, 'config', current_config)
+        
+        # ALSO save to Supabase guilds table (for persistence across restarts)
+        try:
+            data_manager.supabase.table('guilds').update({
+                'bot_status_message': status_message,
+                'bot_status_type': status_type
+            }).eq('guild_id', server_id).execute()
+            logger.info(f"Saved bot status to Supabase for guild {server_id}")
+        except Exception as e:
+            logger.error(f"Failed to save bot status to Supabase: {e}")
+            # Continue anyway - at least file-based config is saved
 
         # If bot is running, update presence immediately
         if _bot_instance and _bot_instance.is_ready():

@@ -201,6 +201,12 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load moderation commands cog: {e}")
 
+        try:
+            await bot.load_extension('cogs.ad_claim')
+            logger.info("✓ Ad Claim cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load ad claim cog: {e}")
+
         # Set managers on cogs that need them
         logger.info("Setting managers on cogs...")
         for cog_name in ['Moderation', 'ModerationCommands']:
@@ -220,6 +226,15 @@ async def run_bot():
                 logger.info("✓ Set managers on Tasks cog")
             except Exception as e:
                 logger.error(f"✗ Failed to set managers on Tasks cog: {e}")
+        
+        # Set manager for AdClaim cog
+        ad_claim_cog = bot.get_cog('AdClaim')
+        if ad_claim_cog and hasattr(ad_claim_cog, 'set_ad_claim_manager'):
+            try:
+                ad_claim_cog.set_ad_claim_manager(bot.ad_claim_manager)
+                logger.info("✓ Set ad_claim_manager on AdClaim cog")
+            except Exception as e:
+                logger.error(f"✗ Failed to set ad_claim_manager on AdClaim cog: {e}")
 
         # Create initializer
         initializer = GuildInitializer(data_manager, bot)
