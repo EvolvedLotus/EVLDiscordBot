@@ -136,9 +136,9 @@ class TaskChannelMonitor:
                 tasks.append({
                     'task_id': task['task_key'],  # Use task_key as ID
                     'guild_id': 'global',
-                    'name': task['title'],
+                    'name': task['name'],  # Fixed: use 'name' not 'title'
                     'description': task['description'],
-                    'reward': task['reward_amount'],
+                    'reward': task['reward'],  # Fixed: use 'reward' not 'reward_amount'
                     'status': 'active',
                     'is_global': True,
                     'is_repeatable': task.get('is_repeatable', False),
