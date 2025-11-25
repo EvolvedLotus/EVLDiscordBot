@@ -250,14 +250,16 @@ window.saveShopItem = async function (event) {
         emoji
     };
 
-    // If category is role, add role_id
+    // If category is role, add role_id in metadata
     if (category === 'role') {
         const roleId = document.getElementById('shop-item-role-id')?.value;
         if (!roleId) {
             showNotification('Please select a role', 'error');
             return;
         }
-        itemData.role_id = roleId;
+        itemData.metadata = {
+            role_id: roleId
+        };
     }
 
     try {
@@ -299,14 +301,14 @@ window.saveAnnouncement = async function (event) {
     }
 
     try {
-        // Send announcement directly to Discord
-        await apiCall(`/api/${currentServerId}/announcements/send`, {
+        // Create and send announcement
+        await apiCall(`/api/${currentServerId}/announcements`, {
             method: 'POST',
             body: JSON.stringify({
                 title,
                 content,
                 channel_id: channelId,
-                is_pinned: isPinned
+                pinned: isPinned
             })
         });
 
