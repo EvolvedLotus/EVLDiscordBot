@@ -16,6 +16,156 @@ from core.shop_manager import ShopManager
 
 logger = logging.getLogger(__name__)
 
+class QuantityModal(discord.ui.Modal, title='Redeem Quantity'):
+    def __init__(self, item_id, item_name, max_quantity, shop_manager, view):
+        super().__init__()
+        self.item_id = item_id
+        self.shop_manager = shop_manager
+        self.view = view
+        self.max_quantity = max_quantity
+        
+        self.quantity = discord.ui.TextInput(
+            label=f'Quantity (Max: {max_quantity})',
+            placeholder='Enter amount to redeem...',
+            default='1',
+            min_length=1,
+            max_length=len(str(max_quantity))
+        )
+        self.add_item(self.quantity)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            qty = int(self.quantity.value)
+            if qty <= 0:
+                await interaction.response.send_message("Quantity must be positive.", ephemeral=True)
+                return
+            if qty > self.max_quantity:
+                await interaction.response.send_message(f"You only have {self.max_quantity} of this item.", ephemeral=True)
+                return
+            
+            # Proceed with redemption
+            await self.view.process_redemption(interaction, self.item_id, qty)
+            
+        except ValueError:
+            await interaction.response.send_message("Please enter a valid number.", ephemeral=True)
+
+class RedemptionSelect(discord.ui.Select):
+    def __init__(self, inventory_items):
+        options = []
+        # Filter for redeemable items only (role and misc)
+        redeemable_items = {
+            k: v for k, v in inventory_items.items() 
+            if v['item'].get('category') in ['role', 'misc', 'general', 'other']
+        }
+        
+        for item_id, data in redeemable_items.items():
+            item = data['item']
+            quantity = data['quantity']
+            emoji = item.get('emoji', '🛍️')
+            
+            # Truncate description
+            desc = f"Quantity: {quantity} | {item.get('category', 'misc').title()}"
+            
+            options.append(discord.SelectOption(
+                label=f"{item['name']}",
+                value=item_id,
+                description=desc,
+                emoji=emoji
+            ))
+            
+        super().__init__(
+            placeholder="Select an item to redeem...", 
+            min_values=1, 
+            max_values=1, 
+            options=options[:25],
+            disabled=len(options) == 0
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        item_id = self.values[0]
+        await self.view.handle_selection(interaction, item_id)
+
+class RedemptionView(discord.ui.View):
+    def __init__(self, shop_manager, inventory_items, user_id):
+        super().__init__(timeout=180)
+        self.shop_manager = shop_manager
+        self.inventory_items = inventory_items
+        self.user_id = user_id
+        
+        # Add select menu
+        self.add_item(RedemptionSelect(inventory_items))
+
+    async def handle_selection(self, interaction: discord.Interaction, item_id: str):
+        data = self.inventory_items.get(item_id)
+        if not data:
+            await interaction.response.send_message("Item not found.", ephemeral=True)
+            return
+            
+        quantity = data['quantity']
+        item_name = data['item']['name']
+        
+        if quantity > 1:
+            # Show modal
+            await interaction.response.send_modal(QuantityModal(item_id, item_name, quantity, self.shop_manager, self))
+        else:
+            # Auto redeem 1
+            await self.process_redemption(interaction, item_id, 1)
+
+    async def process_redemption(self, interaction: discord.Interaction, item_id: str, quantity: int):
+        # Defer if not already deferred
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+            
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        
+        try:
+            result = await self.shop_manager.redeem_item(
+                guild_id,
+                user_id,
+                item_id,
+                quantity,
+                interaction
+            )
+
+            if result['success']:
+                embed = discord.Embed(
+                    title="✅ Item Redeemed",
+                    description=f"You successfully redeemed {quantity}x **{self.inventory_items[item_id]['item']['name']}**!",
+                    color=discord.Color.green()
+                )
+
+                if result.get('effect') == 'role_assigned':
+                    embed.add_field(
+                        name="🎭 Role Assigned",
+                        value=f"You now have the **{result['role_name']}** role for {result['duration_minutes']} minutes.",
+                        inline=False
+                    )
+                elif result.get('effect') == 'log_message_sent':
+                    embed.add_field(
+                        name="📝 Request Sent",
+                        value=f"A redemption request has been sent to the moderators.",
+                        inline=False
+                    )
+                
+                if interaction.response.is_done():
+                    await interaction.followup.send(embed=embed, ephemeral=True)
+                else:
+                    await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                if interaction.response.is_done():
+                    await interaction.followup.send(f"❌ Redemption Failed: {result.get('error')}", ephemeral=True)
+                else:
+                    await interaction.response.send_message(f"❌ Redemption Failed: {result.get('error')}", ephemeral=True)
+                    
+        except Exception as e:
+            logger.exception(f"Redeem error: {e}")
+            msg = "❌ An error occurred while redeeming the item."
+            if interaction.response.is_done():
+                await interaction.followup.send(msg, ephemeral=True)
+            else:
+                await interaction.response.send_message(msg, ephemeral=True)
+
 class Currency(commands.Cog):
     """Currency system with server-specific economies"""
 
@@ -552,90 +702,40 @@ class Currency(commands.Cog):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @app_commands.command(name="redeem", description="Redeem item from your inventory")
-    @app_commands.describe(
-        item="The item to redeem",
-        quantity="How many to redeem (default: 1)"
-    )
+    @app_commands.command(name="redeem", description="Redeem an item from your inventory")
     @app_commands.guild_only()
-    async def redeem(self, interaction: discord.Interaction, item: str, quantity: int = 1):
-        """Redeem shop item from inventory"""
+    async def redeem(self, interaction: discord.Interaction):
+        """Redeem shop item from inventory (Interactive)"""
+        # We don't defer immediately because we might need to send a modal (which requires no deferral or specific handling)
+        # But here we are sending a View first, so deferral is fine? 
+        # Actually, if we want to send a Modal later from the View, the initial interaction must be valid.
+        # Let's defer ephemeral.
         await interaction.response.defer(ephemeral=True)
 
         user_id = interaction.user.id
         guild_id = interaction.guild.id
 
-        # VALIDATION: Positive quantity
-        if quantity <= 0:
-            await interaction.followup.send("❌ Quantity must be positive.", ephemeral=True)
+        # Get user's inventory with item details
+        inventory = self.shop_manager.get_inventory(guild_id, user_id, include_item_details=True)
+
+        # Filter for redeemable items
+        redeemable_items = {
+            k: v for k, v in inventory.items() 
+            if v['item'].get('category') in ['role', 'misc', 'general', 'other']
+        }
+
+        if not redeemable_items:
+            await interaction.followup.send("❌ You don't have any redeemable items in your inventory!", ephemeral=True)
             return
 
-        try:
-            # Redeem the item
-            result = await self.shop_manager.redeem_item(
-                guild_id,
-                user_id,
-                item,
-                quantity,
-                interaction
-            )
-
-            if result['success']:
-                # Create success embed
-                embed = discord.Embed(
-                    title="✅ Item Redeemed",
-                    description=f"You successfully redeemed {quantity}x **{item}**!",
-                    color=discord.Color.green()
-                )
-
-                if result['effect'] == 'role_assigned':
-                    embed.add_field(
-                        name="🎭 Role Assigned",
-                        value=f"You now have the **{result['role_name']}** role for {result['duration_minutes']} minutes.",
-                        inline=False
-                    )
-                elif result['effect'] == 'log_message_sent':
-                    embed.add_field(
-                        name="📝 Log Message",
-                        value=f"A redemption log was sent to #{result['log_channel']}.",
-                        inline=False
-                    )
-
-                await interaction.followup.send(embed=embed, ephemeral=True)
-
-            else:
-                # Handle error
-                embed = discord.Embed(
-                    title="❌ Redemption Failed",
-                    description=result.get('error', 'An unknown error occurred.'),
-                    color=discord.Color.red()
-                )
-                await interaction.followup.send(embed=embed, ephemeral=True)
-
-        except Exception as e:
-            logger.exception(f"Redeem command error: {e}")
-            await interaction.followup.send("❌ An error occurred while redeeming the item.", ephemeral=True)
-
-    @redeem.autocomplete('item')
-    async def redeem_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
-        """Autocomplete redeemable items from user's inventory"""
-        # Get user's inventory with item details
-        inventory = self.shop_manager.get_inventory(interaction.guild.id, interaction.user.id, include_item_details=True)
-
-        choices = []
-        for item_id, data in inventory.items():
-            item = data['item']
-            category = item.get('category', 'misc')
-
-            # Only show redeemable items (role and misc categories)
-            if category in ['role', 'misc'] and current.lower() in item['name'].lower():
-                # Handle missing emoji field gracefully
-                emoji = item.get('emoji', '🛍️')  # Default to shopping bag emoji
-                choices.append(app_commands.Choice(
-                    name=f"{emoji} {item['name']} (x{data['quantity']})",
-                    value=item_id
-                ))
-        return choices[:25]  # Discord limit
+        # Create view
+        view = RedemptionView(self.shop_manager, inventory, user_id)
+        
+        await interaction.followup.send(
+            "🎁 **Select an item to redeem:**",
+            view=view,
+            ephemeral=True
+        )
 
     @app_commands.command(name="buy", description="Purchase item with atomic transaction")
     @app_commands.describe(

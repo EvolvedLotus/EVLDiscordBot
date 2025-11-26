@@ -759,7 +759,7 @@ class ShopManager:
             return {'success': False, 'error': 'Item not found'}
 
         category = item.get('category', 'misc')
-        if category not in ['role', 'misc']:
+        if category not in ['role', 'misc', 'general', 'other']:
             return {'success': False, 'error': 'Item is not redeemable'}
 
         # Check inventory
@@ -773,7 +773,7 @@ class ShopManager:
         try:
             if category == 'role':
                 result = await self._redeem_role_item(guild_id, user_id, item, quantity, interaction)
-            elif category == 'misc':
+            elif category in ['misc', 'general', 'other']:
                 result = await self._redeem_misc_item(guild_id, user_id, item, quantity, interaction)
             else:
                 result = {'success': False, 'error': f'Unknown category: {category}'}
@@ -882,6 +882,26 @@ class ShopManager:
             logger.warning(f"Failed to schedule role removal job: {e}")
             # Don't fail the redemption if job scheduling fails, just log it
 
+        # Send log message
+        config = self.data_manager.load_guild_data(guild_id, 'config')
+        log_channel_id = config.get('log_channel_id')
+        if log_channel_id:
+            log_channel = interaction.guild.get_channel(int(log_channel_id))
+            if log_channel and log_channel.permissions_for(interaction.guild.me).send_messages:
+                try:
+                    embed = discord.Embed(
+                        title="🎭 Role Redeemed",
+                        description=f"User **{member.display_name}** redeemed **{item['name']}**",
+                        color=discord.Color.green(),
+                        timestamp=datetime.now()
+                    )
+                    embed.add_field(name="Role Assigned", value=role.mention, inline=True)
+                    embed.add_field(name="Duration", value=f"{duration_minutes} minutes", inline=True)
+                    embed.set_footer(text=f"User ID: {user_id}")
+                    await log_channel.send(embed=embed)
+                except Exception as e:
+                    logger.warning(f"Failed to send role redemption log: {e}")
+
         return {
             'success': True,
             'effect': 'role_assigned',
@@ -890,7 +910,7 @@ class ShopManager:
         }
 
     async def _redeem_misc_item(self, guild_id: int, user_id: int, item: dict, quantity: int, interaction) -> dict:
-        """Redeem misc item - send log message"""
+        """Redeem misc item - send log message with approval buttons"""
         if not interaction:
             return {'success': False, 'error': 'Interaction required for log message'}
 
@@ -915,18 +935,25 @@ class ShopManager:
 
         try:
             embed = discord.Embed(
-                title="🎁 Item Redeemed",
-                description=f"User **{username}** redeemed **{item['name']}**",
-                color=discord.Color.blue(),
+                title="🎁 Redemption Request",
+                description=f"User **{username}** wants to redeem **{item['name']}**",
+                color=discord.Color.gold(),
                 timestamp=datetime.now()
             )
             embed.add_field(name="Item ID", value=f"`{item.get('item_id', 'unknown')}`", inline=True)
-            embed.add_field(name="Category", value="Misc", inline=True)
+            embed.add_field(name="Category", value=item.get('category', 'Misc').title(), inline=True)
             embed.add_field(name="Quantity", value=quantity, inline=True)
+            embed.add_field(name="Status", value="⏳ Pending Approval", inline=False)
+            
+            embed.set_footer(text=f"User ID: {user_id}")
 
-            await log_channel.send(embed=embed)
+            # Create view for approval
+            view = RedemptionRequestView(self, guild_id, user_id, item, quantity)
+            
+            await log_channel.send(embed=embed, view=view)
 
         except Exception as e:
+            logger.error(f"Failed to send redemption log: {e}")
             return {'success': False, 'error': f'Failed to send log message: {str(e)}'}
 
         return {
@@ -1318,6 +1345,85 @@ class ShopManager:
                 self.data_manager._notify_listeners(event_type, data)
         except Exception as e:
             logger.warning(f"Failed to broadcast event {event_type}: {e}")
+
+
+class RedemptionRequestView(discord.ui.View):
+    """View for handling redemption requests in log channel"""
+
+    def __init__(self, shop_manager, guild_id: int, user_id: int, item: dict, quantity: int):
+        super().__init__(timeout=None)
+        self.shop_manager = shop_manager
+        self.guild_id = guild_id
+        self.user_id = user_id
+        self.item = item
+        self.quantity = quantity
+
+    @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅")
+    async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Accept redemption request"""
+        # Check permissions (only mods/admins)
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("You do not have permission to accept this request.", ephemeral=True)
+            return
+
+        # Disable buttons
+        for child in self.children:
+            child.disabled = True
+        
+        # Update embed
+        embed = interaction.message.embeds[0]
+        embed.color = discord.Color.green()
+        
+        # Update Status field
+        for i, field in enumerate(embed.fields):
+            if field.name == "Status":
+                embed.set_field_at(i, name="Status", value=f"✅ Accepted by {interaction.user.mention}", inline=False)
+                break
+        
+        await interaction.response.edit_message(embed=embed, view=self)
+        
+        # Notify user
+        try:
+            user = await interaction.guild.fetch_member(self.user_id)
+            if user:
+                await user.send(f"✅ Your redemption request for **{self.quantity}x {self.item['name']}** has been accepted!")
+        except Exception as e:
+            logger.warning(f"Failed to DM user {self.user_id} about acceptance: {e}")
+
+    @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
+    async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Deny redemption request and refund item"""
+        # Check permissions
+        if not interaction.user.guild_permissions.manage_guild:
+            await interaction.response.send_message("You do not have permission to deny this request.", ephemeral=True)
+            return
+
+        # Refund item
+        self.shop_manager.add_to_inventory(self.guild_id, self.user_id, self.item['item_id'], self.quantity)
+        
+        # Disable buttons
+        for child in self.children:
+            child.disabled = True
+            
+        # Update embed
+        embed = interaction.message.embeds[0]
+        embed.color = discord.Color.red()
+        
+        # Update Status field
+        for i, field in enumerate(embed.fields):
+            if field.name == "Status":
+                embed.set_field_at(i, name="Status", value=f"❌ Denied by {interaction.user.mention} (Refunded)", inline=False)
+                break
+                
+        await interaction.response.edit_message(embed=embed, view=self)
+        
+        # Notify user
+        try:
+            user = await interaction.guild.fetch_member(self.user_id)
+            if user:
+                await user.send(f"❌ Your redemption request for **{self.quantity}x {self.item['name']}** has been denied and the items have been refunded.")
+        except Exception as e:
+            logger.warning(f"Failed to DM user {self.user_id} about denial: {e}")
 
 
 class ShopItemView(discord.ui.View):
