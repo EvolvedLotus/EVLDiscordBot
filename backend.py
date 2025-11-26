@@ -358,6 +358,7 @@ def handle_options(path=None):
         return response
     return make_response('Forbidden', 403)
 
+
 # ========== HEALTH & SYSTEM ==========
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -366,6 +367,14 @@ def health_check():
         'timestamp': datetime.now(timezone.utc).isoformat(),
         'environment': 'production' if IS_PRODUCTION else 'development',
         'cors_enabled': True
+    })
+
+@app.route('/api/bot/config', methods=['GET'])
+def get_bot_config():
+    """Get public bot configuration (client ID for invite link)"""
+    return jsonify({
+        'client_id': os.getenv('DISCORD_CLIENT_ID', ''),
+        'bot_name': 'EvolvedLotus Bot'
     })
 
 @app.route('/api/status', methods=['GET'])
@@ -1881,6 +1890,63 @@ def serve_styles():
 @app.route('/favicon.ico')
 def serve_favicon():
     return '', 204
+
+# ========== ADMIN SERVER MANAGEMENT ==========
+@app.route('/api/admin/servers/<server_id>/leave', methods=['POST'])
+@require_auth
+def leave_server(server_id):
+    """Allow super admins to make the bot leave a server"""
+    try:
+        user = request.user
+        
+        # Only super admins can use this endpoint
+        if not user.get('is_superadmin'):
+            return jsonify({'error': 'Unauthorized. Super admin access required.'}), 403
+        
+        if not _bot_instance or not _bot_instance.is_ready():
+            return jsonify({'error': 'Bot is not ready'}), 503
+        
+        # Get the guild
+        guild = _bot_instance.get_guild(int(server_id))
+        if not guild:
+            return jsonify({'error': 'Server not found or bot is not in this server'}), 404
+        
+        guild_name = guild.name
+        
+        # Leave the guild (async operation)
+        async def leave_guild():
+            await guild.leave()
+            logger.info(f"Bot left server: {guild_name} ({server_id}) - Requested by admin: {user.get('username')}")
+        
+        # Run the async operation
+        if _bot_instance.loop:
+            future = asyncio.run_coroutine_threadsafe(leave_guild(), _bot_instance.loop)
+            future.result(timeout=10)
+        else:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(leave_guild())
+            finally:
+                loop.close()
+        
+        # Update database to mark guild as inactive
+        try:
+            data_manager.admin_client.table('guilds').update({
+                'is_active': False,
+                'left_at': datetime.now(timezone.utc).isoformat()
+            }).eq('guild_id', server_id).execute()
+        except Exception as db_error:
+            logger.warning(f"Failed to update guild status in database: {db_error}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully left server: {guild_name}'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error leaving server {server_id}: {e}")
+        return safe_error_response(e)
 
 # ========== ERROR HANDLERS ==========
 @app.errorhandler(404)

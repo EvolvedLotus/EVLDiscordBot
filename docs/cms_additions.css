@@ -1,0 +1,144 @@
+/* Bot Invite Button on Login Screen */
+.bot-invite-button {
+    position: fixed;
+    right: 40px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--discord-blurple), var(--discord-green));
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(88, 101, 242, 0.4);
+    transition: all var(--transition-normal);
+    z-index: 10001;
+}
+
+.bot-invite-button:hover {
+    transform: translateY(-50%) scale(1.1);
+    box-shadow: 0 12px 32px rgba(88, 101, 242, 0.6);
+}
+
+.bot-invite-button svg {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Server Management Section */
+.server-management-section {
+    margin-top: 32px;
+    padding: 24px;
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    border: 1px solid var(--border-primary);
+}
+
+.server-management-section h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.server-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.server-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    border: 1px solid var(--border-primary);
+    transition: all var(--transition-fast);
+}
+
+.server-item:hover {
+    background-color: var(--bg-hover);
+    border-color: var(--discord-blurple);
+}
+
+.server-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.server-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.server-id {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: 'Courier New', monospace;
+}
+
+.server-members {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.server-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-leave-server {
+    height: 36px;
+    padding: 0 16px;
+    background-color: transparent;
+    border: 1px solid var(--discord-red);
+    color: var(--discord-red);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-leave-server:hover {
+    background-color: var(--discord-red);
+    color: var(--text-primary);
+}
+
+.server-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.server-list::-webkit-scrollbar-track {
+    background-color: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.server-list::-webkit-scrollbar-thumb {
+    background-color: var(--border-secondary);
+    border-radius: 4px;
+}
+
+.server-list::-webkit-scrollbar-thumb:hover {
+    background-color: var(--discord-blurple);
+}
+
+.empty-server-list {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-size: 14px;
+}
