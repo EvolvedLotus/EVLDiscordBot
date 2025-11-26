@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 class GlobalTaskClaimView(discord.ui.View):
     """View for claiming global tasks (like ad claim task)"""
     
-    def __init__(self, task_key: str):
+    def __init__(self, task_key: str, ad_claim_manager=None):
         super().__init__(timeout=None)
         self.task_key = task_key
+        self.ad_claim_manager = ad_claim_manager
     
     @discord.ui.button(
         label="Claim Task",
@@ -31,19 +32,9 @@ class GlobalTaskClaimView(discord.ui.View):
         try:
             await interaction.response.defer(ephemeral=True)
             
-            # Get ad_claim_manager from backend
-            try:
-                import backend
-                ad_claim_manager = backend.ad_claim_manager
-            except Exception as e:
-                logger.error(f"Error importing ad_claim_manager: {e}")
-                await interaction.followup.send(
-                    "❌ Ad claim system is not available. Please contact an administrator.",
-                    ephemeral=True
-                )
-                return
-            
-            if not ad_claim_manager:
+            # Check if ad_claim_manager is available
+            if not self.ad_claim_manager:
+                logger.error("ad_claim_manager not available in GlobalTaskClaimView")
                 await interaction.followup.send(
                     "❌ Ad claim system is not available. Please contact an administrator.",
                     ephemeral=True
@@ -54,7 +45,7 @@ class GlobalTaskClaimView(discord.ui.View):
             guild_id = str(interaction.guild.id)
             
             # Create ad session
-            result = ad_claim_manager.create_ad_session(
+            result = self.ad_claim_manager.create_ad_session(
                 user_id=user_id,
                 guild_id=guild_id
             )
@@ -377,7 +368,7 @@ class TaskChannelMonitor:
             # Create view with claim button
             if is_global and task.get('task_key') == 'ad_claim_task':
                 # For ad claim task, use custom view that handles ad session creation
-                view = GlobalTaskClaimView(task.get('task_key'))
+                view = GlobalTaskClaimView(task.get('task_key'), self.ad_claim_manager)
             else:
                 # Regular tasks use the standard claim button
                 from cogs.tasks import TaskClaimView
