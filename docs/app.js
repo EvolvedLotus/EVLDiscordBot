@@ -730,7 +730,57 @@ async function deleteShopItem(itemId) {
 }
 
 async function editShopItem(itemId) {
-    alert('Edit functionality coming soon!');
+    if (!currentServerId) return;
+
+    try {
+        // Fetch all items to find the one we want
+        const data = await apiCall(`/api/${currentServerId}/shop`);
+        const item = data.items.find(i => i.item_id === itemId);
+
+        if (!item) {
+            showNotification('Item not found', 'error');
+            return;
+        }
+
+        // Open the modal
+        showCreateShopItemModal();
+
+        // Update title
+        const title = document.getElementById('shop-item-modal-title');
+        if (title) title.textContent = 'Edit Shop Item';
+
+        // Populate fields
+        document.getElementById('shop-item-id').value = item.item_id;
+        document.getElementById('shop-item-name').value = item.name;
+        document.getElementById('shop-item-description').value = item.description || '';
+        document.getElementById('shop-item-price').value = item.price;
+        document.getElementById('shop-item-stock').value = item.stock;
+        document.getElementById('shop-item-emoji').value = item.emoji || '';
+
+        const categorySelect = document.getElementById('shop-item-category');
+        if (categorySelect) {
+            categorySelect.value = item.category || 'role';
+
+            // Handle role category
+            if (item.category === 'role') {
+                // Trigger the category change logic to show role dropdown
+                categorySelect.dispatchEvent(new Event('change'));
+
+                // Wait for roles to load
+                await loadRolesForShopItem();
+
+                // Set the role ID
+                const roleSelect = document.getElementById('shop-item-role-id');
+                if (roleSelect && item.role_id) {
+                    roleSelect.value = item.role_id;
+                }
+            }
+        }
+
+    } catch (error) {
+        console.error('Edit shop item error:', error);
+        showNotification(`Failed to load item details: ${error.message}`, 'error');
+    }
 }
 
 async function viewShopStatistics() {
@@ -842,8 +892,45 @@ async function deleteTask(taskId) {
 }
 
 async function editTask(taskId) {
-    // TODO: Implement edit modal population
-    alert('Edit functionality coming soon!');
+    if (!currentServerId) return;
+
+    try {
+        // Fetch all tasks
+        const data = await apiCall(`/api/${currentServerId}/tasks`);
+
+        let task = null;
+        if (data.tasks) {
+            if (Array.isArray(data.tasks)) {
+                task = data.tasks.find(t => t.task_id === taskId);
+            } else {
+                task = data.tasks[taskId];
+            }
+        }
+
+        if (!task) {
+            showNotification('Task not found', 'error');
+            return;
+        }
+
+        // Open modal
+        showCreateTaskModal();
+
+        // Update title
+        const title = document.getElementById('task-modal-title');
+        if (title) title.textContent = 'Edit Task';
+
+        // Populate fields
+        document.getElementById('task-id').value = task.task_id;
+        document.getElementById('task-name').value = task.name;
+        document.getElementById('task-description').value = task.description || '';
+        document.getElementById('task-reward').value = task.reward;
+        document.getElementById('task-duration').value = task.duration_hours || 24;
+        document.getElementById('task-max-claims').value = task.max_claims || 0;
+
+    } catch (error) {
+        console.error('Edit task error:', error);
+        showNotification(`Failed to load task details: ${error.message}`, 'error');
+    }
 }
 
 async function loadServerSettings() {
@@ -2577,7 +2664,7 @@ function showCreateShopItemModal() {
     // Populate category dropdown with role options if category is 'role'
     const categorySelect = document.getElementById('shop-item-category');
     if (categorySelect) {
-        categorySelect.addEventListener('change', function () {
+        categorySelect.onchange = function () {
             const roleOptionsContainer = document.getElementById('shop-item-role-options');
             if (this.value === 'role') {
                 if (!roleOptionsContainer) {
@@ -2603,7 +2690,7 @@ function showCreateShopItemModal() {
                     roleOptionsContainer.remove();
                 }
             }
-        });
+        };
     }
 
     modal.style.display = 'block';
