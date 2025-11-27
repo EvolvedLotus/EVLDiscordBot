@@ -318,14 +318,29 @@
                         <textarea id="shop-item-description" class="form-control" rows="3"></textarea>
                     </div>
                     <div class="form-group">
-                        <div class="form-group">
-                            <label for="shop-item-emoji">Emoji</label>
-                            <input type="text" id="shop-item-emoji" class="form-control" placeholder="🛍️">
-                        </div>
-                        <div class="button-group">
-                            <button type="submit" class="btn-success">Save Item</button>
-                            <button type="button" onclick="closeShopItemModal()" class="btn-secondary">Cancel</button>
-                        </div>
+                        <label for="shop-item-price">Price *</label>
+                        <input type="number" id="shop-item-price" class="form-control" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="shop-item-category">Category</label>
+                        <select id="shop-item-category" class="form-control">
+                            <option value="general">General</option>
+                            <option value="role">Role</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="shop-item-stock">Stock (-1 for unlimited)</label>
+                        <input type="number" id="shop-item-stock" class="form-control" value="-1">
+                    </div>
+                    <div class="form-group">
+                        <label for="shop-item-emoji">Emoji</label>
+                        <input type="text" id="shop-item-emoji" class="form-control" placeholder="🛍️">
+                    </div>
+                    <div class="button-group">
+                        <button type="submit" class="btn-success">Save Item</button>
+                        <button type="button" onclick="closeShopItemModal()" class="btn-secondary">Cancel</button>
+                    </div>
                 </form>
             </div>
         </div>
