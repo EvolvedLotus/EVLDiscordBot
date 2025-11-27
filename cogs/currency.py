@@ -108,6 +108,8 @@ class RedemptionView(discord.ui.View):
             # Show modal
             await interaction.response.send_modal(QuantityModal(item_id, item_name, quantity, self.shop_manager, self))
         else:
+            # Defer immediately to prevent timeout
+            await interaction.response.defer(ephemeral=True)
             # Auto redeem 1
             await self.process_redemption(interaction, item_id, 1)
 
