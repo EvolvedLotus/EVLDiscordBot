@@ -287,6 +287,35 @@ async function loadConfigTab() {
                     </div>
                 </div>
 
+                <!-- Permission Roles -->
+                <div class="section-card">
+                    <h3>🔐 Permission Roles</h3>
+                    
+                    <div class="form-group">
+                        <label for="admin-roles">Admin Roles:</label>
+                        <select id="admin-roles" class="form-control" multiple size="5">
+                            ${Object.values(discordDataCache.roles).map(r =>
+            `<option value="${r.id}">${r.name}</option>`
+        ).join('')}
+                        </select>
+                        <small>Hold Ctrl/Cmd to select multiple roles</small>
+                        <button onclick="saveRolePermissions('admin')" class="btn-primary btn-small">Save</button>
+                        <span id="admin-roles-status" class="status-text"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="moderator-roles">Moderator Roles:</label>
+                        <select id="moderator-roles" class="form-control" multiple size="5">
+                            ${Object.values(discordDataCache.roles).map(r =>
+            `<option value="${r.id}">${r.name}</option>`
+        ).join('')}
+                        </select>
+                        <small>Hold Ctrl/Cmd to select multiple roles</small>
+                        <button onclick="saveRolePermissions('moderator')" class="btn-primary btn-small">Save</button>
+                        <span id="moderator-roles-status" class="status-text"></span>
+                    </div>
+                </div>
+
                 <!-- Currency Settings -->
                 <div class="section-card">
                     <h3>💰 Currency Settings</h3>
@@ -427,6 +456,22 @@ async function loadConfigTab() {
                 }
                 if (botStatusType && config.bot_status_type) {
                     botStatusType.value = config.bot_status_type;
+                }
+
+                // Set permission roles
+                const adminRolesSelect = document.getElementById('admin-roles');
+                const moderatorRolesSelect = document.getElementById('moderator-roles');
+
+                if (adminRolesSelect && config.admin_roles) {
+                    Array.from(adminRolesSelect.options).forEach(option => {
+                        option.selected = config.admin_roles.includes(option.value);
+                    });
+                }
+
+                if (moderatorRolesSelect && config.moderator_roles) {
+                    Array.from(moderatorRolesSelect.options).forEach(option => {
+                        option.selected = config.moderator_roles.includes(option.value);
+                    });
                 }
             }
 
@@ -1749,6 +1794,38 @@ async function saveFeatureToggle(feature) {
         showNotification(`${feature.charAt(0).toUpperCase() + feature.slice(1)} feature ${isEnabled ? 'enabled' : 'disabled'}`, 'success');
     } catch (error) {
         showNotification(`Failed to toggle ${feature}: ${error.message}`, 'error');
+    }
+}
+
+async function saveRolePermissions(type) {
+    const selectId = type === 'admin' ? 'admin-roles' : 'moderator-roles';
+    const select = document.getElementById(selectId);
+    const selectedRoles = Array.from(select.selectedOptions).map(opt => opt.value);
+    const fieldName = type === 'admin' ? 'admin_roles' : 'moderator_roles';
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                [fieldName]: selectedRoles
+            })
+        });
+        showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} roles updated`, 'success');
+
+        // Update status indicator
+        const statusSpan = document.getElementById(`${selectId}-status`);
+        if (statusSpan) {
+            statusSpan.textContent = '✓ Saved';
+            statusSpan.style.color = 'green';
+            setTimeout(() => statusSpan.textContent = '', 2000);
+        }
+    } catch (error) {
+        showNotification(`Failed to update ${type} roles: ${error.message}`, 'error');
+        const statusSpan = document.getElementById(`${selectId}-status`);
+        if (statusSpan) {
+            statusSpan.textContent = '✗ Failed';
+            statusSpan.style.color = 'red';
+        }
     }
 }
 
