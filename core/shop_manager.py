@@ -732,10 +732,14 @@ class ShopManager:
         new_quantity = current_quantity - quantity
         if new_quantity <= 0:
             user_inventory.pop(item_id, None)
+            logger.info(f"Removed item {item_id} from user {user_id} inventory (quantity 0)")
         else:
             user_inventory[item_id] = new_quantity
+            logger.info(f"Updated item {item_id} for user {user_id} inventory to {new_quantity}")
 
         success = self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
+        if not success:
+            logger.error(f"Failed to save currency data after removing item {item_id}")
         if success:
             self._clear_inventory_cache(guild_id, user_id)
             self.data_manager.invalidate_cache(guild_id, 'currency')
@@ -762,6 +766,9 @@ class ShopManager:
         item = self.get_item(guild_id, item_id)
         if not item:
             return {'success': False, 'error': 'Item not found'}
+        
+        # Inject item_id into item dict for downstream usage
+        item['item_id'] = item_id
 
         category = item.get('category', 'misc')
         if category not in ['role', 'misc', 'general', 'other']:
