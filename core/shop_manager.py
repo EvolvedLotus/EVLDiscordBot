@@ -731,8 +731,9 @@ class ShopManager:
 
         new_quantity = current_quantity - quantity
         if new_quantity <= 0:
-            user_inventory.pop(item_id, None)
-            logger.info(f"Removed item {item_id} from user {user_id} inventory (quantity 0)")
+            # Set to 0 instead of popping so save_guild_data sees it and deletes from DB
+            user_inventory[item_id] = 0
+            logger.info(f"Marked item {item_id} for removal from user {user_id} inventory (quantity 0)")
         else:
             user_inventory[item_id] = new_quantity
             logger.info(f"Updated item {item_id} for user {user_id} inventory to {new_quantity}")
@@ -741,6 +742,8 @@ class ShopManager:
         if not success:
             logger.error(f"Failed to save currency data after removing item {item_id}")
         if success:
+            # If successfully saved (deleted from DB), now we can pop it from cache/memory if needed
+            # But since we reload from DB often, it's fine.
             self._clear_inventory_cache(guild_id, user_id)
             self.data_manager.invalidate_cache(guild_id, 'currency')
             self._broadcast_event('inventory_update', {
@@ -750,6 +753,8 @@ class ShopManager:
                 'item_id': item_id,
                 'quantity': quantity
             })
+
+        return success
 
         return success
 
@@ -1406,6 +1411,9 @@ class RedemptionRequestView(discord.ui.View):
             await interaction.response.send_message("❌ You do not have permission to accept this request.", ephemeral=True)
             return
 
+        # Defer immediately to prevent timeout
+        await interaction.response.defer()
+
         # Disable buttons
         for child in self.children:
             child.disabled = True
@@ -1420,7 +1428,7 @@ class RedemptionRequestView(discord.ui.View):
                 embed.set_field_at(i, name="Status", value=f"✅ Accepted by {interaction.user.mention}", inline=False)
                 break
         
-        await interaction.response.edit_message(embed=embed, view=self)
+        await interaction.message.edit(embed=embed, view=self)
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
     async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1430,8 +1438,22 @@ class RedemptionRequestView(discord.ui.View):
             await interaction.response.send_message("❌ You do not have permission to deny this request.", ephemeral=True)
             return
 
+        # Defer immediately
+        await interaction.response.defer()
+
         # Refund item
-        self.shop_manager.add_to_inventory(self.guild_id, self.user_id, self.item['item_id'], self.quantity)
+        try:
+            item_id = self.item.get('item_id')
+            if not item_id:
+                logger.warning(f"Item ID missing in redemption request deny for user {self.user_id}")
+                await interaction.followup.send("❌ Error: Item ID missing. Cannot refund.", ephemeral=True)
+                return
+
+            self.shop_manager.add_to_inventory(self.guild_id, self.user_id, item_id, self.quantity)
+        except Exception as e:
+            logger.error(f"Failed to refund item on deny: {e}")
+            await interaction.followup.send("❌ Error refunding item.", ephemeral=True)
+            return
         
         # Disable buttons
         for child in self.children:
@@ -1444,10 +1466,10 @@ class RedemptionRequestView(discord.ui.View):
         # Update Status field
         for i, field in enumerate(embed.fields):
             if field.name == "Status":
-                embed.set_field_at(i, name="Status", value=f"❌ Denied by {interaction.user.mention} (Refunded)", inline=False)
+                embed.set_field_at(i, name="Status", value=f"❌ Denied by {interaction.user.mention}", inline=False)
                 break
-                
-        await interaction.response.edit_message(embed=embed, view=self)
+        
+        await interaction.message.edit(embed=embed, view=self)
 
 
 class ShopItemView(discord.ui.View):
