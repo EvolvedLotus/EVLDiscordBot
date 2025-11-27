@@ -1,0 +1,65 @@
+# **__✨ Introducing EVLBot - Your All-in-One Discord Community Powerhouse! ✨__**
+
+We're excited to unveil **EVLBot**, a revolutionary Discord bot designed to transform how you manage and engage your community! Built with cutting-edge technology and packed with features, EVLBot brings gamification, automation, and professional-grade management tools right to your server.
+
+**__🚀 What Makes EVLBot Special:__**
+
+**For All Server Owners:**
+
+**__💰 Complete Economy & Shop Ecosystem:__**
+Create a thriving in-server economy! Users earn coins through daily rewards, completing tasks, and watching ads. Build your custom shop with role rewards, collectible items, and even manual redemption items like coaching sessions. Every transaction is logged, and your community stays engaged!
+
+**__📋 Dynamic Task & Quest System:__**
+Design custom challenges for your members! Set requirements, attach rewards, and let users submit proof directly through Discord. Moderators can approve or reject submissions with a built-in workflow that keeps everything organized.
+
+**__🛡️ Advanced Moderation Suite:__**
+Keep your server safe with our comprehensive strike system, automated actions for temporary punishments, and detailed audit logging. Everything you need to maintain a healthy community environment.
+
+**__📺 Ad Rewards - Monetize While You Reward:__**
+Integrated with Monetag, users can watch short ads to earn server currency. Create a revenue stream for your server while keeping members engaged and rewarded!
+
+**__🖥️ Powerful Web Dashboard (CMS):__**
+Manage everything from a beautiful web interface! No commands needed - just log in with Discord OAuth and access:
+- Real-time server statistics
+- Visual shop and task managers
+- Custom embed builder
+- Announcement system
+- Complete bot configuration with role-based permissions
+
+**__🎯 Exclusive for EvolvedLotus Community Members:__**
+
+As part of our community, you get special perks with EVLBot:
+- **Complete access to all bot features** right here in our server
+- **Earn EvolvedLotus coins** by participating in daily activities and completing community tasks
+- **Redeem exclusive items** from our custom shop including special roles, perks, and community rewards
+- **Test and experience** all EVLBot features firsthand before deploying to your own server
+- **Priority support** and feature requests from the development team
+- **Early access** to new features and updates before public release
+
+**Want EVLBot for your own server?** Experience it here first, then deploy it to supercharge your community!
+
+**__🎮 Available Commands:__**
+
+**Economy & Shop:**
+*   `/balance` - Check your current coin balance
+*   `/daily` - Claim your daily reward
+*   `/shop` - Browse and buy items from the shop
+*   `/inventory` - View your purchased items
+*   `/redeem` - Redeem an item from your inventory
+*   `/pay <user> <amount>` - Send coins to another user
+*   `/leaderboard` - See the richest members
+*   `/watch` - Watch a short ad to earn coins
+
+**Tasks & Quests:**
+*   `/tasks` - View available tasks
+*   `/claim <task_id>` - Start working on a task
+*   `/submit <task_id>` - Submit proof for a task to get your reward
+
+**Moderation (Staff Only):**
+*   `/strike <user> <reason>` - Issue a strike to a user
+*   `/strikes <user>` - View a user's strike history
+*   `/mute`, `/unmute`, `/ban`, `/kick`, `/purge` - Standard moderation tools
+
+## Ready to Level Up Your Community? → [Get EVLBot Now](https://github.com/EvolvedLotus/EVLDiscordBot)
+
+|| @Announcement Ping 📣 ||
