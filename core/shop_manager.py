@@ -721,6 +721,11 @@ class ShopManager:
         user_inventory = inventory.get(str(user_id), {})
 
         current_quantity = user_inventory.get(item_id, 0)
+        
+        # Handle case where inventory might be a dict with 'quantity' key
+        if isinstance(current_quantity, dict):
+            current_quantity = current_quantity.get('quantity', 0)
+        
         if current_quantity < quantity:
             return False
 
