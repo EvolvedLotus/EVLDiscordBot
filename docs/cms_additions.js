@@ -45,16 +45,18 @@ async function loadServerManagement() {
         let html = '<div class="server-list">';
 
         response.servers.forEach(server => {
+            const serverName = escapeHtml(server.name);
             html += `
                 <div class="server-item" data-server-id="${server.id}">
                     <div class="server-info">
-                        <div class="server-name">${escapeHtml(server.name)}</div>
+                        <div class="server-name">${serverName}</div>
                         <div class="server-id">ID: ${server.id}</div>
                         <div class="server-members">👥 ${server.member_count || 'N/A'} members</div>
                     </div>
                     <div class="server-actions">
-                        <button onclick="leaveServer('${server.id}', '${escapeHtml(server.name)}')" 
-                                class="btn-leave-server"
+                        <button class="btn-leave-server"
+                                data-server-id="${server.id}"
+                                data-server-name="${serverName}"
                                 title="Leave this server">
                             🚪 Leave Server
                         </button>
@@ -65,6 +67,15 @@ async function loadServerManagement() {
 
         html += '</div>';
         container.innerHTML = html;
+
+        // Add event listeners to all leave buttons
+        container.querySelectorAll('.btn-leave-server').forEach(button => {
+            button.addEventListener('click', function () {
+                const serverId = this.getAttribute('data-server-id');
+                const serverName = this.getAttribute('data-server-name');
+                leaveServer(serverId, serverName);
+            });
+        });
 
     } catch (error) {
         console.error('Failed to load servers:', error);
