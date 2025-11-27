@@ -765,6 +765,10 @@ class ShopManager:
         # Check inventory
         inventory = self.get_inventory(guild_id, user_id, include_item_details=False)
         current_quantity = inventory.get(item_id, 0)
+        
+        # Handle case where inventory might be a dict with 'quantity' key
+        if isinstance(current_quantity, dict):
+            current_quantity = current_quantity.get('quantity', 0)
 
         if current_quantity < quantity:
             return {'success': False, 'error': f'Insufficient quantity. Have {current_quantity}, need {quantity}'}

@@ -364,6 +364,50 @@ async def run_bot():
         @bot.event
         async def on_guild_remove(guild):
             logger.info(f"Removed from guild: {guild.name} (ID: {guild.id})")
+            
+            # Clean up all guild data from database
+            try:
+                guild_id = str(guild.id)
+                
+                # Delete from all tables
+                tables_to_clean = [
+                    'guilds',
+                    'user_balances',
+                    'transactions',
+                    'shop_items',
+                    'user_inventory',
+                    'tasks',
+                    'user_tasks',
+                    'announcements',
+                    'embeds',
+                    'moderation_audit_logs',
+                    'scheduled_jobs',
+                    'ad_sessions',
+                    'guild_roles',
+                    'user_roles'
+                ]
+                
+                for table in tables_to_clean:
+                    try:
+                        data_manager.admin_client.table(table).delete().eq('guild_id', guild_id).execute()
+                        logger.info(f"Deleted {table} data for guild {guild_id}")
+                    except Exception as table_error:
+                        logger.warning(f"Failed to delete {table} data for guild {guild_id}: {table_error}")
+                
+                # Delete file-based data
+                try:
+                    import shutil
+                    guild_data_path = f"data/guilds/{guild_id}"
+                    if os.path.exists(guild_data_path):
+                        shutil.rmtree(guild_data_path)
+                        logger.info(f"Deleted file data for guild {guild_id}")
+                except Exception as file_error:
+                    logger.warning(f"Failed to delete file data for guild {guild_id}: {file_error}")
+                
+                logger.info(f"Successfully cleaned up all data for guild {guild.name} ({guild_id})")
+                
+            except Exception as e:
+                logger.error(f"Error cleaning up guild data for {guild.id}: {e}")
 
             # Update bot status
             await bot.change_presence(
