@@ -1366,13 +1366,37 @@ class RedemptionRequestView(discord.ui.View):
         self.user_id = user_id
         self.item = item
         self.quantity = quantity
+    
+    def _has_permission(self, interaction: discord.Interaction) -> bool:
+        """Check if user has moderator or admin permissions"""
+        # Server owner always has permission
+        if interaction.user.id == interaction.guild.owner_id:
+            return True
+        
+        # Check Discord permissions
+        if interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.manage_guild:
+            return True
+        
+        # Check custom roles from config
+        try:
+            config = self.shop_manager.data_manager.load_guild_data(self.guild_id, 'config')
+            admin_roles = config.get('admin_roles', [])
+            moderator_roles = config.get('moderator_roles', [])
+            
+            user_role_ids = [str(role.id) for role in interaction.user.roles]
+            
+            # Check if user has any admin or moderator role
+            return any(role_id in user_role_ids for role_id in (admin_roles + moderator_roles))
+        except Exception as e:
+            logger.error(f"Error checking permissions: {e}")
+            return False
 
     @discord.ui.button(label="Accept", style=discord.ButtonStyle.success, emoji="✅")
     async def accept_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Accept redemption request"""
         # Check permissions (only mods/admins)
-        if not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message("You do not have permission to accept this request.", ephemeral=True)
+        if not self._has_permission(interaction):
+            await interaction.response.send_message("❌ You do not have permission to accept this request.", ephemeral=True)
             return
 
         # Disable buttons
@@ -1395,8 +1419,8 @@ class RedemptionRequestView(discord.ui.View):
     async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """Deny redemption request and refund item"""
         # Check permissions
-        if not interaction.user.guild_permissions.manage_guild:
-            await interaction.response.send_message("You do not have permission to deny this request.", ephemeral=True)
+        if not self._has_permission(interaction):
+            await interaction.response.send_message("❌ You do not have permission to deny this request.", ephemeral=True)
             return
 
         # Refund item
