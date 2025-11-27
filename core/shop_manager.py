@@ -1385,14 +1385,6 @@ class RedemptionRequestView(discord.ui.View):
                 break
         
         await interaction.response.edit_message(embed=embed, view=self)
-        
-        # Notify user
-        try:
-            user = await interaction.guild.fetch_member(self.user_id)
-            if user:
-                await user.send(f"✅ Your redemption request for **{self.quantity}x {self.item['name']}** has been accepted!")
-        except Exception as e:
-            logger.warning(f"Failed to DM user {self.user_id} about acceptance: {e}")
 
     @discord.ui.button(label="Deny", style=discord.ButtonStyle.danger, emoji="❌")
     async def deny_button(self, interaction: discord.Interaction, button: discord.ui.Button):
