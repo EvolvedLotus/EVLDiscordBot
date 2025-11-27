@@ -397,7 +397,15 @@
                     </div>
                     <div class="form-group">
                         <label for="announcement-content">Content *</label>
-                        <textarea id="announcement-content" class="form-control" rows="4" required></textarea>
+                        <textarea id="announcement-content" class="form-control" rows="4" maxlength="2000" required
+                            oninput="updateAnnouncementCharCount()"></textarea>
+                        <small id="announcement-char-count" style="color: #666;">0 / 2000 characters</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="announcement-image">Image URL (Optional)</label>
+                        <input type="url" id="announcement-image" class="form-control"
+                            placeholder="https://example.com/image.png">
+                        <small>Paste a direct link to an image (JPG, PNG, GIF, etc.)</small>
                     </div>
                     <div class="form-group">
                         <label for="announcement-channel">Channel *</label>

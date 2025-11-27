@@ -2268,6 +2268,23 @@ async function deleteTask(taskId) {
 
 // ========== ANNOUNCEMENT ACTIONS ==========
 
+// Update character count for announcement content
+function updateAnnouncementCharCount() {
+    const content = document.getElementById('announcement-content').value;
+    const counter = document.getElementById('announcement-char-count');
+    const length = content.length;
+    counter.textContent = `${length} / 2000 characters`;
+
+    // Change color based on length
+    if (length > 1900) {
+        counter.style.color = '#e74c3c'; // Red when approaching limit
+    } else if (length > 1500) {
+        counter.style.color = '#f39c12'; // Orange as warning
+    } else {
+        counter.style.color = '#666'; // Gray for normal
+    }
+}
+
 async function saveAnnouncement(event) {
     if (event) event.preventDefault();
 
@@ -2275,9 +2292,16 @@ async function saveAnnouncement(event) {
     const content = document.getElementById('announcement-content').value;
     const channelId = document.getElementById('announcement-channel').value;
     const isPinned = document.getElementById('announcement-pinned').checked;
+    const imageUrl = document.getElementById('announcement-image').value;
 
     if (!title || !content || !channelId) {
         showNotification('Please fill all required fields', 'warning');
+        return;
+    }
+
+    // Validate content length
+    if (content.length > 2000) {
+        showNotification('Content must be 2000 characters or less', 'error');
         return;
     }
 
@@ -2288,7 +2312,8 @@ async function saveAnnouncement(event) {
                 title,
                 content,
                 channel_id: channelId,
-                pinned: isPinned
+                pinned: isPinned,
+                image_url: imageUrl || null
             })
         });
 
