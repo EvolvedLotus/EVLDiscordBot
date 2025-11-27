@@ -1420,14 +1420,6 @@ class RedemptionRequestView(discord.ui.View):
                 break
                 
         await interaction.response.edit_message(embed=embed, view=self)
-        
-        # Notify user
-        try:
-            user = await interaction.guild.fetch_member(self.user_id)
-            if user:
-                await user.send(f"❌ Your redemption request for **{self.quantity}x {self.item['name']}** has been denied and the items have been refunded.")
-        except Exception as e:
-            logger.warning(f"Failed to DM user {self.user_id} about denial: {e}")
 
 
 class ShopItemView(discord.ui.View):
