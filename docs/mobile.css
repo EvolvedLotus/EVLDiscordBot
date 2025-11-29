@@ -1,0 +1,185 @@
+/* Mobile Responsive Styles for EVL Discord Bot CMS */
+/* Add this file to index.html with: <link rel="stylesheet" href="./mobile.css"> */
+
+/* Mobile Navigation */
+@media (max-width: 768px) {
+
+    /* Sidebar becomes full-width overlay on mobile */
+    .sidebar {
+        position: fixed;
+        left: -100%;
+        width: 80%;
+        max-width: 300px;
+        transition: left 0.3s ease;
+        z-index: 1000;
+    }
+
+    .sidebar.mobile-open {
+        left: 0;
+    }
+
+    /* Main content takes full width on mobile */
+    .main-content {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    /* Mobile menu toggle button */
+    .mobile-menu-toggle {
+        display: block;
+        position: fixed;
+        top: 15px;
+        left: 15px;
+        z-index: 999;
+        width: 44px;
+        height: 44px;
+        background-color: var(--discord-blurple);
+        border: none;
+        border-radius: 8px;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Overlay when mobile menu is open */
+    .mobile-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 999;
+    }
+
+    .mobile-overlay.active {
+        display: block;
+    }
+
+    /* Adjust section headers for mobile */
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .header-actions {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .header-actions button {
+        flex: 1 1 auto;
+        min-width: 120px;
+    }
+
+    /* Make tables scrollable on mobile */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+        min-width: 600px;
+    }
+
+    /* Stack form groups vertically */
+    .form-row {
+        flex-direction: column;
+    }
+
+    .form-group {
+        width: 100% !important;
+    }
+
+    /* Larger touch targets for buttons */
+    button,
+    .btn-primary,
+    .btn-secondary,
+    .btn-success,
+    .btn-danger {
+        min-height: 44px;
+        padding: 12px 16px;
+    }
+
+    /* Modal adjustments for mobile */
+    .modal-content {
+        width: 95%;
+        max-width: none;
+        margin: 20px auto;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    /* Stats grid becomes single column */
+    .stats-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Login screen adjustments */
+    .login-container {
+        width: 90%;
+        padding: 30px 20px;
+    }
+
+    .login-header h1 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Tablet adjustments */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .sidebar {
+        width: 200px;
+    }
+
+    .main-content {
+        margin-left: 200px;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+/* Hide mobile menu toggle on desktop */
+@media (min-width: 769px) {
+    .mobile-menu-toggle {
+        display: none;
+    }
+}
+
+/* Ensure touch-friendly spacing on all screen sizes */
+input,
+select,
+textarea {
+    min-height: 40px;
+    font-size: 16px;
+    /* Prevents zoom on iOS */
+}
+
+/* Improve readability on small screens */
+@media (max-width: 480px) {
+    body {
+        font-size: 14px;
+    }
+
+    h2 {
+        font-size: 1.3rem;
+    }
+
+    h3 {
+        font-size: 1.1rem;
+    }
+
+    .modal-content {
+        width: 100%;
+        margin: 0;
+        border-radius: 0;
+        max-height: 100vh;
+    }
+}
