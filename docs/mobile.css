@@ -1,7 +1,7 @@
 /* Mobile Responsive Styles for EVL Discord Bot CMS */
 /* Add this file to index.html with: <link rel="stylesheet" href="./mobile.css"> */
 
-/* Mobile Navigation */
+/* Mobile Navigation & Layout */
 @media (max-width: 768px) {
 
     /* Sidebar becomes full-width overlay on mobile */
@@ -129,6 +129,15 @@
     .login-header h1 {
         font-size: 1.5rem;
     }
+
+    /* Ensure touch-friendly spacing on mobile inputs */
+    input,
+    select,
+    textarea {
+        min-height: 40px;
+        font-size: 16px;
+        /* Prevents zoom on iOS */
+    }
 }
 
 /* Tablet adjustments */
@@ -153,16 +162,7 @@
     }
 }
 
-/* Ensure touch-friendly spacing on all screen sizes */
-input,
-select,
-textarea {
-    min-height: 40px;
-    font-size: 16px;
-    /* Prevents zoom on iOS */
-}
-
-/* Improve readability on small screens */
+/* Improve readability on very small screens */
 @media (max-width: 480px) {
     body {
         font-size: 14px;
