@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EVL Discord Bot - Documentation</title>
+    <link rel="stylesheet" href="./styles.css">
+    <link rel="stylesheet" href="./mobile-responsive.css">
+    <style>
+        /* Documentation-specific styles */
+        .docs-container {
+            min-height: 100vh;
+            background-color: var(--bg-primary);
+            padding: 0;
+        }
+
+        .docs-header {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+            border-bottom: 1px solid var(--border-primary);
+            padding: 40px 0;
+            text-align: center;
+        }
+
+        .docs-header h1 {
+            font-size: 3rem;
+            margin-bottom: 12px;
+            background: linear-gradient(45deg, var(--discord-blurple), var(--discord-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .docs-header p {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        .docs-nav {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .docs-nav a {
+            padding: 10px 20px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-radius: 6px;
+            border: 1px solid var(--border-secondary);
+            transition: all var(--transition-fast);
+            font-weight: 500;
+        }
+
+        .docs-nav a:hover {
+            background-color: var(--discord-blurple);
+            color: var(--text-primary);
+            border-color: var(--discord-blurple);
+            transform: translateY(-2px);
+        }
+
+        .docs-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 60px 40px;
+        }
+
+        .docs-section {
+            margin-bottom: 60px;
+        }
+
+        .docs-section h2 {
+            font-size: 2rem;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--discord-blurple);
+        }
+
+        .docs-section h3 {
+            font-size: 1.5rem;
+            color: var(--text-primary);
+            margin: 32px 0 16px 0;
+        }
+
+        .docs-section p {
+            color: var(--text-secondary);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .docs-section ul,
+        .docs-section ol {
+            color: var(--text-secondary);
+            line-height: 1.8;
+            margin-bottom: 16px;
+            padding-left: 24px;
+        }
+
+        .docs-section li {
+            margin-bottom: 8px;
+        }
+
+        .command-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+            margin: 24px 0;
+        }
+
+        .command-card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 8px;
+            padding: 16px;
+            transition: all var(--transition-normal);
+        }
+
+        .command-card:hover {
+            border-color: var(--discord-blurple);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .command-name {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--discord-blurple);
+            margin-bottom: 8px;
+            font-family: monospace;
+        }
+
+        .command-desc {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 24px 0;
+        }
+
+        .feature-card {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-primary);
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            transition: all var(--transition-normal);
+        }
+
+        .feature-card:hover {
+            border-color: var(--discord-green);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+
+        .feature-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+        }
+
+        .feature-desc {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+        }
+
+        .code-block {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-secondary);
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            color: var(--discord-green);
+        }
+
+        .info-box {
+            background-color: rgba(88, 101, 242, 0.1);
+            border-left: 4px solid var(--discord-blurple);
+            padding: 16px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .warning-box {
+            background-color: rgba(250, 166, 26, 0.1);
+            border-left: 4px solid var(--discord-yellow);
+            padding: 16px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .success-box {
+            background-color: rgba(59, 165, 93, 0.1);
+            border-left: 4px solid var(--discord-green);
+            padding: 16px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .back-to-top {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background-color: var(--discord-blurple);
+            color: var(--text-primary);
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            transition: all var(--transition-fast);
+            z-index: 1000;
+        }
+
+        .back-to-top:hover {
+            background-color: var(--discord-blurple-dark);
+            transform: translateY(-4px);
+        }
+
+        .back-to-top.show {
+            display: flex;
+        }
+
+        @media (max-width: 768px) {
+            .docs-header h1 {
+                font-size: 2rem;
+            }
+
+            .docs-header p {
+                font-size: 1rem;
+            }
+
+            .docs-content {
+                padding: 40px 20px;
+            }
+
+            .docs-section h2 {
+                font-size: 1.5rem;
+            }
+
+            .command-grid,
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="docs-container">
+        <!-- Header -->
+        <header class="docs-header">
+            <h1>🤖 EVL Discord Bot</h1>
+            <p>Complete Documentation & Setup Guide</p>
+            <nav class="docs-nav">
+                <a href="#overview">Overview</a>
+                <a href="#setup">Setup</a>
+                <a href="#features">Features</a>
+                <a href="#commands">Commands</a>
+                <a href="#cms">CMS Guide</a>
+                <a href="#faq">FAQ</a>
+                <a href="./index.html">← Back to Dashboard</a>
+            </nav>
+        </header>
+
+        <!-- Main Content -->
+        <div class="docs-content">
+            <!-- Overview Section -->
+            <section id="overview" class="docs-section">
+                <h2>📋 Overview</h2>
+                <p>
+                    EVL Discord Bot is a comprehensive, feature-rich Discord bot designed for community managers who
+                    want to implement a reward-based economy system, task management, moderation tools, and more. The
+                    bot includes a powerful web-based CMS (Content Management System) for easy administration without
+                    needing to use Discord commands.
+                </p>
+
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">💰</div>
+                        <div class="feature-title">Economy System</div>
+                        <div class="feature-desc">Full currency system with daily rewards, transactions, and
+                            leaderboards</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📋</div>
+                        <div class="feature-title">Task Management</div>
+                        <div class="feature-desc">Create, assign, and reward users for completing tasks</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🛒</div>
+                        <div class="feature-title">Shop System</div>
+                        <div class="feature-desc">Customizable shop with items, roles, and inventory management</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🛡️</div>
+                        <div class="feature-title">Moderation</div>
+                        <div class="feature-desc">Advanced moderation with warnings, mutes, kicks, bans, and auto-mod
+                        </div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">📢</div>
+                        <div class="feature-title">Announcements</div>
+                        <div class="feature-desc">Rich embed creator with scheduling capabilities</div>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">🖥️</div>
+                        <div class="feature-title">Web Dashboard</div>
+                        <div class="feature-desc">Full-featured CMS for managing all bot functions</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Setup Section -->
+            <section id="setup" class="docs-section">
+                <h2>🚀 Setup Guide</h2>
+
+                <h3>Prerequisites</h3>
+                <ul>
+                    <li>A Discord account with server ownership or Administrator permissions</li>
+                    <li>Access to the EVL Bot (contact server admin for invite link)</li>
+                </ul>
+
+                <h3>Step 1: Invite the Bot</h3>
+                <div class="info-box">
+                    <p><strong>Note:</strong> Make sure you have "Manage Server" permissions to add the bot to your
+                        Discord server.</p>
+                </div>
+                <ol>
+                    <li>Click the bot invite link provided by your server administrator</li>
+                    <li>Select your server from the dropdown menu</li>
+                    <li>Review the requested permissions (the bot needs these to function properly)</li>
+                    <li>Click "Authorize" and complete the CAPTCHA</li>
+                </ol>
+
+                <h3>Step 2: Initial Configuration</h3>
+                <p>Once the bot joins your server, it will automatically create the necessary database entries. You can
+                    now configure it using either Discord commands or the web dashboard.</p>
+
+                <div class="code-block">
+                    /help - View all available commands<br>
+                    /serverinfo - View your server's bot configuration
+                </div>
+
+                <h3>Step 3: Access the Web Dashboard</h3>
+                <ol>
+                    <li>Navigate to the CMS login page (provided by your administrator)</li>
+                    <li>Log in using your Discord account credentials</li>
+                    <li>Select your server from the dropdown menu</li>
+                    <li>Start managing your server through the intuitive web interface!</li>
+                </ol>
+
+                <div class="success-box">
+                    <p><strong>✅ Setup Complete!</strong> Your bot is now ready to use. Check out the Features and
+                        Commands sections below to learn what you can do.</p>
+                </div>
+            </section>
+
+            <!-- Features Section -->
+            <section id="features" class="docs-section">
+                <h2>✨ Features</h2>
+
+                <h3>💰 Economy System</h3>
+                <p>The bot includes a full-featured economy system where users can earn, spend, and transfer currency:
+                </p>
+                <ul>
+                    <li><strong>Daily Rewards:</strong> Users can claim 100 coins daily with <code>/daily</code></li>
+                    <li><strong>Transactions:</strong> Transfer coins between users with <code>/transfer</code></li>
+                    <li><strong>Leaderboards:</strong> View the richest users with <code>/leaderboard</code></li>
+                    <li><strong>Transaction History:</strong> Track all currency movements with
+                        <code>/transactions</code></li>
+                    <li><strong>Ad Rewards:</strong> Users can watch ads to earn additional currency</li>
+                </ul>
+
+                <h3>🛒 Shop System</h3>
+                <p>Create a custom shop with items that users can purchase:</p>
+                <ul>
+                    <li><strong>Custom Items:</strong> Create items with custom names, descriptions, prices, and emojis
+                    </li>
+                    <li><strong>Role Rewards:</strong> Automatically assign Discord roles when items are purchased</li>
+                    <li><strong>Stock Management:</strong> Set limited or unlimited stock for items</li>
+                    <li><strong>Inventory System:</strong> Users can view and redeem their purchased items</li>
+                    <li><strong>Categories:</strong> Organize items into categories (General, Roles, Other)</li>
+                </ul>
+
+                <h3>📋 Task Management</h3>
+                <p>Create tasks for users to complete and earn rewards:</p>
+                <ul>
+                    <li><strong>Task Creation:</strong> Define tasks with descriptions, rewards, and duration</li>
+                    <li><strong>Task Claiming:</strong> Users claim tasks and submit proof of completion</li>
+                    <li><strong>Verification:</strong> Admins review and approve task submissions</li>
+                    <li><strong>Auto-Rewards:</strong> Currency is automatically awarded upon task completion</li>
+                    <li><strong>Task Limits:</strong> Set maximum claims per task</li>
+                </ul>
+
+                <h3>🛡️ Moderation Tools</h3>
+                <p>Comprehensive moderation features to keep your server safe:</p>
+                <ul>
+                    <li><strong>Warnings:</strong> Issue warnings to users and track warning history</li>
+                    <li><strong>Timeouts/Mutes:</strong> Temporarily restrict user messaging</li>
+                    <li><strong>Kicks & Bans:</strong> Remove problematic users from your server</li>
+                    <li><strong>Profanity Filter:</strong> Automatically detect and remove inappropriate language</li>
+                    <li><strong>Link Whitelist:</strong> Control which domains can be shared</li>
+                    <li><strong>Auto-Moderation:</strong> Configurable protection levels</li>
+                    <li><strong>Moderation Logs:</strong> Track all moderation actions</li>
+                </ul>
+
+                <h3>📢 Announcements & Embeds</h3>
+                <p>Create beautiful, rich announcements:</p>
+                <ul>
+                    <li><strong>Embed Builder:</strong> Visual editor for creating custom embeds</li>
+                    <li><strong>Scheduling:</strong> Schedule announcements for future posting</li>
+                    <li><strong>Pinning:</strong> Automatically pin important announcements</li>
+                    <li><strong>Image Support:</strong> Add images to announcements</li>
+                    <li><strong>Templates:</strong> Save and reuse embed templates</li>
+                </ul>
+
+                <h3>🤖 AI Assistant</h3>
+                <p>Built-in AI chat functionality for server members:</p>
+                <ul>
+                    <li><strong>Conversational AI:</strong> Chat with an AI assistant using <code>/chat</code></li>
+                    <li><strong>Context Awareness:</strong> AI remembers conversation history</li>
+                    <li><strong>Privacy:</strong> Clear your chat history with <code>/clear_chat</code></li>
+                </ul>
+            </section>
+
+            <!-- Commands Section -->
+            <section id="commands" class="docs-section">
+                <h2>📚 Command Reference</h2>
+                <p>The bot includes <strong>76+ slash commands</strong>. Here are the most commonly used commands
+                    organized by category:</p>
+
+                <h3>💰 Currency & Economy Commands</h3>
+                <div class="command-grid">
+                    <div class="command-card">
+                        <div class="command-name">/balance</div>
+                        <div class="command-desc">Check your current balance</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/daily</div>
+                        <div class="command-desc">Claim your daily reward of 100 coins</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/leaderboard</div>
+                        <div class="command-desc">View the top 10 richest users</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/transfer</div>
+                        <div class="command-desc">Send coins to another user</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/transactions</div>
+                        <div class="command-desc">View your transaction history</div>
+                    </div>
+                </div>
+
+                <h3>🛒 Shop Commands</h3>
+                <div class="command-grid">
+                    <div class="command-card">
+                        <div class="command-name">/shop</div>
+                        <div class="command-desc">Browse all available shop items</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/buy</div>
+                        <div class="command-desc">Purchase an item from the shop</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/inventory</div>
+                        <div class="command-desc">View your purchased items</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/redeem</div>
+                        <div class="command-desc">Redeem an item from your inventory</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/shop_create</div>
+                        <div class="command-desc">Create a new shop item (Admin only)</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/shop_edit</div>
+                        <div class="command-desc">Edit an existing shop item (Admin only)</div>
+                    </div>
+                </div>
+
+                <h3>📋 Task Commands</h3>
+                <div class="command-grid">
+                    <div class="command-card">
+                        <div class="command-name">/tasks</div>
+                        <div class="command-desc">View all available tasks</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/claim</div>
+                        <div class="command-desc">Claim a task to work on</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/mytasks</div>
+                        <div class="command-desc">View your claimed tasks</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/task_submit</div>
+                        <div class="command-desc">Submit proof for a claimed task</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/create_task</div>
+                        <div class="command-desc">Create a new task (Admin only)</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/completetask</div>
+                        <div class="command-desc">Mark a task as complete (Admin only)</div>
+                    </div>
+                </div>
+
+                <h3>🛡️ Moderation Commands</h3>
+                <div class="command-grid">
+                    <div class="command-card">
+                        <div class="command-name">/warn</div>
+                        <div class="command-desc">Issue a warning to a user</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/timeout</div>
+                        <div class="command-desc">Temporarily mute a user</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/kick</div>
+                        <div class="command-desc">Kick a user from the server</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/ban</div>
+                        <div class="command-desc">Ban a user from the server</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/warnings</div>
+                        <div class="command-desc">View a user's warning history</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/clear</div>
+                        <div class="command-desc">Bulk delete messages</div>
+                    </div>
+                </div>
+
+                <h3>🤖 Utility Commands</h3>
+                <div class="command-grid">
+                    <div class="command-card">
+                        <div class="command-name">/help</div>
+                        <div class="command-desc">Display help information</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/ping</div>
+                        <div class="command-desc">Check bot latency</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/serverinfo</div>
+                        <div class="command-desc">Display server information</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/userinfo</div>
+                        <div class="command-desc">Display user information</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/poll</div>
+                        <div class="command-desc">Create a poll with up to 10 options</div>
+                    </div>
+                    <div class="command-card">
+                        <div class="command-name">/chat</div>
+                        <div class="command-desc">Chat with the AI assistant</div>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <p><strong>💡 Tip:</strong> Use <code>/help</code> in Discord to see the complete list of all 76+
+                        commands with detailed descriptions.</p>
+                </div>
+            </section>
+
+            <!-- CMS Guide Section -->
+            <section id="cms" class="docs-section">
+                <h2>🖥️ Web Dashboard (CMS) Guide</h2>
+                <p>The web-based Content Management System provides a user-friendly interface for managing your Discord
+                    server without using commands.</p>
+
+                <h3>Accessing the Dashboard</h3>
+                <ol>
+                    <li>Navigate to the CMS URL (provided by your administrator)</li>
+                    <li>Log in with your Discord account</li>
+                    <li>Select your server from the dropdown</li>
+                </ol>
+
+                <h3>Dashboard Sections</h3>
+
+                <h4>📊 Dashboard</h4>
+                <p>Overview of your server's statistics including total users, currency in circulation, active tasks,
+                    and shop items.</p>
+
+                <h4>👥 User Management</h4>
+                <p>View and manage all users in your server:</p>
+                <ul>
+                    <li>View user balances and transaction history</li>
+                    <li>Add or remove currency from user accounts</li>
+                    <li>Manage user roles</li>
+                    <li>Apply moderation actions (kick, ban, timeout)</li>
+                </ul>
+
+                <h4>🛒 Shop Management</h4>
+                <p>Create and manage your server's shop:</p>
+                <ul>
+                    <li>Add new items with custom names, descriptions, and prices</li>
+                    <li>Set item categories and stock limits</li>
+                    <li>Assign roles that are given when items are purchased</li>
+                    <li>Edit or delete existing items</li>
+                    <li>View shop statistics and popular items</li>
+                </ul>
+
+                <h4>📋 Task Management</h4>
+                <p>Create and monitor tasks:</p>
+                <ul>
+                    <li>Create new tasks with rewards and duration</li>
+                    <li>View all active, claimed, and completed tasks</li>
+                    <li>Review task submissions and approve/reject them</li>
+                    <li>Set maximum claims per task</li>
+                </ul>
+
+                <h4>📢 Announcements</h4>
+                <p>Create and schedule announcements:</p>
+                <ul>
+                    <li>Write announcements with rich formatting</li>
+                    <li>Add images to announcements (up to 2000 characters)</li>
+                    <li>Select the channel to post in</li>
+                    <li>Pin important announcements</li>
+                    <li>Schedule announcements for future posting</li>
+                </ul>
+
+                <h4>📧 Embed Builder</h4>
+                <p>Create custom Discord embeds:</p>
+                <ul>
+                    <li>Set title, description, and footer text</li>
+                    <li>Choose custom colors</li>
+                    <li>Add images and thumbnails</li>
+                    <li>Save embeds as templates for reuse</li>
+                    <li>Send embeds to any channel</li>
+                </ul>
+
+                <h4>⚙️ Server Settings</h4>
+                <p>Configure bot behavior:</p>
+                <ul>
+                    <li>Set log channels for moderation actions</li>
+                    <li>Configure announcement and shop channels</li>
+                    <li>Customize bot status message</li>
+                    <li>Adjust moderation settings and filters</li>
+                </ul>
+
+                <h4>📝 Logs</h4>
+                <p>View system logs and moderation history:</p>
+                <ul>
+                    <li>Filter logs by level (Info, Warning, Error)</li>
+                    <li>View moderation actions and timestamps</li>
+                    <li>Track bot activity and errors</li>
+                </ul>
+
+                <div class="warning-box">
+                    <p><strong>⚠️ Mobile Support:</strong> The CMS is fully mobile-responsive! You can manage your
+                        server from your phone or tablet.</p>
+                </div>
+            </section>
+
+            <!-- FAQ Section -->
+            <section id="faq" class="docs-section">
+                <h2>❓ Frequently Asked Questions</h2>
+
+                <h3>How do I invite the bot to my server?</h3>
+                <p>Contact your server administrator for the bot invite link. You'll need "Manage Server" permissions to
+                    add the bot.</p>
+
+                <h3>Can I use the bot on multiple servers?</h3>
+                <p>Yes! The bot supports multiple servers, and each server has its own isolated economy, tasks, and
+                    shop.</p>
+
+                <h3>How do users earn currency?</h3>
+                <p>Users can earn currency through:</p>
+                <ul>
+                    <li>Daily rewards (<code>/daily</code>)</li>
+                    <li>Completing tasks</li>
+                    <li>Watching ads (if enabled)</li>
+                    <li>Receiving transfers from other users</li>
+                    <li>Admin rewards</li>
+                </ul>
+
+                <h3>Can I customize the daily reward amount?</h3>
+                <p>Currently, the daily reward is fixed at 100 coins. Contact the bot developer if you need custom
+                    amounts.</p>
+
+                <h3>What happens if a user leaves the server?</h3>
+                <p>Their data (balance, inventory, tasks) is preserved in the database. If they rejoin, they'll have
+                    access to their previous data.</p>
+
+                <h3>Can I reset a user's balance?</h3>
+                <p>Yes! Administrators can use <code>/setbalance</code> to set a user's balance to any amount, or use
+                    the User Management section in the CMS.</p>
+
+                <h3>How do I create a shop item that gives a role?</h3>
+                <p>When creating a shop item in the CMS, select "Role" as the category and choose the role from the
+                    dropdown. When users purchase the item, they'll automatically receive the role.</p>
+
+                <h3>Can I schedule announcements?</h3>
+                <p>Yes! Use the <code>/scheduleannouncement</code> command or the Announcements section in the CMS to
+                    schedule announcements for future posting.</p>
+
+                <h3>Is the bot's data secure?</h3>
+                <p>Yes! The bot uses Supabase (PostgreSQL) for secure data storage, and the CMS uses Discord OAuth2 for
+                    authentication.</p>
+
+                <h3>Who can access the web dashboard?</h3>
+                <p>Server owners and users with Administrator permissions can access the CMS for their servers.</p>
+
+                <h3>Can I customize the bot's status?</h3>
+                <p>Yes! Use the Server Settings section in the CMS to set a custom status message and activity type.</p>
+
+                <h3>How do I report bugs or request features?</h3>
+                <p>Contact your server administrator or the bot developer through the official support channels.</p>
+
+                <div class="success-box">
+                    <p><strong>Still have questions?</strong> Use <code>/help</code> in Discord or contact your server
+                        administrator for assistance!</p>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <section class="docs-section"
+                style="text-align: center; padding-top: 40px; border-top: 1px solid var(--border-primary);">
+                <p style="font-size: 1.2rem; margin-bottom: 12px;">Made with ❤️ by <strong>EvolvedLotus</strong></p>
+                <p style="color: var(--text-muted);">Powered by discord.py, Supabase, and Railway</p>
+                <div style="margin-top: 24px;">
+                    <a href="./index.html" class="btn-primary"
+                        style="text-decoration: none; padding: 12px 24px; border-radius: 6px; display: inline-block;">
+                        🖥️ Go to Dashboard
+                    </a>
+                </div>
+            </section>
+        </div>
+
+        <!-- Back to Top Button -->
+        <button class="back-to-top" id="backToTop" onclick="scrollToTop()">↑</button>
+    </div>
+
+    <script>
+        // Back to top button functionality
+        window.onscroll = function () {
+            const backToTop = document.getElementById('backToTop');
+            if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
+                backToTop.classList.add('show');
+            } else {
+                backToTop.classList.remove('show');
+            }
+        };
+
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>
