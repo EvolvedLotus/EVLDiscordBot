@@ -24,22 +24,36 @@
 
         // Observe dashboard visibility changes
         const dashboard = document.getElementById('main-dashboard');
+        const loginScreen = document.getElementById('login-screen');
+
+        // Observer for dashboard
         if (dashboard) {
             const observer = new MutationObserver(function (mutations) {
-                mutations.forEach(function (mutation) {
-                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-                        checkMobileState();
-                    }
-                });
+                checkMobileState();
             });
-            observer.observe(dashboard, { attributes: true });
+            observer.observe(dashboard, { attributes: true, attributeFilter: ['style', 'class'] });
         }
+
+        // Observer for login screen (to detect when it hides)
+        if (loginScreen) {
+            const loginObserver = new MutationObserver(function (mutations) {
+                checkMobileState();
+            });
+            loginObserver.observe(loginScreen, { attributes: true, attributeFilter: ['style', 'class'] });
+        }
+
+        // Periodic check fallback (every 1s) to ensure button appears
+        setInterval(checkMobileState, 1000);
     }
 
     function checkMobileState() {
-        const isMobile = window.innerWidth <= 768;
+        const isMobile = window.innerWidth <= 1024; // Increased breakpoint to include tablets
         const dashboard = document.getElementById('main-dashboard');
-        const isDashboardVisible = dashboard && dashboard.style.display !== 'none';
+        const loginScreen = document.getElementById('login-screen');
+
+        // Check if dashboard is visible OR login screen is hidden (implies dashboard active)
+        const isDashboardVisible = (dashboard && dashboard.style.display !== 'none') ||
+            (loginScreen && loginScreen.style.display === 'none');
 
         if (isMobile && isDashboardVisible) {
             if (!document.getElementById('mobile-menu-toggle')) {
@@ -47,7 +61,11 @@
                 attachMobileListeners();
             }
         } else {
-            removeMobileElements();
+            // Only remove if we are on desktop AND dashboard is visible
+            // If we are on mobile but dashboard hidden (login screen), we also remove
+            if (!isMobile || !isDashboardVisible) {
+                removeMobileElements();
+            }
         }
     }
 
@@ -63,6 +81,7 @@
         toggleBtn.className = 'mobile-menu-toggle';
         toggleBtn.innerHTML = '☰';
         toggleBtn.setAttribute('aria-label', 'Toggle Menu');
+        toggleBtn.title = 'Open Menu';
 
         // Create overlay
         const overlay = document.createElement('div');
@@ -72,6 +91,12 @@
         // Add to body
         document.body.appendChild(toggleBtn);
         document.body.appendChild(overlay);
+
+        // Force sidebar styles if needed
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) {
+            sidebar.classList.add('mobile-ready');
+        }
     }
 
     function attachMobileListeners() {
@@ -83,28 +108,41 @@
             return;
         }
 
+        // Remove old listeners to avoid duplicates (cloning trick)
+        const newBtn = toggleBtn.cloneNode(true);
+        toggleBtn.parentNode.replaceChild(newBtn, toggleBtn);
+
+        const newOverlay = overlay.cloneNode(true);
+        overlay.parentNode.replaceChild(newOverlay, overlay);
+
+        // Re-select
+        const activeBtn = document.getElementById('mobile-menu-toggle');
+        const activeOverlay = document.getElementById('mobile-overlay');
+
         // Toggle menu on button click
-        toggleBtn.addEventListener('click', function () {
+        activeBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
             sidebar.classList.toggle('mobile-open');
-            overlay.classList.toggle('active');
-            toggleBtn.innerHTML = sidebar.classList.contains('mobile-open') ? '✕' : '☰';
+            activeOverlay.classList.toggle('active');
+            activeBtn.innerHTML = sidebar.classList.contains('mobile-open') ? '✕' : '☰';
         });
 
         // Close menu when clicking overlay
-        overlay.addEventListener('click', function () {
+        activeOverlay.addEventListener('click', function () {
             sidebar.classList.remove('mobile-open');
-            overlay.classList.remove('active');
-            toggleBtn.innerHTML = '☰';
+            activeOverlay.classList.remove('active');
+            activeBtn.innerHTML = '☰';
         });
 
         // Close menu when clicking a nav button
         const navButtons = sidebar.querySelectorAll('.tab-button');
         navButtons.forEach(function (btn) {
             btn.addEventListener('click', function () {
-                if (window.innerWidth <= 768) {
+                if (window.innerWidth <= 1024) {
                     sidebar.classList.remove('mobile-open');
-                    overlay.classList.remove('active');
-                    toggleBtn.innerHTML = '☰';
+                    activeOverlay.classList.remove('active');
+                    activeBtn.innerHTML = '☰';
                 }
             });
         });
@@ -123,6 +161,7 @@
         }
         if (sidebar) {
             sidebar.classList.remove('mobile-open');
+            sidebar.classList.remove('mobile-ready');
         }
     }
 })();

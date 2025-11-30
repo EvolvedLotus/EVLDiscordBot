@@ -13,9 +13,9 @@
 /* ===================================
    LOGIN SCREEN - MOBILE OPTIMIZED
    =================================== */
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
 
-    /* Fix login screen for mobile */
+    /* Fix login screen for mobile/tablet */
     .login-screen {
         padding: 20px;
         overflow-y: auto;
@@ -83,22 +83,26 @@
         bottom: 20px;
         right: 20px;
     }
+}
 
-    /* ===================================
-       DASHBOARD - MOBILE LAYOUT
-       =================================== */
+/* ===================================
+   DASHBOARD - MOBILE LAYOUT
+   =================================== */
+@media (max-width: 1024px) {
 
     /* Sidebar becomes full-width overlay on mobile */
     .sidebar {
         position: fixed;
         left: -100%;
-        width: 80%;
-        max-width: 300px;
+        width: 85%;
+        max-width: 320px;
         transition: left 0.3s ease;
-        z-index: 1000;
+        z-index: 10000;
+        /* Higher than everything */
         box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
         height: 100vh;
         overflow-y: auto;
+        background-color: var(--bg-secondary);
     }
 
     .sidebar.mobile-open {
@@ -113,23 +117,23 @@
         padding-bottom: 80px;
     }
 
-    /* Mobile menu toggle button */
+    /* Mobile menu toggle button - HIGH VISIBILITY */
     .mobile-menu-toggle {
-        display: block !important;
+        display: flex !important;
         position: fixed;
         top: 15px;
         left: 15px;
-        z-index: 9999;
+        z-index: 10001;
+        /* Higher than sidebar */
         width: 48px;
         height: 48px;
         background-color: var(--discord-blurple);
-        border: none;
+        border: 2px solid rgba(255, 255, 255, 0.1);
         border-radius: 10px;
         color: white;
         font-size: 24px;
         cursor: pointer;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-        display: flex;
         align-items: center;
         justify-content: center;
         touch-action: manipulation;
@@ -144,7 +148,7 @@
         width: 100%;
         height: 100%;
         background-color: rgba(0, 0, 0, 0.7);
-        z-index: 999;
+        z-index: 9999;
         backdrop-filter: blur(2px);
     }
 
@@ -160,11 +164,13 @@
         height: auto;
         min-height: 80px;
         padding: 20px;
-        padding-left: 70px;
+        padding-left: 75px;
+        /* Space for toggle button */
     }
 
     .section-header h2 {
         font-size: 1.3rem;
+        margin-top: 4px;
     }
 
     .header-actions {
@@ -177,6 +183,53 @@
     .header-actions button {
         flex: 1 1 auto;
         min-width: 120px;
+    }
+
+    /* ===================================
+       SERVER SELECTOR - MOBILE OPTIMIZED
+       =================================== */
+    .server-selector {
+        padding: 20px;
+        background-color: var(--bg-tertiary);
+        margin-bottom: 10px;
+        border-bottom: 1px solid var(--border-primary);
+    }
+
+    .server-selector label {
+        font-size: 14px;
+        margin-bottom: 10px;
+        color: var(--text-secondary);
+    }
+
+    .server-selector select {
+        width: 100%;
+        height: 50px;
+        /* Large touch target */
+        font-size: 16px !important;
+        padding: 10px 15px;
+        background-color: var(--bg-primary);
+        color: white;
+        border: 1px solid var(--discord-blurple);
+        border-radius: 8px;
+    }
+
+    /* Sidebar Header */
+    .sidebar-header {
+        height: 70px;
+        padding: 0 20px;
+    }
+
+    .sidebar-header h1 {
+        font-size: 1.5rem;
+    }
+
+    /* Nav Buttons */
+    .tab-button {
+        height: 54px;
+        /* Larger touch target */
+        font-size: 16px;
+        padding: 0 20px;
+        margin-bottom: 4px;
     }
 
     /* ===================================
@@ -203,12 +256,13 @@
 
     .form-group {
         width: 100% !important;
-        margin-bottom: 16px;
+        margin-bottom: 20px;
     }
 
     .form-group label {
-        font-size: 13px;
+        font-size: 14px;
         margin-bottom: 8px;
+        display: block;
     }
 
     /* ===================================
@@ -241,15 +295,21 @@
     .modal-content {
         width: 95%;
         max-width: none;
-        margin: 20px auto;
-        max-height: 90vh;
+        margin: 10px auto;
+        max-height: 92vh;
         overflow-y: auto;
         border-radius: 12px;
+        padding-bottom: 20px;
     }
 
     .modal-content h2 {
         font-size: 1.2rem;
         padding: 20px;
+        position: sticky;
+        top: 0;
+        background-color: var(--bg-tertiary);
+        z-index: 10;
+        border-bottom: 1px solid var(--border-primary);
     }
 
     .modal-body {
@@ -257,14 +317,17 @@
     }
 
     .close {
-        top: 20px;
-        right: 20px;
+        top: 15px;
+        right: 15px;
         font-size: 32px;
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
         display: flex;
         align-items: center;
         justify-content: center;
+        z-index: 20;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 50%;
     }
 
     /* ===================================
@@ -276,10 +339,18 @@
         -webkit-overflow-scrolling: touch;
         margin-bottom: 20px;
         border-radius: 8px;
+        border: 1px solid var(--border-primary);
     }
 
     table {
-        min-width: 600px;
+        min-width: 700px;
+        /* Ensure table doesn't squash */
+    }
+
+    th,
+    td {
+        padding: 16px;
+        /* Larger touch targets in table */
     }
 
     /* ===================================
@@ -313,46 +384,22 @@
     .shop-card,
     .task-card {
         border-radius: 10px;
+        margin-bottom: 10px;
     }
 
     .stat-card h3 {
-        font-size: 12px;
+        font-size: 13px;
     }
 
     .stat-value {
-        font-size: 28px;
-    }
-}
-
-/* ===================================
-   TABLET ADJUSTMENTS (769px - 1024px)
-   =================================== */
-@media (min-width: 769px) and (max-width: 1024px) {
-    .sidebar {
-        width: 200px;
-    }
-
-    .main-content {
-        margin-left: 200px;
-        width: calc(100vw - 200px);
-        left: 200px;
-    }
-
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr) !important;
-    }
-
-    input,
-    select,
-    textarea {
-        font-size: 15px;
+        font-size: 32px;
     }
 }
 
 /* ===================================
    HIDE MOBILE ELEMENTS ON DESKTOP
    =================================== */
-@media (min-width: 769px) {
+@media (min-width: 1025px) {
     .mobile-menu-toggle {
         display: none !important;
     }
@@ -396,7 +443,7 @@
 
     .section-header {
         padding: 16px;
-        padding-left: 65px;
+        padding-left: 70px;
     }
 
     .content-area {
@@ -408,23 +455,5 @@
         height: 44px;
         top: 12px;
         left: 12px;
-    }
-}
-
-/* ===================================
-   LANDSCAPE MODE ON MOBILE
-   =================================== */
-@media (max-width: 768px) and (orientation: landscape) {
-    .login-screen {
-        padding: 10px;
-    }
-
-    .login-container {
-        max-height: 90vh;
-        overflow-y: auto;
-    }
-
-    .modal-content {
-        max-height: 95vh;
     }
 }
