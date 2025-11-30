@@ -207,6 +207,24 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load ad claim cog: {e}")
 
+        # Register persistent views BEFORE on_ready to handle button interactions after bot restarts
+        logger.info("Registering persistent views...")
+        try:
+            from core.task_channel_monitor import GlobalTaskClaimView
+            from cogs.tasks import TaskClaimView
+            
+            # Register GlobalTaskClaimView for ad claim tasks
+            # Note: We'll pass ad_claim_manager when the view is recreated
+            bot.add_view(GlobalTaskClaimView(task_key='ad_claim_task', ad_claim_manager=bot.ad_claim_manager))
+            logger.info("✓ Registered GlobalTaskClaimView (ad claim)")
+            
+            # Register TaskClaimView for regular tasks
+            # Note: task_id will be set when the view is recreated from the message
+            bot.add_view(TaskClaimView(task_id=''))
+            logger.info("✓ Registered TaskClaimView (regular tasks)")
+        except Exception as e:
+            logger.error(f"✗ Failed to register persistent views: {e}")
+
         # Set managers on cogs that need them
         logger.info("Setting managers on cogs...")
         for cog_name in ['Moderation', 'ModerationCommands']:
