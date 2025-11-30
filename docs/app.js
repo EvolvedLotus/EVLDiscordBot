@@ -696,7 +696,7 @@ async function loadUsers(page = 1) {
             const totalUsers = data.total || data.users.length;
             const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
 
-            let html = '<table class="data-table"><thead><tr><th>User</th><th>Balance</th><th>Level</th><th>XP</th><th>Actions</th></tr></thead><tbody>';
+            let html = '<div class="table-container"><table class="data-table"><thead><tr><th>User</th><th>Balance</th><th>Level</th><th>XP</th><th>Actions</th></tr></thead><tbody>';
             data.users.forEach(user => {
                 html += `
                     <tr>
@@ -710,7 +710,7 @@ async function loadUsers(page = 1) {
                     </tr>
                 `;
             });
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
 
             // Add pagination controls
             html += '<div class="pagination-controls">';
@@ -1221,6 +1221,7 @@ async function loadTransactions(page = 1) {
 
             // Build transaction table
             let html = `
+                <div class="table-container">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -1255,7 +1256,7 @@ async function loadTransactions(page = 1) {
                 `;
             });
 
-            html += '</tbody></table>';
+            html += '</tbody></table></div>';
 
             // Add pagination controls
             html += '<div class="pagination-controls">';

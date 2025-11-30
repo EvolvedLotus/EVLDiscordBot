@@ -12,6 +12,7 @@
         max-width: 300px;
         transition: left 0.3s ease;
         z-index: 1000;
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
     }
 
     .sidebar.mobile-open {
@@ -22,6 +23,10 @@
     .main-content {
         margin-left: 0;
         width: 100%;
+        left: 0;
+        /* Override left: var(--sidebar-width) */
+        padding-bottom: 80px;
+        /* Add padding for bottom reachability */
     }
 
     /* Mobile menu toggle button */
@@ -30,7 +35,8 @@
         position: fixed;
         top: 15px;
         left: 15px;
-        z-index: 999;
+        z-index: 9999;
+        /* Ensure above everything */
         width: 44px;
         height: 44px;
         background-color: var(--discord-blurple);
@@ -39,7 +45,10 @@
         color: white;
         font-size: 24px;
         cursor: pointer;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     /* Overlay when mobile menu is open */
@@ -50,8 +59,9 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
+        background-color: rgba(0, 0, 0, 0.7);
         z-index: 999;
+        backdrop-filter: blur(2px);
     }
 
     .mobile-overlay.active {
@@ -63,6 +73,11 @@
         flex-direction: column;
         align-items: flex-start;
         gap: 12px;
+        height: auto;
+        padding: 20px;
+        /* Add padding for toggle button space */
+        padding-left: 70px;
+        /* Make space for toggle button */
     }
 
     .header-actions {
@@ -81,6 +96,7 @@
     .table-container {
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        margin-bottom: 20px;
     }
 
     table {
@@ -110,14 +126,30 @@
     .modal-content {
         width: 95%;
         max-width: none;
-        margin: 20px auto;
-        max-height: 90vh;
+        margin: 10px auto;
+        /* Reduced top margin */
+        max-height: 95vh;
         overflow-y: auto;
     }
 
     /* Stats grid becomes single column */
-    .stats-grid {
+    .stats-grid,
+    .dashboard-grid {
         grid-template-columns: 1fr !important;
+    }
+
+    /* Shop grid adjustments */
+    .shop-grid,
+    .grid-container,
+    .embeds-grid,
+    .roles-grid,
+    .moderation-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Content area padding */
+    .content-area {
+        padding: 20px;
     }
 
     /* Login screen adjustments */
@@ -134,7 +166,8 @@
     input,
     select,
     textarea {
-        min-height: 40px;
+        min-height: 44px;
+        /* Larger touch target */
         font-size: 16px;
         /* Prevents zoom on iOS */
     }
@@ -148,6 +181,8 @@
 
     .main-content {
         margin-left: 200px;
+        width: calc(100vw - 200px);
+        left: 200px;
     }
 
     .stats-grid {

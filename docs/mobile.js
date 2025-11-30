@@ -12,27 +12,43 @@
     }
 
     function initMobile() {
-        // Only initialize mobile features if on mobile device
-        if (window.innerWidth <= 768) {
-            createMobileElements();
-            attachMobileListeners();
-        }
+        // Initial check
+        checkMobileState();
 
         // Re-initialize on window resize
         let resizeTimer;
         window.addEventListener('resize', function () {
             clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(function () {
-                if (window.innerWidth <= 768) {
-                    if (!document.getElementById('mobile-menu-toggle')) {
-                        createMobileElements();
-                        attachMobileListeners();
-                    }
-                } else {
-                    removeMobileElements();
-                }
-            }, 250);
+            resizeTimer = setTimeout(checkMobileState, 250);
         });
+
+        // Observe dashboard visibility changes
+        const dashboard = document.getElementById('main-dashboard');
+        if (dashboard) {
+            const observer = new MutationObserver(function (mutations) {
+                mutations.forEach(function (mutation) {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+                        checkMobileState();
+                    }
+                });
+            });
+            observer.observe(dashboard, { attributes: true });
+        }
+    }
+
+    function checkMobileState() {
+        const isMobile = window.innerWidth <= 768;
+        const dashboard = document.getElementById('main-dashboard');
+        const isDashboardVisible = dashboard && dashboard.style.display !== 'none';
+
+        if (isMobile && isDashboardVisible) {
+            if (!document.getElementById('mobile-menu-toggle')) {
+                createMobileElements();
+                attachMobileListeners();
+            }
+        } else {
+            removeMobileElements();
+        }
     }
 
     function createMobileElements() {

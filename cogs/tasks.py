@@ -386,6 +386,33 @@ class Tasks(commands.Cog):
         # Initialize managers lazily to avoid dependency issues during cog loading
         # Don't start the loop here - it will be started in setup or after bot is ready
 
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Register persistent views when bot is ready."""
+        print("Tasks cog: on_ready triggered - registering persistent views...")
+        await self.bot.wait_until_ready()
+        
+        # Wait a bit to ensure guilds are fully loaded
+        await asyncio.sleep(5)
+        
+        count = 0
+        for guild in self.bot.guilds:
+            guild_id = str(guild.id)
+            try:
+                # Get active tasks from database
+                active_tasks = self.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('status', 'active').execute()
+
+                for task in active_tasks.data or []:
+                    if task.get('message_id'):
+                        # TaskClaimView expects int task_id
+                        view = TaskClaimView(int(task['task_id']))
+                        self.bot.add_view(view, message_id=int(task['message_id']))
+                        count += 1
+            except Exception as e:
+                print(f"Error registering views for guild {guild_id}: {e}")
+        
+        print(f"Tasks cog: Registered {count} persistent task views.")
+
     def set_managers(self, data_manager, transaction_manager):
         """Set data and transaction managers"""
         self.data_manager = data_manager
@@ -1381,15 +1408,5 @@ async def setup(bot):
         cog.set_managers(data_manager_instance, transaction_manager_instance)
 
     # Register persistent views for existing tasks
-    for guild in bot.guilds:
-        guild_id = str(guild.id)
-        try:
-            # Get active tasks from database
-            active_tasks = cog.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('status', 'active').execute()
-
-            for task in active_tasks.data or []:
-                if task.get('message_id'):
-                    view = TaskClaimView(int(task['task_id']))
-                    bot.add_view(view, message_id=int(task['message_id']))
-        except Exception as e:
-                print(f"Error registering views for guild {guild_id}: {e}")
+    # This is now handled in the on_ready listener within the Tasks cog
+    pass
