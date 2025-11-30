@@ -1,8 +1,92 @@
 /* Mobile Responsive Styles for EVL Discord Bot CMS */
-/* Add this file to index.html with: <link rel="stylesheet" href="./mobile.css"> */
+/* CRITICAL: Ensures mobile compatibility without breaking desktop */
 
-/* Mobile Navigation & Layout */
+/* ===================================
+   MOBILE VIEWPORT FIX
+   =================================== */
+/* Prevent zoom on input focus (iOS Safari fix) */
+@viewport {
+    width: device-width;
+    zoom: 1.0;
+}
+
+/* ===================================
+   LOGIN SCREEN - MOBILE OPTIMIZED
+   =================================== */
 @media (max-width: 768px) {
+
+    /* Fix login screen for mobile */
+    .login-screen {
+        padding: 20px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .login-container {
+        width: 100%;
+        max-width: 100%;
+        padding: 30px 20px;
+        margin: 0 auto;
+        box-shadow: none;
+    }
+
+    .login-header h1 {
+        font-size: 1.5rem;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+
+    .login-header p {
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+
+    .login-form {
+        gap: 16px;
+    }
+
+    /* Form inputs - CRITICAL for mobile */
+    .login-form input[type="text"],
+    .login-form input[type="password"] {
+        width: 100%;
+        min-height: 48px;
+        font-size: 16px !important;
+        padding: 14px 16px;
+        border-radius: 8px;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+
+    /* Login button */
+    .login-form button[type="submit"],
+    .btn-large {
+        width: 100%;
+        min-height: 50px;
+        font-size: 16px;
+        padding: 14px 24px;
+        border-radius: 8px;
+        touch-action: manipulation;
+    }
+
+    /* Login error message */
+    .login-error {
+        font-size: 13px;
+        padding: 12px;
+        margin-top: 12px;
+        word-break: break-word;
+    }
+
+    /* Bot invite button on login */
+    .bot-invite-button {
+        width: 50px;
+        height: 50px;
+        bottom: 20px;
+        right: 20px;
+    }
+
+    /* ===================================
+       DASHBOARD - MOBILE LAYOUT
+       =================================== */
 
     /* Sidebar becomes full-width overlay on mobile */
     .sidebar {
@@ -13,6 +97,8 @@
         transition: left 0.3s ease;
         z-index: 1000;
         box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
+        height: 100vh;
+        overflow-y: auto;
     }
 
     .sidebar.mobile-open {
@@ -21,27 +107,24 @@
 
     /* Main content takes full width on mobile */
     .main-content {
-        margin-left: 0;
-        width: 100%;
-        left: 0;
-        /* Override left: var(--sidebar-width) */
+        margin-left: 0 !important;
+        width: 100% !important;
+        left: 0 !important;
         padding-bottom: 80px;
-        /* Add padding for bottom reachability */
     }
 
     /* Mobile menu toggle button */
     .mobile-menu-toggle {
-        display: block;
+        display: block !important;
         position: fixed;
         top: 15px;
         left: 15px;
         z-index: 9999;
-        /* Ensure above everything */
-        width: 44px;
-        height: 44px;
+        width: 48px;
+        height: 48px;
         background-color: var(--discord-blurple);
         border: none;
-        border-radius: 8px;
+        border-radius: 10px;
         color: white;
         font-size: 24px;
         cursor: pointer;
@@ -49,6 +132,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
+        touch-action: manipulation;
     }
 
     /* Overlay when mobile menu is open */
@@ -74,10 +158,13 @@
         align-items: flex-start;
         gap: 12px;
         height: auto;
+        min-height: 80px;
         padding: 20px;
-        /* Add padding for toggle button space */
         padding-left: 70px;
-        /* Make space for toggle button */
+    }
+
+    .section-header h2 {
+        font-size: 1.3rem;
     }
 
     .header-actions {
@@ -92,15 +179,21 @@
         min-width: 120px;
     }
 
-    /* Make tables scrollable on mobile */
-    .table-container {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        margin-bottom: 20px;
-    }
+    /* ===================================
+       FORMS & INPUTS - MOBILE FRIENDLY
+       =================================== */
 
-    table {
-        min-width: 600px;
+    /* ALL inputs must be 16px to prevent iOS zoom */
+    input,
+    select,
+    textarea,
+    .form-control {
+        min-height: 48px !important;
+        font-size: 16px !important;
+        padding: 12px 16px;
+        -webkit-appearance: none;
+        appearance: none;
+        border-radius: 8px;
     }
 
     /* Stack form groups vertically */
@@ -110,70 +203,130 @@
 
     .form-group {
         width: 100% !important;
+        margin-bottom: 16px;
     }
 
-    /* Larger touch targets for buttons */
+    .form-group label {
+        font-size: 13px;
+        margin-bottom: 8px;
+    }
+
+    /* ===================================
+       BUTTONS - LARGER TOUCH TARGETS
+       =================================== */
+
     button,
+    .btn,
     .btn-primary,
     .btn-secondary,
     .btn-success,
-    .btn-danger {
-        min-height: 44px;
-        padding: 12px 16px;
+    .btn-danger,
+    .btn-warning {
+        min-height: 48px !important;
+        padding: 12px 20px;
+        font-size: 15px;
+        border-radius: 8px;
+        touch-action: manipulation;
     }
 
-    /* Modal adjustments for mobile */
+    .btn-small {
+        min-height: 40px !important;
+        font-size: 14px;
+    }
+
+    /* ===================================
+       MODALS - MOBILE OPTIMIZED
+       =================================== */
+
     .modal-content {
         width: 95%;
         max-width: none;
-        margin: 10px auto;
-        /* Reduced top margin */
-        max-height: 95vh;
+        margin: 20px auto;
+        max-height: 90vh;
         overflow-y: auto;
+        border-radius: 12px;
     }
 
-    /* Stats grid becomes single column */
+    .modal-content h2 {
+        font-size: 1.2rem;
+        padding: 20px;
+    }
+
+    .modal-body {
+        padding: 20px;
+    }
+
+    .close {
+        top: 20px;
+        right: 20px;
+        font-size: 32px;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* ===================================
+       TABLES - HORIZONTAL SCROLL
+       =================================== */
+
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+
+    table {
+        min-width: 600px;
+    }
+
+    /* ===================================
+       GRIDS - SINGLE COLUMN ON MOBILE
+       =================================== */
+
     .stats-grid,
-    .dashboard-grid {
-        grid-template-columns: 1fr !important;
-    }
-
-    /* Shop grid adjustments */
+    .dashboard-grid,
     .shop-grid,
     .grid-container,
     .embeds-grid,
     .roles-grid,
     .moderation-grid {
         grid-template-columns: 1fr !important;
+        gap: 16px;
     }
 
-    /* Content area padding */
+    /* ===================================
+       CONTENT AREAS
+       =================================== */
+
     .content-area {
-        padding: 20px;
+        padding: 20px 16px;
     }
 
-    /* Login screen adjustments */
-    .login-container {
-        width: 90%;
-        padding: 30px 20px;
+    /* ===================================
+       CARDS - MOBILE FRIENDLY
+       =================================== */
+
+    .stat-card,
+    .shop-card,
+    .task-card {
+        border-radius: 10px;
     }
 
-    .login-header h1 {
-        font-size: 1.5rem;
+    .stat-card h3 {
+        font-size: 12px;
     }
 
-    /* Ensure touch-friendly spacing on mobile inputs */
-    input,
-    select,
-    textarea {
-        min-height: 44px;
-        /* Larger touch target */
-        font-size: 16px;
-        /* Prevents zoom on iOS */
+    .stat-value {
+        font-size: 28px;
     }
 }
 
-/* Tablet adjustments */
+/* ===================================
+   TABLET ADJUSTMENTS (769px - 1024px)
+   =================================== */
 @media (min-width: 769px) and (max-width: 1024px) {
     .sidebar {
         width: 200px;
@@ -188,27 +341,49 @@
     .stats-grid {
         grid-template-columns: repeat(2, 1fr) !important;
     }
-}
 
-/* Hide mobile menu toggle on desktop */
-@media (min-width: 769px) {
-    .mobile-menu-toggle {
-        display: none;
+    input,
+    select,
+    textarea {
+        font-size: 15px;
     }
 }
 
-/* Improve readability on very small screens */
+/* ===================================
+   HIDE MOBILE ELEMENTS ON DESKTOP
+   =================================== */
+@media (min-width: 769px) {
+    .mobile-menu-toggle {
+        display: none !important;
+    }
+
+    .mobile-overlay {
+        display: none !important;
+    }
+}
+
+/* ===================================
+   VERY SMALL SCREENS (< 480px)
+   =================================== */
 @media (max-width: 480px) {
     body {
         font-size: 14px;
     }
 
     h2 {
-        font-size: 1.3rem;
+        font-size: 1.2rem;
     }
 
     h3 {
-        font-size: 1.1rem;
+        font-size: 1rem;
+    }
+
+    .login-container {
+        padding: 24px 16px;
+    }
+
+    .login-header h1 {
+        font-size: 1.3rem;
     }
 
     .modal-content {
@@ -216,5 +391,40 @@
         margin: 0;
         border-radius: 0;
         max-height: 100vh;
+        height: 100vh;
+    }
+
+    .section-header {
+        padding: 16px;
+        padding-left: 65px;
+    }
+
+    .content-area {
+        padding: 16px 12px;
+    }
+
+    .mobile-menu-toggle {
+        width: 44px;
+        height: 44px;
+        top: 12px;
+        left: 12px;
+    }
+}
+
+/* ===================================
+   LANDSCAPE MODE ON MOBILE
+   =================================== */
+@media (max-width: 768px) and (orientation: landscape) {
+    .login-screen {
+        padding: 10px;
+    }
+
+    .login-container {
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-content {
+        max-height: 95vh;
     }
 }
