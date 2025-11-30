@@ -92,21 +92,35 @@
 
     /* Sidebar becomes full-width overlay on mobile */
     .sidebar {
-        position: fixed;
-        left: -100%;
-        width: 85%;
-        max-width: 320px;
-        transition: left 0.3s ease;
-        z-index: 10000;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 85% !important;
+        max-width: 320px !important;
+        height: 100vh !important;
+
+        /* Use transform for sliding - more reliable */
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out !important;
+
+        z-index: 10000 !important;
         /* Higher than everything */
-        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5);
-        height: 100vh;
-        overflow-y: auto;
-        background-color: var(--bg-secondary);
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5) !important;
+
+        overflow-y: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+
+        /* Fallback background if var fails */
+        background-color: #2f3136 !important;
+        background-color: var(--bg-secondary) !important;
+
+        visibility: visible !important;
+        opacity: 1 !important;
     }
 
     .sidebar.mobile-open {
-        left: 0;
+        transform: translateX(0) !important;
     }
 
     /* Main content takes full width on mobile */
