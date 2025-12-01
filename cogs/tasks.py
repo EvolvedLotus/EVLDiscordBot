@@ -147,6 +147,23 @@ class TaskClaimView(discord.ui.View):
                 await interaction.followup.send("❌ Task management system not available.", ephemeral=True)
                 return
 
+            # Check task category first
+            try:
+                task_check = tasks_cog.data_manager.supabase.table('tasks').select('category').eq('guild_id', str(guild_id)).eq('task_id', self.task_id).execute()
+                if task_check.data and len(task_check.data) > 0:
+                    category = task_check.data[0].get('category')
+                    if category == 'General':
+                        await interaction.followup.send(
+                            "⚠️ **General Task Requirement**\n"
+                            "This task requires proof of completion to claim.\n"
+                            f"Please use the command: `/task_claim_proof task_id:{self.task_id} proof:<your_proof> [attachment]`",
+                            ephemeral=True
+                        )
+                        return
+            except Exception as e:
+                print(f"Error checking task category: {e}")
+                # Continue with normal claim if check fails (fallback)
+
             # Use TaskManager to claim task (expects integers)
             result = await tasks_cog.task_manager.claim_task(guild_id, user_id, self.task_id)
 
@@ -429,6 +446,105 @@ class Tasks(commands.Cog):
         except AttributeError:
             pass  # SSE manager not available yet
 
+    @app_commands.command(name="task_claim_proof", description="Claim and submit proof for a General task")
+    @app_commands.describe(
+        task_id="The ID of the task to claim and submit",
+        proof="Description or link to proof of completion",
+        attachment="Optional screenshot/image proof"
+    )
+    async def task_claim_proof(
+        self,
+        interaction: discord.Interaction,
+        task_id: int,
+        proof: str,
+        attachment: discord.Attachment = None
+    ):
+        """Claim and submit proof for a General task."""
+        await interaction.response.defer(ephemeral=True)
+
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+
+        try:
+            # 1. Claim the task
+            claim_result = await self.task_manager.claim_task(guild_id, user_id, task_id)
+            
+            if not claim_result['success']:
+                await interaction.followup.send(claim_result['error'], ephemeral=True)
+                return
+
+            task_data = claim_result['task']
+
+            # 2. Submit the proof
+            submit_result = await self.task_manager.submit_task(guild_id, user_id, task_id, proof)
+            
+            if not submit_result['success']:
+                await interaction.followup.send(f"✅ Task claimed, but submission failed: {submit_result['error']}", ephemeral=True)
+                return
+
+            # 3. Handle attachment
+            proof_attachments = []
+            if attachment:
+                proof_attachments.append(attachment.url)
+                # Update proof attachments in DB
+                self.data_manager.supabase.table('user_tasks').update({
+                    'proof_attachments': proof_attachments
+                }).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).eq('task_id', str(task_id)).execute()
+
+            # 4. Post to Log Channel
+            # Get log channel ID from config
+            settings = self.data_manager.load_guild_data(str(guild_id), 'config')
+            log_channel_id = settings.get('logs_channel')
+            
+            if log_channel_id:
+                channel = interaction.guild.get_channel(int(log_channel_id))
+                if channel:
+                    proof_embed = discord.Embed(
+                        title="📨 General Task Submission",
+                        description=f"**{interaction.user.mention}** submitted proof for **{task_data['name']}**",
+                        color=discord.Color.orange(),
+                        timestamp=datetime.now(timezone.utc)
+                    )
+                    proof_embed.add_field(name="Proof Description", value=proof, inline=False)
+                    proof_embed.add_field(name="Task ID", value=str(task_id), inline=True)
+                    proof_embed.add_field(name="User ID", value=str(user_id), inline=True)
+
+                    if proof_attachments:
+                        proof_embed.set_image(url=proof_attachments[0])
+
+                    # Add review buttons
+                    view = TaskReviewView(task_id, user_id)
+                    proof_message = await discord_operation_with_retry(
+                        lambda: channel.send(embed=proof_embed, view=view)
+                    )
+
+                    # Update proof_message_id in DB
+                    self.data_manager.supabase.table('user_tasks').update({
+                        'proof_message_id': str(proof_message.id)
+                    }).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).eq('task_id', str(task_id)).execute()
+
+                    await interaction.followup.send(
+                        "✅ Task claimed and submitted successfully! Waiting for moderator review.",
+                        ephemeral=True
+                    )
+                else:
+                    await interaction.followup.send(
+                        "✅ Task claimed and submitted, but log channel not found. Please contact an admin.",
+                        ephemeral=True
+                    )
+            else:
+                await interaction.followup.send(
+                    "✅ Task claimed and submitted, but log channel is not configured. Please contact an admin.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            print(f"Task claim_proof error: {e}")
+            await interaction.followup.send(
+                "❌ An error occurred. Please try again.",
+                ephemeral=True
+            )
+
     @app_commands.command(name="task_submit", description="Submit proof for a claimed task")
     @app_commands.describe(
         task_id="The ID of the task to submit",
@@ -444,83 +560,73 @@ class Tasks(commands.Cog):
         """Submit task completion proof."""
         await interaction.response.defer(ephemeral=True)
 
-        guild_id = str(interaction.guild.id)
-        user_id = str(interaction.user.id)
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
 
         try:
-            # Load data
-            tasks_data = data_manager.load_guild_data(guild_id, 'tasks')
-            task = tasks_data['tasks'].get(str(task_id))
+            # Use TaskManager to submit
+            result = await self.task_manager.submit_task(guild_id, user_id, task_id, proof)
 
-            if not task:
-                await interaction.followup.send("❌ Task not found.", ephemeral=True)
-                return
-
-            # Check if user claimed task
-            user_task = tasks_data.get('user_tasks', {}).get(user_id, {}).get(str(task_id))
-            if not user_task:
-                await interaction.followup.send("❌ You haven't claimed this task.", ephemeral=True)
-                return
-
-            # Check status
-            if user_task['status'] not in ['claimed', 'in_progress']:
-                await interaction.followup.send(
-                    f"❌ Cannot submit task with status: {user_task['status']}",
-                    ephemeral=True
-                )
-                return
-
-            # Check deadline
-            deadline = datetime.fromisoformat(user_task['deadline'])
-            if datetime.now(timezone.utc) > deadline:
-                user_task['status'] = 'expired'
-                data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
-                await interaction.followup.send("❌ Task deadline has passed.", ephemeral=True)
+            if not result['success']:
+                await interaction.followup.send(result['error'], ephemeral=True)
                 return
 
             # Handle attachment
             proof_attachments = []
             if attachment:
                 proof_attachments.append(attachment.url)
+                # Update proof attachments in DB
+                self.data_manager.supabase.table('user_tasks').update({
+                    'proof_attachments': proof_attachments
+                }).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).eq('task_id', str(task_id)).execute()
 
-            # Update user task
-            submitted_at = datetime.now(timezone.utc)
-            user_task['status'] = 'submitted'
-            user_task['proof_content'] = proof
-            user_task['proof_attachments'] = proof_attachments
-            user_task['submitted_at'] = submitted_at.isoformat()
+            # Get task details for embed
+            task_result = self.data_manager.supabase.table('tasks').select('name').eq('guild_id', str(guild_id)).eq('task_id', task_id).execute()
+            task_name = task_result.data[0]['name'] if task_result.data else "Unknown Task"
 
-            # Create proof message in task channel for review
-            channel = interaction.guild.get_channel(int(task['channel_id']))
-            if channel:
+            # Post to Log Channel (or Task Channel if log not set, but user requested log channel for general)
+            # For regular tasks, we might still want to post to log channel if configured
+            settings = self.data_manager.load_guild_data(str(guild_id), 'config')
+            log_channel_id = settings.get('logs_channel')
+            
+            target_channel = None
+            if log_channel_id:
+                target_channel = interaction.guild.get_channel(int(log_channel_id))
+            
+            if target_channel:
                 proof_embed = discord.Embed(
                     title="📨 Task Submission",
-                    description=f"**{interaction.user.mention}** submitted proof for **{task['name']}**",
+                    description=f"**{interaction.user.mention}** submitted proof for **{task_name}**",
                     color=discord.Color.orange(),
-                    timestamp=submitted_at
+                    timestamp=datetime.now(timezone.utc)
                 )
                 proof_embed.add_field(name="Proof", value=proof, inline=False)
+                proof_embed.add_field(name="Task ID", value=str(task_id), inline=True)
+                proof_embed.add_field(name="User ID", value=str(user_id), inline=True)
 
                 if proof_attachments:
                     proof_embed.set_image(url=proof_attachments[0])
 
-                proof_embed.set_footer(text=f"Task ID: {task_id} | User ID: {user_id}")
-
                 # Add review buttons
                 view = TaskReviewView(task_id, user_id)
                 proof_message = await discord_operation_with_retry(
-                    lambda: channel.send(embed=proof_embed, view=view)
+                    lambda: target_channel.send(embed=proof_embed, view=view)
                 )
 
-                user_task['proof_message_id'] = str(proof_message.id)
+                # Update proof_message_id
+                self.data_manager.supabase.table('user_tasks').update({
+                    'proof_message_id': str(proof_message.id)
+                }).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).eq('task_id', str(task_id)).execute()
 
-            # Save
-            data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
-
-            await interaction.followup.send(
-                "✅ Task submitted successfully! Waiting for review.",
-                ephemeral=True
-            )
+                await interaction.followup.send(
+                    "✅ Task submitted successfully! Waiting for review.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    "✅ Task submitted, but no log channel configured for review.",
+                    ephemeral=True
+                )
 
         except Exception as e:
             print(f"Task submission error: {e}")

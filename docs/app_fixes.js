@@ -73,8 +73,9 @@ function showCreateTaskModal() {
         <input type="number" id="task-reward" class="form-control" required min="1">
     </div>
     <div class="form-group">
-        <label>Duration (hours)</label>
-        <input type="number" id="task-duration" class="form-control" min="1" value="24">
+        <label>Duration (hours, -1 for infinite)</label>
+        <input type="number" id="task-duration" class="form-control" value="24">
+        <small>Set to -1 for tasks with no time limit</small>
     </div>
     <div class="form-group">
         <label>Max Claims (-1 for unlimited)</label>
@@ -89,6 +90,9 @@ function showCreateTaskModal() {
             <option value="special">Special</option>
             <option value="role_required">Role Required</option>
         </select>
+        <small id="general-category-note" style="color: #ffc107; display: block;">
+            ⚠️ General tasks require users to submit proof (screenshot) which must be approved by a moderator/admin before rewards are granted.
+        </small>
     </div>
     
     <!-- Role Selection (Hidden by default) -->
@@ -119,15 +123,26 @@ function showCreateTaskModal() {
 
     document.body.appendChild(modal);
     modal.style.display = 'block';
+
+    // Initialize toggle state
+    toggleTaskRoleSelect();
 }
 
 function toggleTaskRoleSelect() {
     const category = document.getElementById('task-category').value;
     const roleGroup = document.getElementById('task-role-select-group');
+    const generalNote = document.getElementById('general-category-note');
+
     if (category === 'role_required') {
         roleGroup.style.display = 'block';
     } else {
         roleGroup.style.display = 'none';
+    }
+
+    if (category === 'general') {
+        if (generalNote) generalNote.style.display = 'block';
+    } else {
+        if (generalNote) generalNote.style.display = 'none';
     }
 }
 

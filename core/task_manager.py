@@ -113,6 +113,7 @@ class TaskManager:
                 })
             
             return task_data
+
         except Exception as e:
             logger.error(f"Failed to create task: {e}")
             raise e
@@ -210,7 +211,11 @@ class TaskManager:
                 return {'success': False, 'error': "You already claimed this task."}
 
             # Calculate deadline
-            deadline = datetime.now(timezone.utc) + timedelta(hours=task_data['duration_hours'])
+            if task_data['duration_hours'] == -1:
+                # Infinite duration - set to 100 years in future
+                deadline = datetime.now(timezone.utc) + timedelta(days=36500)
+            else:
+                deadline = datetime.now(timezone.utc) + timedelta(hours=task_data['duration_hours'])
 
             # CREATE USER TASK
             user_task_data = {
