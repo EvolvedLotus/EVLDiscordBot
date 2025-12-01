@@ -971,7 +971,8 @@ async function editTask(taskId) {
         let task = null;
         if (data.tasks) {
             if (Array.isArray(data.tasks)) {
-                task = data.tasks.find(t => t.task_id === taskId);
+                // Convert both to numbers for comparison
+                task = data.tasks.find(t => Number(t.task_id) === Number(taskId));
             } else {
                 task = data.tasks[taskId];
             }
