@@ -197,19 +197,15 @@ class TaskChannelMonitor:
     async def get_active_tasks(self, guild_id: str):
         """Get all active regular tasks for a guild"""
         try:
-            # Use file-based storage (same as task_manager)
-            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
-            if not tasks_data:
+            # Query Supabase directly for tasks
+            result = self.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('status', 'active').execute()
+            
+            if not result.data:
                 return []
             
-            tasks = tasks_data.get('tasks', {})
             active_tasks = []
             
-            for task_id, task in tasks.items():
-                # Skip non-active tasks
-                if task.get('status') != 'active':
-                    continue
-                
+            for task in result.data:
                 # Check if not expired
                 if task.get('expires_at'):
                     expires_at = task['expires_at']
@@ -219,10 +215,9 @@ class TaskChannelMonitor:
                     if expires_at <= datetime.now(timezone.utc):
                         continue  # Skip expired
                 
-                # Add task with ID
+                # Add task with is_global flag
                 active_tasks.append({
                     **task,
-                    'task_id': task_id,
                     'is_global': False
                 })
             
