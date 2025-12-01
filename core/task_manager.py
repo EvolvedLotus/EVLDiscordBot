@@ -114,8 +114,65 @@ class TaskManager:
             
             return task_data
 
+
         except Exception as e:
             logger.error(f"Failed to create task: {e}")
+            raise e
+
+    async def update_task(self, guild_id: int, task_id: int, updates: Dict) -> Dict:
+        """Update an existing task"""
+        guild_id = str(guild_id)
+        task_id = int(task_id)
+
+        try:
+            # Build update data
+            update_data = {}
+            
+            if 'name' in updates:
+                update_data['name'] = updates['name']
+            if 'description' in updates:
+                update_data['description'] = updates['description']
+            if 'reward' in updates:
+                update_data['reward'] = int(updates['reward'])
+            if 'duration_hours' in updates:
+                duration = int(updates['duration_hours'])
+                if duration <= 0 and duration != -1:
+                    raise ValueError("Duration must be positive or -1 for infinite")
+                update_data['duration_hours'] = duration
+            if 'max_claims' in updates:
+                update_data['max_claims'] = int(updates['max_claims']) if updates['max_claims'] else None
+            if 'category' in updates:
+                update_data['category'] = updates['category']
+            if 'status' in updates:
+                update_data['status'] = updates['status']
+            
+            # Update timestamp
+            update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
+
+            # Update in database
+            result = self.data_manager.admin_client.table('tasks').update(update_data).eq('guild_id', guild_id).eq('task_id', task_id).execute()
+
+            if not result.data:
+                return {'success': False, 'error': 'Task not found'}
+
+            logger.info(f"✅ Updated task {task_id} in guild {guild_id}")
+
+            # Invalidate cache
+            if hasattr(self, 'cache_manager') and self.cache_manager:
+                self.cache_manager.invalidate(f"tasks:{guild_id}")
+
+            # Emit SSE event
+            if hasattr(self, 'sse_manager') and self.sse_manager:
+                await self.sse_manager.broadcast_event(guild_id, {
+                    'type': 'task_updated',
+                    'task_id': task_id,
+                    'updates': update_data
+                })
+
+            return {'success': True, 'task': result.data[0]}
+
+        except Exception as e:
+            logger.exception(f"Failed to update task: {e}")
             raise e
 
     async def delete_task(self, guild_id: int, task_id: int) -> Dict:
