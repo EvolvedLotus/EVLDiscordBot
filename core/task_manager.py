@@ -172,63 +172,63 @@ class TaskManager:
         """Claim task with PREVENT OVER-CLAIMING - atomic validation"""
         user_id = str(user_id)
         guild_id = str(guild_id)
-        task_id = str(task_id)
+        task_id = int(task_id)  # Keep as int for Supabase query
 
         try:
-            async with self.data_manager.atomic_transaction() as conn:
-                # 1. LOCK TASK ROW FIRST
-                task_data = await conn.fetchrow(
-                    """SELECT task_id, name, reward, duration_hours, max_claims,
-                              current_claims, status, expires_at
-                       FROM tasks
-                       WHERE task_id = $1 AND guild_id = $2
-                       FOR UPDATE""",
-                    task_id, guild_id
-                )
+            # 1. GET TASK DATA
+            task_result = self.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('task_id', task_id).execute()
+            
+            if not task_result.data or len(task_result.data) == 0:
+                return {'success': False, 'error': "Task not found."}
+            
+            task_data = task_result.data[0]
 
-                if not task_data:
-                    return {'success': False, 'error': "Task not found."}
+            # VALIDATION: Task must be active
+            if task_data['status'] != 'active':
+                return {'success': False, 'error': "Task is not active."}
 
-                # VALIDATION: Task must be active
-                if task_data['status'] != 'active':
-                    return {'success': False, 'error': "Task is not active."}
-
-                # VALIDATION: Task not expired
-                if task_data['expires_at'] < datetime.now(timezone.utc):
+            # VALIDATION: Task not expired
+            expires_at = task_data.get('expires_at')
+            if expires_at:
+                if isinstance(expires_at, str):
+                    expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                if expires_at < datetime.now(timezone.utc):
                     return {'success': False, 'error': "Task has expired."}
 
-                # VALIDATION: Max claims not exceeded
-                # VALIDATION: Max claims not exceeded
-                # Check if max_claims is set (not None) AND not -1 (unlimited)
-                if task_data['max_claims'] and task_data['max_claims'] != -1 and task_data['current_claims'] >= task_data['max_claims']:
-                    return {'success': False, 'error': "Task is full."}
+            # VALIDATION: Max claims not exceeded
+            max_claims = task_data.get('max_claims')
+            current_claims = task_data.get('current_claims', 0)
+            
+            # Check if max_claims is set (not None) AND not -1 (unlimited)
+            if max_claims is not None and max_claims != -1 and current_claims >= max_claims:
+                return {'success': False, 'error': "Task is full."}
 
-                # VALIDATION: User hasn't already claimed
-                existing_claim = await conn.fetchrow(
-                    """SELECT id FROM user_tasks
-                       WHERE user_id = $1 AND guild_id = $2 AND task_id = $3""",
-                    user_id, guild_id, task_id
-                )
+            # VALIDATION: User hasn't already claimed
+            existing_claim = self.data_manager.supabase.table('user_tasks').select('id').eq('user_id', user_id).eq('guild_id', guild_id).eq('task_id', task_id).execute()
+            
+            if existing_claim.data and len(existing_claim.data) > 0:
+                return {'success': False, 'error': "You already claimed this task."}
 
-                if existing_claim:
-                    return {'success': False, 'error': "You already claimed this task."}
+            # Calculate deadline
+            deadline = datetime.now(timezone.utc) + timedelta(hours=task_data['duration_hours'])
 
-                # Calculate deadline
-                deadline = datetime.now(timezone.utc) + timedelta(hours=task_data['duration_hours'])
+            # CREATE USER TASK
+            user_task_data = {
+                'user_id': user_id,
+                'guild_id': guild_id,
+                'task_id': task_id,
+                'status': 'in_progress',
+                'claimed_at': datetime.now(timezone.utc).isoformat(),
+                'deadline': deadline.isoformat()
+            }
+            
+            self.data_manager.supabase.table('user_tasks').insert(user_task_data).execute()
 
-                # CREATE USER TASK
-                await conn.execute(
-                    """INSERT INTO user_tasks (user_id, guild_id, task_id, status, claimed_at, deadline)
-                       VALUES ($1, $2, $3, 'in_progress', $4, $5)""",
-                    user_id, guild_id, task_id, datetime.now(timezone.utc), deadline
-                )
-
-                # INCREMENT CURRENT_CLAIMS
-                await conn.execute(
-                    """UPDATE tasks SET current_claims = current_claims + 1
-                       WHERE task_id = $1 AND guild_id = $2""",
-                    task_id, guild_id
-                )
+            # INCREMENT CURRENT_CLAIMS
+            new_claims = current_claims + 1
+            self.data_manager.supabase.table('tasks').update({
+                'current_claims': new_claims
+            }).eq('guild_id', guild_id).eq('task_id', task_id).execute()
 
             # Invalidate cache safely
             if self.cache_manager:
