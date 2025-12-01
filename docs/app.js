@@ -897,14 +897,34 @@ async function loadTasks() {
 
     try {
         const data = await apiCall(`/api/${currentServerId}/tasks`);
-        if (data.tasks && Object.keys(data.tasks).length > 0) {
+
+        // Handle both array and object responses
+        let tasks = [];
+        if (data.tasks) {
+            if (Array.isArray(data.tasks)) {
+                tasks = data.tasks;
+            } else if (typeof data.tasks === 'object') {
+                tasks = Object.values(data.tasks);
+            }
+        }
+
+        if (tasks.length > 0) {
             let html = '<div class="grid-container">';
-            Object.values(data.tasks).forEach(task => {
+            tasks.forEach(task => {
+                // Add global badge if task is global
+                const globalBadge = task.is_global ? '<span class="global-badge" style="background: #5865F2; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; margin-left: 8px;">🌐 Global</span>' : '';
+                const borderStyle = task.is_global ? 'style="border-left: 4px solid #5865F2;"' : '';
+
                 html += `
-                    <div class="task-card">
-                        <h4>${task.name}</h4>
-                        <p>${task.description}</p>
-                        <div class="reward">Reward: ${task.reward}</div>
+                    <div class="task-card" ${borderStyle}>
+                        <h4>${task.name}${globalBadge}</h4>
+                        <p>${task.description || ''}</p>
+                        <div class="reward">Reward: ${task.reward} coins</div>
+                        <div class="task-meta">
+                            <span>⏱️ ${task.duration_hours || 24}h</span>
+                            ${task.max_claims && task.max_claims > 0 ? `<span>👥 ${task.current_claims || 0}/${task.max_claims}</span>` : ''}
+                            <span class="status-badge status-${task.status}">${task.status}</span>
+                        </div>
                         <div class="card-actions">
                             <button onclick="editTask('${task.task_id}')" class="btn-small btn-primary">✏️ Edit</button>
                             <button onclick="deleteTask('${task.task_id}')" class="btn-small btn-danger">🗑️ Delete</button>
@@ -918,6 +938,7 @@ async function loadTasks() {
             list.innerHTML = '<p>No tasks found.</p>';
         }
     } catch (error) {
+        console.error('Load tasks error:', error);
         list.innerHTML = `<div class="error">Error: ${error.message}</div>`;
     }
 }
