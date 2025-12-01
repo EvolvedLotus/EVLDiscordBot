@@ -154,7 +154,7 @@ description TEXT,
 reward INTEGER NOT NULL CHECK (reward > 0),
 duration_hours INTEGER NOT NULL CHECK (duration_hours > 0),
 
--- Assignment
+-- Assignmenttt 
 category TEXT DEFAULT 'General',
 role_name TEXT,
 assigned_users TEXT[] DEFAULT '{}',
