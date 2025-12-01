@@ -112,6 +112,10 @@ class TaskManager:
                     'task': task_data
                 })
             
+            # Trigger task channel update
+            if self.bot and hasattr(self.bot, 'task_channel_monitor'):
+                await self.bot.task_channel_monitor.on_task_created(str(guild_id), task_data)
+
             return task_data
 
 
@@ -169,6 +173,12 @@ class TaskManager:
                     'updates': update_data
                 })
 
+            # Trigger task channel update
+            if self.bot and hasattr(self.bot, 'task_channel_monitor'):
+                # We need the full task object, so use the result data
+                updated_task = result.data[0]
+                await self.bot.task_channel_monitor.on_task_updated(str(guild_id), updated_task)
+
             return {'success': True, 'task': result.data[0]}
 
         except Exception as e:
@@ -220,11 +230,16 @@ class TaskManager:
                     'task_id': task_id
                 })
 
+            # Trigger task channel update
+            if self.bot and hasattr(self.bot, 'task_channel_monitor'):
+                await self.bot.task_channel_monitor.on_task_deleted(str(guild_id), str(task_id))
+
             return {'success': True}
 
         except Exception as e:
             logger.exception(f"Delete task error: {e}")
             return {'success': False, 'error': "Failed to delete task."}
+
 
     async def claim_task(self, guild_id: int, user_id: int, task_id: int) -> Dict:
         """Claim task with PREVENT OVER-CLAIMING - atomic validation"""
