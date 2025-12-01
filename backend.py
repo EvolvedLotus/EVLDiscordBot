@@ -477,8 +477,7 @@ def login():
         session_token = auth_manager.create_session(user)
 
         # Update last_login if it's a DB user (optional, skip for env user)
-        if user.get('id') != 'admin-env-user':
-            auth_manager.update_last_login(user['id'])
+        # Update last_login is handled internally by authenticate_user
 
         response = jsonify({
             'success': True,
