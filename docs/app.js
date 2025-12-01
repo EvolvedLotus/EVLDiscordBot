@@ -897,6 +897,7 @@ async function loadTasks() {
 
     try {
         const data = await apiCall(`/api/${currentServerId}/tasks`);
+        console.log('Tasks API response:', data);
 
         // Handle both array and object responses
         let tasks = [];
@@ -907,6 +908,9 @@ async function loadTasks() {
                 tasks = Object.values(data.tasks);
             }
         }
+
+        console.log(`Total tasks loaded: ${tasks.length}`);
+        console.log('Global tasks:', tasks.filter(t => t.is_global));
 
         if (tasks.length > 0) {
             let html = '<div class="grid-container">';

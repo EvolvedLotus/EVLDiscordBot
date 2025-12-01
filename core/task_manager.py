@@ -658,7 +658,7 @@ class TaskManager:
             guild_id: Guild ID
             
         Returns:
-            List of task dictionaries (regular + global)
+            List of task dictionaries (regular + global + global_tasks table)
         """
         try:
             # Get tasks for this guild OR global tasks
@@ -673,7 +673,7 @@ class TaskManager:
             
             tasks_list = guild_tasks_result.data if guild_tasks_result.data else []
             
-            # 2. Fetch Global Tasks (where is_global is true)
+            # 2. Fetch Global Tasks from tasks table (where is_global is true)
             # We exclude tasks that are already in the list (though they shouldn't be if guild_id matches)
             global_tasks_result = self.data_manager.admin_client.table('tasks') \
                 .select('*') \
@@ -683,6 +683,38 @@ class TaskManager:
                 
             if global_tasks_result.data:
                 tasks_list.extend(global_tasks_result.data)
+            
+            # 3. Fetch from global_tasks table (separate table for special global tasks)
+            global_tasks_table_result = self.data_manager.admin_client.table('global_tasks') \
+                .select('*') \
+                .eq('is_active', True) \
+                .execute()
+            
+            if global_tasks_table_result.data:
+                # Convert global_tasks format to match tasks format
+                for gt in global_tasks_table_result.data:
+                    # Map global_tasks fields to tasks fields
+                    task_dict = {
+                        'task_id': gt.get('task_key', gt.get('id')),  # Use task_key as task_id
+                        'guild_id': 'GLOBAL',  # Mark as global
+                        'name': gt.get('name'),
+                        'description': gt.get('description'),
+                        'reward': gt.get('reward'),
+                        'duration_hours': 24,  # Default duration
+                        'category': gt.get('task_type', 'special'),
+                        'is_global': True,  # Always global
+                        'status': 'active' if gt.get('is_active') else 'inactive',
+                        'max_claims': -1,  # Unlimited by default
+                        'current_claims': 0,
+                        'created_at': gt.get('created_at'),
+                        'updated_at': gt.get('updated_at'),
+                        # Additional fields from global_tasks
+                        'is_repeatable': gt.get('is_repeatable', True),
+                        'cooldown_minutes': gt.get('cooldown_minutes', 0),
+                        'icon_emoji': gt.get('icon_emoji', '🎁'),
+                        'button_text': gt.get('button_text', 'Claim Here'),
+                    }
+                    tasks_list.append(task_dict)
             
             # Sort by creation date if available, or ID
             # Put global tasks at the top
