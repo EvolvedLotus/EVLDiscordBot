@@ -24,6 +24,8 @@ class General(commands.Cog):
         self.start_time = datetime.now()
         self.reminders_file = 'data/reminders.json'
         self.reminders = self.load_reminders()
+
+    async def cog_load(self):
         self.check_reminders.start()
 
     def cog_unload(self):
