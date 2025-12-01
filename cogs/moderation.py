@@ -307,10 +307,14 @@ class Moderation(commands.Cog):
                 )
 
                 # Broadcast SSE event
-                self.data_manager.broadcast_event('moderation_config_update', {
-                    'guild_id': interaction.guild.id,
-                    'config': config
-                })
+                try:
+                    from backend import sse_manager
+                    sse_manager.broadcast_event('moderation_config_update', {
+                        'guild_id': str(interaction.guild.id),
+                        'config': config
+                    })
+                except Exception as sse_error:
+                    logger.warning(f"Failed to broadcast SSE event: {sse_error}")
 
             else:
                 embed = discord.Embed(
