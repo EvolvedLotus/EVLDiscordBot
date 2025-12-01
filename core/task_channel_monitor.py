@@ -381,23 +381,21 @@ class TaskChannelMonitor:
                 # For global tasks, store message ID per guild
                 await self.store_global_task_message(guild.id, task['task_key'], channel.id, message.id)
             else:
-                # Update regular task in file-based storage
+                # Update regular task in Supabase
                 try:
-                    tasks_data = self.data_manager.load_guild_data(str(guild.id), 'tasks')
-                    if tasks_data and 'tasks' in tasks_data:
-                        task_id = task['task_id']
-                        if task_id in tasks_data['tasks']:
-                            tasks_data['tasks'][task_id]['message_id'] = str(message.id)
-                            tasks_data['tasks'][task_id]['channel_id'] = str(channel.id)
-                            self.data_manager.save_guild_data(str(guild.id), 'tasks', tasks_data)
+                    self.data_manager.admin_client.table('tasks').update({
+                        'message_id': str(message.id),
+                        'channel_id': str(channel.id)
+                    }).eq('guild_id', str(guild.id)).eq('task_id', task['task_id']).execute()
+                    
+                    logger.debug(f"Saved message ID {message.id} for task {task['task_id']} to Supabase")
                 except Exception as e:
-                    logger.error(f"Error saving task message ID to file storage: {e}")
+                    logger.error(f"Error saving task message ID to Supabase: {e}")
             
             logger.info(f"✅ Posted task {task['task_id']} to channel {channel.id} (message {message.id})")
             
         except Exception as e:
             logger.error(f"Error posting task message: {e}")
-    
     async def store_global_task_message(self, guild_id: int, task_key: str, channel_id: int, message_id: int):
         """Store global task message ID for a specific guild"""
         try:
