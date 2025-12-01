@@ -73,6 +73,14 @@ function showCreateTaskModal() {
         <input type="number" id="task-reward" class="form-control" required min="1">
     </div>
     <div class="form-group">
+        <label>Duration (hours)</label>
+        <input type="number" id="task-duration" class="form-control" min="1" value="24">
+    </div>
+    <div class="form-group">
+        <label>Max Claims (-1 for unlimited)</label>
+        <input type="number" id="task-max-claims" class="form-control" value="-1">
+    </div>
+    <div class="form-group">
         <label>Category</label>
         <select id="task-category" class="form-control" onchange="toggleTaskRoleSelect()">
             <option value="general">General</option>
@@ -130,6 +138,8 @@ async function saveTask(event) {
     const name = document.getElementById('task-name').value;
     const description = document.getElementById('task-description').value;
     const reward = document.getElementById('task-reward').value;
+    const duration = document.getElementById('task-duration')?.value || 24;
+    const maxClaims = document.getElementById('task-max-claims')?.value || -1;
     const category = document.getElementById('task-category').value;
     const roleId = document.getElementById('task-role')?.value;
     const isGlobal = document.getElementById('task-is-global')?.checked || false;
@@ -143,6 +153,8 @@ async function saveTask(event) {
         name,
         description,
         reward: parseInt(reward),
+        duration_hours: parseInt(duration),
+        max_claims: parseInt(maxClaims),
         category,
         required_role_id: (category === 'role_required' && roleId) ? roleId : null,
         is_global: isGlobal

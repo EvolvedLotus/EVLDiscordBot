@@ -198,7 +198,9 @@ class TaskManager:
                     return {'success': False, 'error': "Task has expired."}
 
                 # VALIDATION: Max claims not exceeded
-                if task_data['max_claims'] and task_data['current_claims'] >= task_data['max_claims']:
+                # VALIDATION: Max claims not exceeded
+                # Check if max_claims is set (not None) AND not -1 (unlimited)
+                if task_data['max_claims'] and task_data['max_claims'] != -1 and task_data['current_claims'] >= task_data['max_claims']:
                     return {'success': False, 'error': "Task is full."}
 
                 # VALIDATION: User hasn't already claimed
