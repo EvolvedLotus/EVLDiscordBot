@@ -231,13 +231,15 @@ class TaskManager:
             }).eq('guild_id', guild_id).eq('task_id', task_id).execute()
 
             # Invalidate cache safely
-            if self.cache_manager:
-                self.cache_manager.invalidate(f"tasks:{guild_id}")
-                self.cache_manager.invalidate(f"user_tasks:{guild_id}:{user_id}")
+            cache_manager = getattr(self, 'cache_manager', None)
+            if cache_manager:
+                cache_manager.invalidate(f"tasks:{guild_id}")
+                cache_manager.invalidate(f"user_tasks:{guild_id}:{user_id}")
 
             # Emit SSE event safely
-            if self.sse_manager:
-                await self.sse_manager.broadcast_event(guild_id, {
+            sse_manager = getattr(self, 'sse_manager', None)
+            if sse_manager:
+                await sse_manager.broadcast_event(guild_id, {
                     'type': 'task_claimed',
                     'user_id': user_id,
                     'task_id': task_id
