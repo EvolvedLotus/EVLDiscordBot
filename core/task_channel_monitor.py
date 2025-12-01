@@ -284,20 +284,24 @@ class TaskChannelMonitor:
                 message_id = task.get('message_id')
             
             # Try to fetch existing message
-            message_exists = False
+            should_repost = False
+            
             if message_id:
                 try:
                     await channel.fetch_message(int(message_id))
-                    message_exists = True
                     logger.debug(f"Task {task_id} message already exists")
                 except discord.NotFound:
-                    message_exists = False
+                    should_repost = True
                     logger.info(f"Task {task_id} message not found, will repost")
                 except Exception as e:
                     logger.error(f"Error fetching message {message_id}: {e}")
+                    # Do NOT repost on other errors (like Forbidden, HTTP error) to avoid spam
+                    should_repost = False
+            else:
+                should_repost = True
             
             # If message doesn't exist, post it
-            if not message_exists:
+            if should_repost:
                 logger.info(f"Posting task {task_id} to channel {channel.id}")
                 await self.post_task_message(guild, channel, task)
                 
