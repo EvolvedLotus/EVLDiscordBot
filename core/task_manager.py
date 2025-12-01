@@ -46,8 +46,8 @@ class TaskManager:
         # VALIDATION
         if reward <= 0:
             raise ValueError("Reward must be positive")
-        if duration_hours <= 0:
-            raise ValueError("Duration must be positive")
+        if duration_hours <= 0 and duration_hours != -1:
+            raise ValueError("Duration must be positive or -1 for infinite")
 
         async with self.data_manager.atomic_transaction() as conn:
             # ATOMIC INCREMENT of task_id (prevent race condition)
