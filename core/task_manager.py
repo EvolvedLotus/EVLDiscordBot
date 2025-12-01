@@ -30,7 +30,7 @@ class TaskManager:
         """Set SSE manager instance"""
         self.sse_manager = sse_manager
 
-    async def create_task(self, guild_id, name, description=None, reward=None, duration_hours=None, max_claims=None):
+    async def create_task(self, guild_id, name, description=None, reward=None, duration_hours=None, max_claims=None, is_global=False):
         """Create new task with atomic task_id generation"""
 
         # Handle dictionary input (from API)
@@ -41,6 +41,7 @@ class TaskManager:
             reward = int(data.get('reward', 0))
             duration_hours = int(data.get('duration_hours', 24))
             max_claims = int(data.get('max_claims')) if data.get('max_claims') else None
+            is_global = data.get('is_global', False)
 
         # VALIDATION
         if reward <= 0:
@@ -86,6 +87,7 @@ class TaskManager:
             'max_claims': max_claims,
             'current_claims': 0,
             'status': 'active',
+            'is_global': is_global,
             'created_at': datetime.now(timezone.utc).isoformat(),
             'expires_at': expires_at.isoformat()
         }
@@ -94,11 +96,13 @@ class TaskManager:
             # Insert into Supabase
             result = self.data_manager.admin_client.table('tasks').insert(task_data).execute()
             
-            logger.info(f"✅ Created task {task_id} in guild {guild_id}")
+            logger.info(f"✅ Created task {task_id} in guild {guild_id} (Global: {is_global})")
             
             # Invalidate cache
             if hasattr(self, 'cache_manager') and self.cache_manager:
                 self.cache_manager.invalidate(f"tasks:{guild_id}")
+                if is_global:
+                    self.cache_manager.invalidate("tasks:global")
             
             # Emit SSE event
             if hasattr(self, 'sse_manager') and self.sse_manager:
@@ -657,40 +661,28 @@ class TaskManager:
             List of task dictionaries (regular + global)
         """
         try:
-            # Get regular tasks
-            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
-            tasks = tasks_data.get('tasks', {})
+            # Get tasks for this guild OR global tasks
+            # Note: Supabase/PostgREST doesn't support OR across different columns easily in one query without raw SQL
+            # So we'll fetch guild tasks and global tasks separately and merge
             
-            tasks_list = []
-            for task_id, task in tasks.items():
-                # Ensure task_id is in the dict
-                task['task_id'] = task_id
-                task['is_global'] = False
-                tasks_list.append(task)
+            # 1. Fetch Guild Tasks
+            guild_tasks_result = self.data_manager.admin_client.table('tasks') \
+                .select('*') \
+                .eq('guild_id', str(guild_id)) \
+                .execute()
             
-            # Get global tasks from Supabase
-            try:
-                global_tasks_result = self.data_manager.admin_client.table('global_tasks').select('*').eq('is_active', True).execute()
+            tasks_list = guild_tasks_result.data if guild_tasks_result.data else []
+            
+            # 2. Fetch Global Tasks (where is_global is true)
+            # We exclude tasks that are already in the list (though they shouldn't be if guild_id matches)
+            global_tasks_result = self.data_manager.admin_client.table('tasks') \
+                .select('*') \
+                .eq('is_global', True) \
+                .neq('guild_id', str(guild_id)) \
+                .execute()
                 
-                for global_task in global_tasks_result.data:
-                    # Convert global task format to regular task format
-                    tasks_list.append({
-                        'task_id': global_task['task_key'],
-                        'name': global_task.get('name', global_task.get('title', 'Unnamed Task')),
-                        'description': global_task.get('description', ''),
-                        'reward': global_task['reward'],
-                        'status': 'active',
-                        'is_global': True,
-                        'is_repeatable': global_task.get('is_repeatable', False),
-                        'cooldown_minutes': global_task.get('cooldown_minutes', 0),
-                        'disclaimer': global_task.get('disclaimer'),
-                        'task_key': global_task['task_key'],
-                        'created_at': global_task.get('created_at', ''),
-                        'icon_emoji': global_task.get('icon_emoji', '🌍'),
-                        'button_text': global_task.get('button_text', 'Claim Here')
-                    })
-            except Exception as e:
-                logger.error(f"Error fetching global tasks: {e}")
+            if global_tasks_result.data:
+                tasks_list.extend(global_tasks_result.data)
             
             # Sort by creation date if available, or ID
             # Put global tasks at the top

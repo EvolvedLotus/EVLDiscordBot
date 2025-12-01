@@ -158,6 +158,7 @@ duration_hours INTEGER NOT NULL CHECK (duration_hours > 0),
 category TEXT DEFAULT 'General',
 role_name TEXT,
 assigned_users TEXT[] DEFAULT '{}',
+is_global BOOLEAN DEFAULT false,
 
 -- Limits
 max_claims INTEGER DEFAULT -1,

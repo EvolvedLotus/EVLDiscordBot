@@ -92,6 +92,16 @@ function showCreateTaskModal() {
         <small>Users must have this role to see/complete the task.</small>
     </div>
 
+    <!-- Global Task Option (Superadmin only) -->
+    ${currentUser?.is_superadmin ? `
+    <div class="form-group">
+        <label>
+            <input type="checkbox" id="task-is-global">
+            Global Task (Visible across all servers)
+        </label>
+    </div>
+    ` : ''}
+
     <div class="button-group">
         <button type="button" onclick="saveTask(event)" class="btn-success">Save</button>
         <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
@@ -122,6 +132,7 @@ async function saveTask(event) {
     const reward = document.getElementById('task-reward').value;
     const category = document.getElementById('task-category').value;
     const roleId = document.getElementById('task-role')?.value;
+    const isGlobal = document.getElementById('task-is-global')?.checked || false;
 
     if (!name || !description || !reward) {
         showNotification('Please fill all required fields', 'warning');
@@ -133,7 +144,8 @@ async function saveTask(event) {
         description,
         reward: parseInt(reward),
         category,
-        required_role_id: (category === 'role_required' && roleId) ? roleId : null
+        required_role_id: (category === 'role_required' && roleId) ? roleId : null,
+        is_global: isGlobal
     };
 
     try {
