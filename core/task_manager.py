@@ -72,7 +72,11 @@ class TaskManager:
                 task_id = result['next_task_id']
 
             # Calculate expiration
-            expires_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
+            if duration_hours == -1:
+                # Infinite duration - no expiration
+                expires_at = None
+            else:
+                expires_at = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
 
         task_id = int(task_id)
         
@@ -89,7 +93,7 @@ class TaskManager:
             'status': 'active',
             'is_global': is_global,
             'created_at': datetime.now(timezone.utc).isoformat(),
-            'expires_at': expires_at.isoformat()
+            'expires_at': expires_at.isoformat() if expires_at else None
         }
         
         try:
