@@ -193,7 +193,7 @@ class TaskManager:
         try:
             # Verify task exists using Supabase
             task_check = self.data_manager.admin_client.table('tasks') \
-                .select('task_id') \
+                .select('*') \
                 .eq('task_id', task_id) \
                 .eq('guild_id', guild_id) \
                 .execute()
@@ -201,6 +201,8 @@ class TaskManager:
             if not task_check.data or len(task_check.data) == 0:
                 logger.warning(f"Task {task_id} not found in guild {guild_id}")
                 return {'success': False, 'error': "Task not found."}
+
+            task_to_delete = task_check.data[0]
 
             # Delete associated user_tasks first
             self.data_manager.admin_client.table('user_tasks') \
@@ -232,7 +234,7 @@ class TaskManager:
 
             # Trigger task channel update
             if self.bot and hasattr(self.bot, 'task_channel_monitor'):
-                await self.bot.task_channel_monitor.on_task_deleted(str(guild_id), str(task_id))
+                await self.bot.task_channel_monitor.on_task_deleted(str(guild_id), str(task_id), task_to_delete)
 
             return {'success': True}
 

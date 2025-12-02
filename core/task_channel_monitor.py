@@ -198,7 +198,13 @@ class TaskChannelMonitor:
         """Get all active regular tasks for a guild"""
         try:
             # Query Supabase directly for tasks
-            result = self.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('status', 'active').execute()
+            # Exclude global tasks to avoid duplication with get_global_tasks
+            result = self.data_manager.supabase.table('tasks') \
+                .select('*') \
+                .eq('guild_id', guild_id) \
+                .eq('status', 'active') \
+                .eq('is_global', False) \
+                .execute()
             
             if not result.data:
                 return []
@@ -215,7 +221,7 @@ class TaskChannelMonitor:
                     if expires_at <= datetime.now(timezone.utc):
                         continue  # Skip expired
                 
-                # Add task with is_global flag
+                # Add task
                 active_tasks.append({
                     **task,
                     'is_global': False
@@ -229,9 +235,11 @@ class TaskChannelMonitor:
     async def get_global_tasks(self):
         """Get all active global tasks"""
         try:
+            tasks = []
+            
+            # 1. Fetch from global_tasks table (special system tasks)
             result = self.data_manager.admin_client.table('global_tasks').select('*').eq('is_active', True).execute()
             
-            tasks = []
             for task in result.data:
                 # Convert global task format to regular task format
                 tasks.append({
@@ -247,6 +255,22 @@ class TaskChannelMonitor:
                     'disclaimer': task.get('disclaimer'),
                     'task_key': task['task_key']
                 })
+                
+            # 2. Fetch from tasks table where is_global = True
+            # These are user-created global tasks
+            user_global_result = self.data_manager.admin_client.table('tasks') \
+                .select('*') \
+                .eq('is_global', True) \
+                .eq('status', 'active') \
+                .execute()
+                
+            for task in user_global_result.data:
+                # These are already in the correct format, just ensure is_global is True
+                # and add task_key for consistency if needed (though regular tasks use task_id)
+                task_copy = task.copy()
+                task_copy['is_global'] = True
+                task_copy['task_key'] = f"global_{task['task_id']}" # Generate a key for message tracking
+                tasks.append(task_copy)
             
             return tasks
         except Exception as e:
@@ -436,15 +460,20 @@ class TaskChannelMonitor:
         except Exception as e:
             logger.error(f"Error handling task created: {e}")
     
-    async def on_task_deleted(self, guild_id: str, task_id: str):
+    async def on_task_deleted(self, guild_id: str, task_id: str, task_data: dict = None):
         """Called when a task is deleted"""
         try:
-            # Get task data from file-based storage
-            tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
-            if not tasks_data or 'tasks' not in tasks_data:
-                return
-            
-            task = tasks_data['tasks'].get(task_id)
+            # If task_data is provided (preferred), use it
+            if task_data:
+                task = task_data
+            else:
+                # Fallback to trying to load (unlikely to work if already deleted)
+                logger.warning(f"on_task_deleted called without task_data for task {task_id}")
+                tasks_data = self.data_manager.load_guild_data(guild_id, 'tasks')
+                if not tasks_data or 'tasks' not in tasks_data:
+                    return
+                task = tasks_data['tasks'].get(task_id)
+
             if task and task.get('message_id'):
                 message_id = task['message_id']
                 channel_id = task.get('channel_id')

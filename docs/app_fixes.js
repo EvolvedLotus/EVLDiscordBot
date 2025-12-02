@@ -3,6 +3,119 @@
 
 // ========== SHOP ITEM FUNCTIONS ==========
 
+// ========== SHOP ITEM FUNCTIONS ==========
+
+function showCreateShopItemModal() {
+    // Generate the modal HTML
+    const modal = createModal('Create Shop Item', `
+<form id="shop-item-form" onsubmit="return false;">
+    <input type="hidden" id="shop-item-id">
+    <div class="form-group">
+        <label>Item Name</label>
+        <input type="text" id="shop-item-name" class="form-control" required>
+    </div>
+    <div class="form-group">
+        <label>Description</label>
+        <textarea id="shop-item-description" class="form-control" rows="3"></textarea>
+    </div>
+    <div class="form-group">
+        <label>Price</label>
+        <input type="number" id="shop-item-price" class="form-control" required min="0">
+    </div>
+    <div class="form-group">
+        <label>Category</label>
+        <select id="shop-item-category" class="form-control" onchange="toggleShopRoleSelect()">
+            <option value="general">General</option>
+            <option value="consumable">Consumable</option>
+            <option value="role">Role</option>
+            <option value="collectible">Collectible</option>
+        </select>
+    </div>
+    
+    <!-- Role Selection (Hidden by default) -->
+    <div class="form-group" id="shop-role-select-group" style="display: none;">
+        <label>Select Role</label>
+        <select id="shop-item-role-id" class="form-control">
+            ${typeof getRoleOptions === 'function' ? getRoleOptions() : '<option value="">Loading...</option>'}
+        </select>
+        <small>The role to give when purchased.</small>
+    </div>
+
+    <div class="form-group">
+        <label>Stock (-1 for unlimited)</label>
+        <input type="number" id="shop-item-stock" class="form-control" value="-1">
+    </div>
+    <div class="form-group">
+        <label>Emoji</label>
+        <div class="emoji-picker-container" style="display: flex; align-items: center;">
+            <input type="text" id="shop-item-emoji" class="form-control" placeholder="🎁" style="width: 80px; margin-right: 10px;">
+            <button type="button" class="btn-secondary emoji-picker-btn" onclick="showEmojiPicker('shop-item-emoji')">😀 Pick Emoji</button>
+        </div>
+    </div>
+    <div class="button-group">
+        <button type="button" onclick="saveShopItem(event)" class="btn-success">Save</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+</form>
+    `);
+
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+
+    // Initialize role toggle
+    toggleShopRoleSelect();
+}
+
+function closeShopItemModal() {
+    const modal = document.getElementById('shop-item-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function toggleShopRoleSelect() {
+    const category = document.getElementById('shop-item-category').value;
+    const roleGroup = document.getElementById('shop-role-select-group');
+
+    if (category === 'role') {
+        if (roleGroup) roleGroup.style.display = 'block';
+        // Load roles if empty
+        const roleSelect = document.getElementById('shop-item-role-id');
+        if (roleSelect && roleSelect.options.length <= 1) {
+            if (typeof loadRolesForShopItem === 'function') {
+                loadRolesForShopItem();
+            } else {
+                // Fallback if function not found (e.g. app_additions.js not loaded yet or overwritten)
+                console.warn('loadRolesForShopItem function not found, trying to load manually');
+                loadRolesForShopItemFallback();
+            }
+        }
+    } else {
+        if (roleGroup) roleGroup.style.display = 'none';
+    }
+}
+
+async function loadRolesForShopItemFallback() {
+    const roleSelect = document.getElementById('shop-item-role-id');
+    if (!roleSelect || !currentServerId) return;
+
+    try {
+        // Ensure discordDataCache is populated
+        if (!discordDataCache.roles || Object.keys(discordDataCache.roles).length === 0) {
+            await fetchDiscordData(currentServerId);
+        }
+
+        const roles = Object.values(discordDataCache.roles || {});
+
+        let html = '<option value="">Select a role...</option>';
+        roles.forEach(role => {
+            html += `<option value="${role.id}" style="color: #${role.color.toString(16).padStart(6, '0')}">${role.name}</option>`;
+        });
+        roleSelect.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load roles:', error);
+        roleSelect.innerHTML = '<option value="">Failed to load roles</option>';
+    }
+}
+
 async function saveShopItem(event) {
     if (event) event.preventDefault();
 
@@ -13,10 +126,10 @@ async function saveShopItem(event) {
     const category = document.getElementById('shop-item-category').value;
     const stock = document.getElementById('shop-item-stock').value;
     const emoji = document.getElementById('shop-item-emoji').value;
-    const roleId = document.getElementById('shop-item-role')?.value;
+    const roleId = document.getElementById('shop-item-role-id')?.value;
 
     if (!name || !price) {
-        showNotification('Please fill all required fields', 'warning');
+        showNotification('Please fill all required fields (Name, Price)', 'warning');
         return;
     }
 
@@ -29,6 +142,11 @@ async function saveShopItem(event) {
         emoji: emoji || '🎁',
         role_id: (category === 'role' && roleId) ? roleId : null
     };
+
+    // Add metadata for role if needed
+    if (category === 'role' && roleId) {
+        payload.metadata = { role_id: roleId };
+    }
 
     try {
         if (itemId) {
@@ -46,7 +164,7 @@ async function saveShopItem(event) {
             });
             showNotification('Shop item created', 'success');
         }
-        closeModal();
+        closeShopItemModal();
         loadShop();
     } catch (error) {
         console.error('Save shop item error:', error);
