@@ -268,17 +268,25 @@ async function saveTask(event) {
     if (event) event.preventDefault();
 
     const taskId = document.getElementById('task-id')?.value;
-    const name = document.getElementById('task-name').value;
-    const description = document.getElementById('task-description').value;
-    const reward = document.getElementById('task-reward').value;
+    const name = document.getElementById('task-name')?.value;
+    const description = document.getElementById('task-description')?.value;
+    const reward = document.getElementById('task-reward')?.value;
     const duration = document.getElementById('task-duration')?.value || 24;
     const maxClaims = document.getElementById('task-max-claims')?.value || -1;
-    const category = document.getElementById('task-category').value;
+    const category = document.getElementById('task-category')?.value;
     const roleId = document.getElementById('task-role')?.value;
     const isGlobal = document.getElementById('task-is-global')?.checked || false;
 
-    if (!name || !description || !reward) {
-        showNotification('Please fill all required fields', 'warning');
+    // Detailed validation with specific error messages
+    const missingFields = [];
+    if (!name || name.trim() === '') missingFields.push('Task Name');
+    if (!description || description.trim() === '') missingFields.push('Description');
+    if (!reward || reward === '' || isNaN(reward) || parseInt(reward) <= 0) missingFields.push('Reward (must be > 0)');
+
+    if (missingFields.length > 0) {
+        showNotification(`Missing required fields: ${missingFields.join(', ')}`, 'warning');
+        console.error('Validation failed. Missing fields:', missingFields);
+        console.log('Form values:', { name, description, reward, duration, maxClaims, category });
         return;
     }
 
