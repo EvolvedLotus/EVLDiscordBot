@@ -254,6 +254,9 @@ function showCreateTaskModal() {
     document.body.appendChild(modal);
     modal.style.display = 'block';
 
+    // Store modal reference globally so saveTask can access it
+    window.currentTaskModal = modal;
+
     // Initialize toggle state
     toggleTaskRoleSelect();
 }
@@ -274,254 +277,252 @@ function toggleTaskRoleSelect() {
     } else {
         if (generalNote) generalNote.style.display = 'none';
     }
-}
+    async function saveTask(event) {
+        if (event) event.preventDefault();
 
-async function saveTask(event) {
-    if (event) event.preventDefault();
+        // Use the stored modal reference to query elements
+        const modal = window.currentTaskModal || document.getElementById('dynamic-modal');
+        if (!modal) {
+            console.error('No modal found!');
+            showNotification('Error: Modal not found', 'error');
+            return;
+        }
 
-    // Debug: Check if elements exist
-    console.log('=== SAVE TASK DEBUG ===');
-    console.log('Modal exists:', !!document.getElementById('dynamic-modal'));
-    console.log('Form exists:', !!document.getElementById('task-form'));
-    console.log('Name input exists:', !!document.getElementById('task-name'));
-    console.log('Name input element:', document.getElementById('task-name'));
+        // Query elements from the specific modal, not the entire document
+        const taskId = modal.querySelector('#task-id')?.value;
+        const name = modal.querySelector('#task-name')?.value;
+        const description = modal.querySelector('#task-description')?.value;
+        const reward = modal.querySelector('#task-reward')?.value;
+        const duration = modal.querySelector('#task-duration')?.value || 24;
+        const maxClaims = modal.querySelector('#task-max-claims')?.value || -1;
+        const category = modal.querySelector('#task-category')?.value;
+        const roleId = modal.querySelector('#task-role')?.value;
+        const isGlobal = modal.querySelector('#task-is-global')?.checked || false;
 
-    const taskId = document.getElementById('task-id')?.value;
-    const name = document.getElementById('task-name')?.value;
-    const description = document.getElementById('task-description')?.value;
-    const reward = document.getElementById('task-reward')?.value;
-    const duration = document.getElementById('task-duration')?.value || 24;
-    const maxClaims = document.getElementById('task-max-claims')?.value || -1;
-    const category = document.getElementById('task-category')?.value;
-    const roleId = document.getElementById('task-role')?.value;
-    const isGlobal = document.getElementById('task-is-global')?.checked || false;
+        // Detailed validation with specific error messages
+        const missingFields = [];
+        if (!name || name.trim() === '') missingFields.push('Task Name');
+        if (!description || description.trim() === '') missingFields.push('Description');
+        if (!reward || reward === '' || isNaN(reward) || parseInt(reward) <= 0) missingFields.push('Reward (must be > 0)');
 
-    // Detailed validation with specific error messages
-    const missingFields = [];
-    if (!name || name.trim() === '') missingFields.push('Task Name');
-    if (!description || description.trim() === '') missingFields.push('Description');
-    if (!reward || reward === '' || isNaN(reward) || parseInt(reward) <= 0) missingFields.push('Reward (must be > 0)');
+        if (missingFields.length > 0) {
+            showNotification(`Missing required fields: ${missingFields.join(', ')}`, 'warning');
+            return;
+        }
 
-    if (missingFields.length > 0) {
-        showNotification(`Missing required fields: ${missingFields.join(', ')}`, 'warning');
-        console.error('Validation failed. Missing fields:', missingFields);
-        console.log('Form values:', { name, description, reward, duration, maxClaims, category });
-        return;
+        const payload = {
+            name,
+            description,
+            reward: parseInt(reward),
+            duration_hours: parseInt(duration),
+            max_claims: parseInt(maxClaims),
+            category,
+            required_role_id: (category === 'role_required' && roleId) ? roleId : null,
+            is_global: isGlobal
+        };
+
+        try {
+            if (taskId) {
+                await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+                showNotification('Task updated', 'success');
+            } else {
+                await apiCall(`/api/${currentServerId}/tasks`, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                showNotification('Task created', 'success');
+            }
+            closeModal();
+            loadTasks();
+        } catch (error) {
+            console.error('Save task error:', error);
+            showNotification('Failed to save task: ' + error.message, 'error');
+        }
     }
 
-    const payload = {
-        name,
-        description,
-        reward: parseInt(reward),
-        duration_hours: parseInt(duration),
-        max_claims: parseInt(maxClaims),
-        category,
-        required_role_id: (category === 'role_required' && roleId) ? roleId : null,
-        is_global: isGlobal
-    };
+    // ========== CONFIG TAB SAVE FUNCTIONS ==========
 
-    try {
-        if (taskId) {
-            await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+    async function saveChannelSetting(type) {
+        const channelId = document.getElementById(`${type}-channel`)?.value;
+        const statusSpan = document.getElementById(`${type}-channel-status`);
+
+        if (!channelId) {
+            showNotification('Please select a channel', 'warning');
+            return;
+        }
+
+        try {
+            const fieldMap = {
+                'welcome': 'welcome_channel',
+                'log': 'logs_channel',
+                'task': 'task_channel_id',
+                'shop': 'shop_channel_id'
+            };
+
+            const payload = {
+                [fieldMap[type]]: channelId
+            };
+
+            await apiCall(`/api/${currentServerId}/config`, {
                 method: 'PUT',
                 body: JSON.stringify(payload)
             });
-            showNotification('Task updated', 'success');
-        } else {
-            await apiCall(`/api/${currentServerId}/tasks`, {
-                method: 'POST',
-                body: JSON.stringify(payload)
+
+            if (statusSpan) {
+                statusSpan.textContent = '✅ Saved';
+                statusSpan.className = 'status-text success';
+                setTimeout(() => {
+                    statusSpan.textContent = '';
+                }, 3000);
+            }
+            showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} channel saved`, 'success');
+        } catch (error) {
+            console.error('Save channel setting error:', error);
+            if (statusSpan) {
+                statusSpan.textContent = '❌ Failed';
+                statusSpan.className = 'status-text error';
+            }
+            showNotification('Failed to save channel setting', 'error');
+        }
+    }
+
+    async function saveCurrencySettings() {
+        const currencyName = document.getElementById('currency-name')?.value;
+        const currencySymbol = document.getElementById('currency-symbol')?.value;
+        const statusSpan = document.getElementById('currency-settings-status');
+
+        if (!currencyName || !currencySymbol) {
+            showNotification('Please fill all currency fields', 'warning');
+            return;
+        }
+
+        try {
+            await apiCall(`/api/${currentServerId}/config`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    currency_name: currencyName,
+                    currency_symbol: currencySymbol
+                })
             });
-            showNotification('Task created', 'success');
+
+            if (statusSpan) {
+                statusSpan.textContent = '✅ Saved';
+                statusSpan.className = 'status-text success';
+                setTimeout(() => {
+                    statusSpan.textContent = '';
+                }, 3000);
+            }
+            showNotification('Currency settings saved', 'success');
+        } catch (error) {
+            console.error('Save currency settings error:', error);
+            if (statusSpan) {
+                statusSpan.textContent = '❌ Failed';
+                statusSpan.className = 'status-text error';
+            }
+            showNotification('Failed to save currency settings', 'error');
         }
-        closeModal();
-        loadTasks();
-    } catch (error) {
-        console.error('Save task error:', error);
-        showNotification('Failed to save task: ' + error.message, 'error');
-    }
-}
-
-// ========== CONFIG TAB SAVE FUNCTIONS ==========
-
-async function saveChannelSetting(type) {
-    const channelId = document.getElementById(`${type}-channel`)?.value;
-    const statusSpan = document.getElementById(`${type}-channel-status`);
-
-    if (!channelId) {
-        showNotification('Please select a channel', 'warning');
-        return;
     }
 
-    try {
-        const fieldMap = {
-            'welcome': 'welcome_channel',
-            'log': 'logs_channel',
-            'task': 'task_channel_id',
-            'shop': 'shop_channel_id'
-        };
+    async function saveBotBehavior() {
+        const inactivityDays = document.getElementById('inactivity-days')?.value;
+        const autoExpireTasks = document.getElementById('auto-expire-tasks')?.checked;
+        const requireTaskProof = document.getElementById('require-task-proof')?.checked;
+        const statusSpan = document.getElementById('bot-behavior-status');
 
-        const payload = {
-            [fieldMap[type]]: channelId
-        };
+        try {
+            await apiCall(`/api/${currentServerId}/config`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    inactivity_days: parseInt(inactivityDays),
+                    auto_expire_enabled: autoExpireTasks,
+                    require_proof: requireTaskProof
+                })
+            });
 
-        await apiCall(`/api/${currentServerId}/config`, {
-            method: 'PUT',
-            body: JSON.stringify(payload)
-        });
-
-        if (statusSpan) {
-            statusSpan.textContent = '✅ Saved';
-            statusSpan.className = 'status-text success';
-            setTimeout(() => {
-                statusSpan.textContent = '';
-            }, 3000);
+            if (statusSpan) {
+                statusSpan.textContent = '✅ Saved';
+                statusSpan.className = 'status-text success';
+                setTimeout(() => {
+                    statusSpan.textContent = '';
+                }, 3000);
+            }
+            showNotification('Bot behavior settings saved', 'success');
+        } catch (error) {
+            console.error('Save bot behavior error:', error);
+            if (statusSpan) {
+                statusSpan.textContent = '❌ Failed';
+                statusSpan.className = 'status-text error';
+            }
+            showNotification('Failed to save bot behavior settings', 'error');
         }
-        showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} channel saved`, 'success');
-    } catch (error) {
-        console.error('Save channel setting error:', error);
-        if (statusSpan) {
-            statusSpan.textContent = '❌ Failed';
-            statusSpan.className = 'status-text error';
-        }
-        showNotification('Failed to save channel setting', 'error');
-    }
-}
-
-async function saveCurrencySettings() {
-    const currencyName = document.getElementById('currency-name')?.value;
-    const currencySymbol = document.getElementById('currency-symbol')?.value;
-    const statusSpan = document.getElementById('currency-settings-status');
-
-    if (!currencyName || !currencySymbol) {
-        showNotification('Please fill all currency fields', 'warning');
-        return;
     }
 
-    try {
-        await apiCall(`/api/${currentServerId}/config`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                currency_name: currencyName,
-                currency_symbol: currencySymbol
-            })
-        });
+    async function saveFeatureToggle(feature) {
+        const checkbox = document.getElementById(`feature-${feature}`);
+        const statusSpan = document.getElementById(`feature-${feature}-status`);
 
-        if (statusSpan) {
-            statusSpan.textContent = '✅ Saved';
-            statusSpan.className = 'status-text success';
-            setTimeout(() => {
-                statusSpan.textContent = '';
-            }, 3000);
+        if (!checkbox) return;
+
+        try {
+            await apiCall(`/api/${currentServerId}/config`, {
+                method: 'PUT',
+                body: JSON.stringify({
+                    [`feature_${feature}`]: checkbox.checked
+                })
+            });
+
+            if (statusSpan) {
+                statusSpan.textContent = '✅ Saved';
+                statusSpan.className = 'status-text success';
+                setTimeout(() => {
+                    statusSpan.textContent = '';
+                }, 3000);
+            }
+            showNotification(`${feature.charAt(0).toUpperCase() + feature.slice(1)} feature ${checkbox.checked ? 'enabled' : 'disabled'}`, 'success');
+        } catch (error) {
+            console.error('Save feature toggle error:', error);
+            if (statusSpan) {
+                statusSpan.textContent = '❌ Failed';
+                statusSpan.className = 'status-text error';
+            }
+            showNotification('Failed to save feature toggle', 'error');
         }
-        showNotification('Currency settings saved', 'success');
-    } catch (error) {
-        console.error('Save currency settings error:', error);
-        if (statusSpan) {
-            statusSpan.textContent = '❌ Failed';
-            statusSpan.className = 'status-text error';
-        }
-        showNotification('Failed to save currency settings', 'error');
-    }
-}
-
-async function saveBotBehavior() {
-    const inactivityDays = document.getElementById('inactivity-days')?.value;
-    const autoExpireTasks = document.getElementById('auto-expire-tasks')?.checked;
-    const requireTaskProof = document.getElementById('require-task-proof')?.checked;
-    const statusSpan = document.getElementById('bot-behavior-status');
-
-    try {
-        await apiCall(`/api/${currentServerId}/config`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                inactivity_days: parseInt(inactivityDays),
-                auto_expire_enabled: autoExpireTasks,
-                require_proof: requireTaskProof
-            })
-        });
-
-        if (statusSpan) {
-            statusSpan.textContent = '✅ Saved';
-            statusSpan.className = 'status-text success';
-            setTimeout(() => {
-                statusSpan.textContent = '';
-            }, 3000);
-        }
-        showNotification('Bot behavior settings saved', 'success');
-    } catch (error) {
-        console.error('Save bot behavior error:', error);
-        if (statusSpan) {
-            statusSpan.textContent = '❌ Failed';
-            statusSpan.className = 'status-text error';
-        }
-        showNotification('Failed to save bot behavior settings', 'error');
-    }
-}
-
-async function saveFeatureToggle(feature) {
-    const checkbox = document.getElementById(`feature-${feature}`);
-    const statusSpan = document.getElementById(`feature-${feature}-status`);
-
-    if (!checkbox) return;
-
-    try {
-        await apiCall(`/api/${currentServerId}/config`, {
-            method: 'PUT',
-            body: JSON.stringify({
-                [`feature_${feature}`]: checkbox.checked
-            })
-        });
-
-        if (statusSpan) {
-            statusSpan.textContent = '✅ Saved';
-            statusSpan.className = 'status-text success';
-            setTimeout(() => {
-                statusSpan.textContent = '';
-            }, 3000);
-        }
-        showNotification(`${feature.charAt(0).toUpperCase() + feature.slice(1)} feature ${checkbox.checked ? 'enabled' : 'disabled'}`, 'success');
-    } catch (error) {
-        console.error('Save feature toggle error:', error);
-        if (statusSpan) {
-            statusSpan.textContent = '❌ Failed';
-            statusSpan.className = 'status-text error';
-        }
-        showNotification('Failed to save feature toggle', 'error');
-    }
-}
-
-// ========== BOT STATUS UPDATE ==========
-
-async function saveBotStatus() {
-    const statusType = document.getElementById('bot-status-type')?.value;
-    const statusMessage = document.getElementById('bot-status-message')?.value;
-
-    if (!statusType || !statusMessage) {
-        showNotification('Please fill all bot status fields', 'warning');
-        return;
     }
 
-    try {
-        await apiCall(`/api/${currentServerId}/bot_status`, {
-            method: 'POST',
-            body: JSON.stringify({
-                type: statusType,
-                message: statusMessage
-            })
-        });
-        showNotification('Bot status updated', 'success');
-    } catch (error) {
-        console.error('Save bot status error:', error);
-        showNotification('Failed to update bot status', 'error');
+    // ========== BOT STATUS UPDATE ==========
+
+    async function saveBotStatus() {
+        const statusType = document.getElementById('bot-status-type')?.value;
+        const statusMessage = document.getElementById('bot-status-message')?.value;
+
+        if (!statusType || !statusMessage) {
+            showNotification('Please fill all bot status fields', 'warning');
+            return;
+        }
+
+        try {
+            await apiCall(`/api/${currentServerId}/bot_status`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    type: statusType,
+                    message: statusMessage
+                })
+            });
+            showNotification('Bot status updated', 'success');
+        } catch (error) {
+            console.error('Save bot status error:', error);
+            showNotification('Failed to update bot status', 'error');
+        }
     }
-}
 
-// ========== EMBED FUNCTIONS ==========
+    // ========== EMBED FUNCTIONS ==========
 
-async function sendEmbed(embedId) {
-    // First, show a modal to select the channel
-    const modal = createModal('Send Embed', `
+    async function sendEmbed(embedId) {
+        // First, show a modal to select the channel
+        const modal = createModal('Send Embed', `
 <form id="send-embed-form" onsubmit="return false;">
     <div class="form-group">
         <label>Select Channel</label>
@@ -536,63 +537,63 @@ async function sendEmbed(embedId) {
 </form>
     `);
 
-    document.body.appendChild(modal);
-    modal.style.display = 'block';
-}
-
-async function confirmSendEmbed(embedId) {
-    const channelId = document.getElementById('send-embed-channel')?.value;
-
-    if (!channelId) {
-        showNotification('Please select a channel', 'warning');
-        return;
+        document.body.appendChild(modal);
+        modal.style.display = 'block';
     }
 
-    try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
-            method: 'POST',
-            body: JSON.stringify({ channel_id: channelId })
-        });
-        showNotification('Embed sent successfully', 'success');
-        closeModal();
-    } catch (error) {
-        console.error('Send embed error:', error);
-        showNotification('Failed to send embed: ' + error.message, 'error');
+    async function confirmSendEmbed(embedId) {
+        const channelId = document.getElementById('send-embed-channel')?.value;
+
+        if (!channelId) {
+            showNotification('Please select a channel', 'warning');
+            return;
+        }
+
+        try {
+            await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+                method: 'POST',
+                body: JSON.stringify({ channel_id: channelId })
+            });
+            showNotification('Embed sent successfully', 'success');
+            closeModal();
+        } catch (error) {
+            console.error('Send embed error:', error);
+            showNotification('Failed to send embed: ' + error.message, 'error');
+        }
     }
-}
 
-async function deleteEmbed(embedId) {
-    if (!confirm('Are you sure you want to delete this embed?')) return;
+    async function deleteEmbed(embedId) {
+        if (!confirm('Are you sure you want to delete this embed?')) return;
 
-    try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
-            method: 'DELETE'
-        });
-        showNotification('Embed deleted', 'success');
-        loadEmbeds();
-    } catch (error) {
-        console.error('Delete embed error:', error);
-        showNotification('Failed to delete embed: ' + error.message, 'error');
+        try {
+            await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+                method: 'DELETE'
+            });
+            showNotification('Embed deleted', 'success');
+            loadEmbeds();
+        } catch (error) {
+            console.error('Delete embed error:', error);
+            showNotification('Failed to delete embed: ' + error.message, 'error');
+        }
     }
-}
 
-async function editEmbed(embedId) {
-    // TODO: Implement edit modal population
-    showNotification('Edit embed functionality coming soon!', 'info');
-}
+    async function editEmbed(embedId) {
+        // TODO: Implement edit modal population
+        showNotification('Edit embed functionality coming soon!', 'info');
+    }
 
-async function editAnnouncement(announcementId) {
-    // TODO: Implement edit modal population
-    showNotification('Edit announcement functionality coming soon!', 'info');
-}
+    async function editAnnouncement(announcementId) {
+        // TODO: Implement edit modal population
+        showNotification('Edit announcement functionality coming soon!', 'info');
+    }
 
-// ========== MODAL HELPER ==========
+    // ========== MODAL HELPER ==========
 
-function createModal(title, content) {
-    const modal = document.createElement('div');
-    modal.id = 'dynamic-modal';
-    modal.className = 'modal';
-    modal.innerHTML = `
+    function createModal(title, content) {
+        const modal = document.createElement('div');
+        modal.id = 'dynamic-modal';
+        modal.className = 'modal';
+        modal.innerHTML = `
         <div class="modal-content">
             <div class="modal-header">
                 <h2>${title}</h2>
@@ -603,5 +604,5 @@ function createModal(title, content) {
             </div>
         </div>
     `;
-    return modal;
-}
+        return modal;
+    }
