@@ -6,6 +6,12 @@
 // ========== SHOP ITEM FUNCTIONS ==========
 
 function showCreateShopItemModal() {
+    // Remove any existing modal first
+    const existingModal = document.getElementById('dynamic-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
     // Generate the modal HTML
     const modal = createModal('Create Shop Item', `
 <form id="shop-item-form" onsubmit="return false;">
@@ -175,6 +181,12 @@ async function saveShopItem(event) {
 // ========== TASK MODAL FUNCTIONS ==========
 
 function showCreateTaskModal() {
+    // Remove any existing modal first
+    const existingModal = document.getElementById('dynamic-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
     const modal = createModal('Create Task', `
 <form id="task-form" onsubmit="return false;">
     <input type="hidden" id="task-id">
