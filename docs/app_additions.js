@@ -160,6 +160,61 @@ document.addEventListener('DOMContentLoaded', () => {
     checkSession();
 });
 
+// ========== HELPER FUNCTIONS FOR MODALS ==========
+
+function getRoleOptions() {
+    if (!discordDataCache.roles || Object.keys(discordDataCache.roles).length === 0) {
+        return '<option value="">Loading roles...</option>';
+    }
+
+    const roles = Object.values(discordDataCache.roles);
+    let html = '<option value="">Select a role...</option>';
+    roles.forEach(role => {
+        if (role.name !== '@everyone') {
+            html += `<option value="${role.id}">${role.name}</option>`;
+        }
+    });
+    return html;
+}
+
+function getChannelOptions() {
+    if (!discordDataCache.channels || Object.keys(discordDataCache.channels).length === 0) {
+        return '<option value="">Loading channels...</option>';
+    }
+
+    const channels = Object.values(discordDataCache.channels);
+    let html = '<option value="">Select a channel...</option>';
+    channels.forEach(channel => {
+        html += `<option value="${channel.id}">#${channel.name}</option>`;
+    });
+    return html;
+}
+
+async function loadRolesForShopItem() {
+    const roleSelect = document.getElementById('shop-item-role-id');
+    if (!roleSelect || !currentServerId) return;
+
+    try {
+        // Ensure discordDataCache is populated
+        if (!discordDataCache.roles || Object.keys(discordDataCache.roles).length === 0) {
+            await fetchDiscordData(currentServerId);
+        }
+
+        const roles = Object.values(discordDataCache.roles || {});
+
+        let html = '<option value="">Select a role...</option>';
+        roles.forEach(role => {
+            if (role.name !== '@everyone') {
+                html += `<option value="${role.id}">${role.name}</option>`;
+            }
+        });
+        roleSelect.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load roles:', error);
+        roleSelect.innerHTML = '<option value="">Failed to load roles</option>';
+    }
+}
+
 // ========== EMOJI PICKER FOR SHOP ITEMS ==========
 
 function showEmojiPicker(inputId) {
