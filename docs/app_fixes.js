@@ -279,6 +279,13 @@ function toggleTaskRoleSelect() {
 async function saveTask(event) {
     if (event) event.preventDefault();
 
+    // Debug: Check if elements exist
+    console.log('=== SAVE TASK DEBUG ===');
+    console.log('Modal exists:', !!document.getElementById('dynamic-modal'));
+    console.log('Form exists:', !!document.getElementById('task-form'));
+    console.log('Name input exists:', !!document.getElementById('task-name'));
+    console.log('Name input element:', document.getElementById('task-name'));
+
     const taskId = document.getElementById('task-id')?.value;
     const name = document.getElementById('task-name')?.value;
     const description = document.getElementById('task-description')?.value;
