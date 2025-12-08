@@ -1624,9 +1624,11 @@ class AtomicTransactionContext:
 
         try:
             # Parse the query to determine the table and operation
-            query_upper = query.strip().upper()
+            # Normalize whitespace for better matching
+            import re
+            query_normalized = re.sub(r'\s+', ' ', query.strip()).upper()
             
-            if 'UPDATE task_settings' in query_upper and 'RETURNING' in query_upper:
+            if 'UPDATE TASK_SETTINGS' in query_normalized and 'RETURNING' in query_normalized:
                 # Handle: UPDATE task_settings SET next_task_id = next_task_id + 1 WHERE guild_id = $1 RETURNING next_task_id
                 guild_id = str(args[0])
                 result = self.client.table('task_settings').select('next_task_id').eq('guild_id', guild_id).execute()
@@ -1643,14 +1645,14 @@ class AtomicTransactionContext:
                     return {'next_task_id': new_id}
                 return None
                 
-            elif 'SELECT' in query_upper and 'FROM tasks' in query_upper:
+            elif 'SELECT' in query_normalized and 'FROM TASKS' in query_normalized:
                 # Handle: SELECT ... FROM tasks WHERE task_id = $1 AND guild_id = $2
                 task_id = str(args[0])
                 guild_id = str(args[1])
                 result = self.client.table('tasks').select('*').eq('task_id', task_id).eq('guild_id', guild_id).execute()
                 return result.data[0] if result.data else None
                 
-            elif 'SELECT' in query_upper and 'FROM user_tasks' in query_upper:
+            elif 'SELECT' in query_normalized and 'FROM USER_TASKS' in query_normalized:
                 # Handle: SELECT ... FROM user_tasks WHERE user_id = $1 AND guild_id = $2 AND task_id = $3
                 user_id = str(args[0])
                 guild_id = str(args[1])
@@ -1658,7 +1660,7 @@ class AtomicTransactionContext:
                 result = self.client.table('user_tasks').select('*').eq('user_id', user_id).eq('guild_id', guild_id).eq('task_id', task_id).execute()
                 return result.data[0] if result.data else None
                 
-            elif 'SELECT' in query_upper and 'FROM users' in query_upper:
+            elif 'SELECT' in query_normalized and 'FROM USERS' in query_normalized:
                 # Handle: SELECT balance FROM users WHERE user_id = $1 AND guild_id = $2
                 user_id = str(args[0])
                 guild_id = str(args[1])
@@ -1682,9 +1684,10 @@ class AtomicTransactionContext:
             raise RuntimeError("Not in transaction context")
 
         try:
-            query_upper = query.strip().upper()
+            import re
+            query_normalized = re.sub(r'\s+', ' ', query.strip()).upper()
             
-            if 'INSERT INTO task_settings' in query_upper:
+            if 'INSERT INTO TASK_SETTINGS' in query_normalized:
                 # Handle: INSERT INTO task_settings (guild_id, next_task_id) VALUES ($1, 1) ON CONFLICT DO NOTHING
                 guild_id = str(args[0])
                 self.client.table('task_settings').upsert({
@@ -1692,7 +1695,7 @@ class AtomicTransactionContext:
                     'next_task_id': 1
                 }, on_conflict='guild_id').execute()
                 
-            elif 'INSERT INTO tasks' in query_upper:
+            elif 'INSERT INTO TASKS' in query_normalized:
                 # Handle: INSERT INTO tasks (task_id, guild_id, name, description, reward, duration_hours, max_claims, current_claims, status, expires_at)
                 task_id, guild_id, name, description, reward, duration_hours, max_claims, expires_at = args
                 self.client.table('tasks').insert({
@@ -1708,19 +1711,19 @@ class AtomicTransactionContext:
                     'expires_at': expires_at.isoformat() if hasattr(expires_at, 'isoformat') else expires_at
                 }).execute()
                 
-            elif 'DELETE FROM user_tasks' in query_upper:
+            elif 'DELETE FROM USER_TASKS' in query_normalized:
                 # Handle: DELETE FROM user_tasks WHERE task_id = $1 AND guild_id = $2
                 task_id = str(args[0])
                 guild_id = str(args[1])
                 self.client.table('user_tasks').delete().eq('task_id', task_id).eq('guild_id', guild_id).execute()
                 
-            elif 'DELETE FROM tasks' in query_upper:
+            elif 'DELETE FROM TASKS' in query_normalized:
                 # Handle: DELETE FROM tasks WHERE task_id = $1 AND guild_id = $2
                 task_id = str(args[0])
                 guild_id = str(args[1])
                 self.client.table('tasks').delete().eq('task_id', task_id).eq('guild_id', guild_id).execute()
                 
-            elif 'INSERT INTO user_tasks' in query_upper:
+            elif 'INSERT INTO USER_TASKS' in query_normalized:
                 # Handle: INSERT INTO user_tasks (user_id, guild_id, task_id, status, claimed_at, deadline)
                 user_id, guild_id, task_id, claimed_at, deadline = args
                 self.client.table('user_tasks').insert({
@@ -1732,7 +1735,7 @@ class AtomicTransactionContext:
                     'deadline': deadline.isoformat() if hasattr(deadline, 'isoformat') else deadline
                 }).execute()
                 
-            elif 'UPDATE tasks SET current_claims' in query_upper:
+            elif 'UPDATE TASKS SET CURRENT_CLAIMS' in query_normalized:
                 # Handle: UPDATE tasks SET current_claims = current_claims + 1 WHERE task_id = $1 AND guild_id = $2
                 task_id = str(args[0])
                 guild_id = str(args[1])
@@ -1745,9 +1748,9 @@ class AtomicTransactionContext:
                         'current_claims': current + 1
                     }).eq('task_id', task_id).eq('guild_id', guild_id).execute()
                     
-            elif 'UPDATE user_tasks' in query_upper and 'status' in query_upper:
+            elif 'UPDATE USER_TASKS' in query_normalized and 'STATUS' in query_normalized:
                 # Handle various UPDATE user_tasks queries
-                if 'submitted' in query_upper.lower():
+                if 'SUBMITTED' in query_normalized:
                     # UPDATE user_tasks SET status = 'submitted', proof_content = $1, submitted_at = $2, proof_message_id = $3 WHERE id = $4
                     proof, submitted_at, proof_message_id, user_task_id = args
                     self.client.table('user_tasks').update({
@@ -1756,28 +1759,28 @@ class AtomicTransactionContext:
                         'submitted_at': submitted_at.isoformat() if hasattr(submitted_at, 'isoformat') else submitted_at,
                         'proof_message_id': proof_message_id
                     }).eq('id', user_task_id).execute()
-                elif 'accepted' in query_upper.lower():
+                elif 'ACCEPTED' in query_normalized:
                     # UPDATE user_tasks SET status = 'accepted', completed_at = $1 WHERE id = $2
                     completed_at, user_task_id = args
                     self.client.table('user_tasks').update({
                         'status': 'accepted',
                         'completed_at': completed_at.isoformat() if hasattr(completed_at, 'isoformat') else completed_at
                     }).eq('id', user_task_id).execute()
-                elif 'expired' in query_upper.lower():
+                elif 'EXPIRED' in query_normalized:
                     # UPDATE user_tasks SET status = 'expired' WHERE id = $1
                     user_task_id = args[0]
                     self.client.table('user_tasks').update({
                         'status': 'expired'
                     }).eq('id', user_task_id).execute()
                     
-            elif 'UPDATE users SET balance' in query_upper:
+            elif 'UPDATE USERS SET BALANCE' in query_normalized:
                 # Handle: UPDATE users SET balance = $1 WHERE user_id = $2 AND guild_id = $3
                 new_balance, user_id, guild_id = args
                 self.client.table('users').update({
                     'balance': new_balance
                 }).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).execute()
                 
-            elif 'UPDATE task_settings' in query_upper and 'total_completed' in query_upper:
+            elif 'UPDATE TASK_SETTINGS' in query_normalized and 'TOTAL_COMPLETED' in query_normalized:
                 # Handle: UPDATE task_settings SET total_completed = total_completed + 1 WHERE guild_id = $1
                 guild_id = str(args[0])
                 result = self.client.table('task_settings').select('total_completed').eq('guild_id', guild_id).execute()
