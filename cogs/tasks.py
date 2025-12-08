@@ -257,7 +257,7 @@ class GeneralTaskProofModal(discord.ui.Modal):
 
             # 4. Post to Log Channel
             settings = tasks_cog.data_manager.load_guild_data(str(guild_id), 'config')
-            log_channel_id = settings.get('logs_channel')
+            log_channel_id = settings.get('log_channel_id')
             
             if log_channel_id:
                 channel = interaction.guild.get_channel(int(log_channel_id))
@@ -739,7 +739,7 @@ class Tasks(commands.Cog):
 
             # 4. Post to Log Channel
             settings = self.data_manager.load_guild_data(str(guild_id), 'config')
-            log_channel_id = settings.get('logs_channel')
+            log_channel_id = settings.get('log_channel_id')
             
             if log_channel_id:
                 channel = interaction.guild.get_channel(int(log_channel_id))
@@ -861,7 +861,7 @@ class Tasks(commands.Cog):
             # 4. Post to Log Channel
             # Get log channel ID from config
             settings = self.data_manager.load_guild_data(str(guild_id), 'config')
-            log_channel_id = settings.get('logs_channel')
+            log_channel_id = settings.get('log_channel_id')
             
             if log_channel_id:
                 channel = interaction.guild.get_channel(int(log_channel_id))
@@ -954,7 +954,7 @@ class Tasks(commands.Cog):
             # Post to Log Channel (or Task Channel if log not set, but user requested log channel for general)
             # For regular tasks, we might still want to post to log channel if configured
             settings = self.data_manager.load_guild_data(str(guild_id), 'config')
-            log_channel_id = settings.get('logs_channel')
+            log_channel_id = settings.get('log_channel_id')
             
             target_channel = None
             if log_channel_id:
