@@ -104,8 +104,81 @@ class TaskListPaginator(discord.ui.View):
             await interaction.response.send_message("❌ Already on last page.", ephemeral=True)
 
 
+async def send_general_task_proof_modal(interaction: discord.Interaction, task_id: int, task_name: str):
+    """
+    Send a custom modal with FileUpload support using raw Discord API.
+    Discord API supports FileUpload (type 19) but discord.py hasn't added it yet.
+    """
+    # Build the modal payload with FileUpload component (type 19) wrapped in Label (type 18)
+    modal_payload = {
+        "type": 9,  # MODAL interaction response type
+        "data": {
+            "custom_id": f"general_task_proof_modal_{task_id}",
+            "title": f"Submit Proof - Task #{task_id}",
+            "components": [
+                # Label component (type 18) wrapping Text Input for proof
+                {
+                    "type": 18,  # Label
+                    "label": "Proof of Completion",
+                    "description": "Describe how you completed this task",
+                    "component": {
+                        "type": 4,  # Text Input
+                        "custom_id": "proof_input",
+                        "style": 2,  # Paragraph
+                        "min_length": 10,
+                        "max_length": 1000,
+                        "placeholder": "Describe how you completed this task, or paste a link to your proof...",
+                        "required": True
+                    }
+                },
+                # Label component wrapping Text Input for notes
+                {
+                    "type": 18,  # Label  
+                    "label": "Additional Notes (Optional)",
+                    "component": {
+                        "type": 4,  # Text Input
+                        "custom_id": "notes_input",
+                        "style": 1,  # Short
+                        "max_length": 500,
+                        "placeholder": "Any extra information for the reviewer...",
+                        "required": False
+                    }
+                },
+                # Label component wrapping FileUpload (type 19)
+                {
+                    "type": 18,  # Label
+                    "label": "Upload Proof (Optional)",
+                    "description": "Attach screenshots or files as proof",
+                    "component": {
+                        "type": 19,  # FileUpload
+                        "custom_id": "proof_files",
+                        "min_values": 0,
+                        "max_values": 5,
+                        "required": False
+                    }
+                }
+            ]
+        }
+    }
+    
+    # Send modal via raw HTTP request
+    try:
+        route = discord.http.Route(
+            'POST', 
+            '/interactions/{interaction_id}/{interaction_token}/callback',
+            interaction_id=interaction.id,
+            interaction_token=interaction.token
+        )
+        await interaction.client.http.request(route, json=modal_payload)
+        return True
+    except Exception as e:
+        print(f"Error sending custom modal: {e}")
+        # Fallback to standard discord.py modal without file upload
+        return False
+
+
 class GeneralTaskProofModal(discord.ui.Modal):
-    """Modal for submitting proof for General tasks - user-friendly popup form with file upload support."""
+    """Fallback modal for submitting proof (used if raw API modal fails)."""
     
     def __init__(self, task_id: int, task_name: str):
         super().__init__(title=f"Submit Proof - Task #{task_id}")
@@ -132,23 +205,6 @@ class GeneralTaskProofModal(discord.ui.Modal):
             max_length=500
         )
         self.add_item(self.notes_input)
-        
-        # File upload component for proof attachments (New Discord feature - Oct 2025)
-        # Note: FileUpload support requires discord.py 2.7+ 
-        # If not available, we'll handle gracefully in on_submit
-        try:
-            if hasattr(discord.ui, 'FileUpload'):
-                self.file_upload = discord.ui.FileUpload(
-                    label="Upload Proof (Optional)",
-                    required=False,
-                    min_values=0,
-                    max_values=5  # Allow up to 5 proof images/files
-                )
-                self.add_item(self.file_upload)
-            else:
-                self.file_upload = None
-        except Exception:
-            self.file_upload = None
     
     async def on_submit(self, interaction: discord.Interaction):
         """Handle the modal submission - claim task and submit proof."""
@@ -319,7 +375,11 @@ class TaskClaimView(discord.ui.View):
                     task_name = task_check.data[0].get('name', f'Task #{self.task_id}')
                     
                     if category == 'General':
-                        # Show user-friendly modal popup for General tasks
+                        # Try to send custom modal with FileUpload support
+                        success = await send_general_task_proof_modal(interaction, self.task_id, task_name)
+                        if success:
+                            return
+                        # Fallback to standard discord.py modal without file upload
                         modal = GeneralTaskProofModal(self.task_id, task_name)
                         await interaction.response.send_modal(modal)
                         return
@@ -595,6 +655,147 @@ class Tasks(commands.Cog):
                 print(f"Error registering views for guild {guild_id}: {e}")
         
         print(f"Tasks cog: Registered {count} persistent task views.")
+
+    @commands.Cog.listener()
+    async def on_interaction(self, interaction: discord.Interaction):
+        """Handle custom modal submissions (for FileUpload support)."""
+        # Only handle modal submissions with our custom_id pattern
+        if interaction.type != discord.InteractionType.modal_submit:
+            return
+        
+        custom_id = interaction.data.get('custom_id', '')
+        if not custom_id.startswith('general_task_proof_modal_'):
+            return
+        
+        # Extract task_id from custom_id
+        try:
+            task_id = int(custom_id.replace('general_task_proof_modal_', ''))
+        except ValueError:
+            return
+        
+        await interaction.response.defer(ephemeral=True)
+        
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        
+        # Extract form data from the interaction
+        proof = ""
+        notes = ""
+        attachment_urls = []
+        
+        components = interaction.data.get('components', [])
+        for component in components:
+            # Handle Label wrapper (type 18)
+            if component.get('type') == 18:
+                inner = component.get('component', component.get('components', [{}])[0] if component.get('components') else {})
+            else:
+                inner = component
+            
+            custom_id_inner = inner.get('custom_id', '')
+            
+            if custom_id_inner == 'proof_input':
+                proof = inner.get('value', '')
+            elif custom_id_inner == 'notes_input':
+                notes = inner.get('value', '')
+            elif custom_id_inner == 'proof_files':
+                # FileUpload returns array of attachment IDs in 'values'
+                file_ids = inner.get('values', [])
+                # Get resolved attachments
+                resolved = interaction.data.get('resolved', {})
+                attachments = resolved.get('attachments', {})
+                for file_id in file_ids:
+                    att = attachments.get(str(file_id), {})
+                    if att.get('url'):
+                        attachment_urls.append(att['url'])
+        
+        try:
+            # Get task name
+            task_check = self.data_manager.supabase.table('tasks').select('name').eq('guild_id', str(guild_id)).eq('task_id', task_id).execute()
+            task_name = task_check.data[0].get('name', f'Task #{task_id}') if task_check.data else f'Task #{task_id}'
+            
+            # 1. Claim the task
+            claim_result = await self.task_manager.claim_task(guild_id, user_id, task_id)
+            
+            if not claim_result['success']:
+                await interaction.followup.send(claim_result['error'], ephemeral=True)
+                return
+
+            # 2. Submit the proof
+            submit_result = await self.task_manager.submit_task(guild_id, user_id, task_id, proof)
+            
+            if not submit_result['success']:
+                await interaction.followup.send(f"✅ Task claimed, but submission failed: {submit_result['error']}", ephemeral=True)
+                return
+
+            # 3. Update notes and attachments if provided
+            update_data = {}
+            if notes:
+                update_data['notes'] = notes
+            if attachment_urls:
+                update_data['proof_attachments'] = attachment_urls
+            
+            if update_data:
+                self.data_manager.supabase.table('user_tasks').update(update_data).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).eq('task_id', str(task_id)).execute()
+
+            # 4. Post to Log Channel
+            settings = self.data_manager.load_guild_data(str(guild_id), 'config')
+            log_channel_id = settings.get('logs_channel')
+            
+            if log_channel_id:
+                channel = interaction.guild.get_channel(int(log_channel_id))
+                if channel:
+                    proof_embed = discord.Embed(
+                        title="📨 General Task Submission",
+                        description=f"**{interaction.user.mention}** submitted proof for **{task_name}**",
+                        color=discord.Color.orange(),
+                        timestamp=datetime.now(timezone.utc)
+                    )
+                    proof_embed.add_field(name="📝 Proof Description", value=proof or "No description provided", inline=False)
+                    if notes:
+                        proof_embed.add_field(name="📋 Additional Notes", value=notes, inline=False)
+                    if attachment_urls:
+                        attachments_text = "\n".join([f"📎 [Attachment {i+1}]({url})" for i, url in enumerate(attachment_urls)])
+                        proof_embed.add_field(name="📁 Uploaded Files", value=attachments_text, inline=False)
+                        # Set the first image as the embed image if it's an image type
+                        for url in attachment_urls:
+                            if any(ext in url.lower() for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp']):
+                                proof_embed.set_image(url=url)
+                                break
+                    proof_embed.add_field(name="🆔 Task ID", value=str(task_id), inline=True)
+                    proof_embed.add_field(name="👤 User ID", value=str(user_id), inline=True)
+
+                    # Add review buttons
+                    view = TaskReviewView(task_id, user_id)
+                    proof_message = await discord_operation_with_retry(
+                        lambda: channel.send(embed=proof_embed, view=view)
+                    )
+
+                    # Update proof_message_id in DB
+                    self.data_manager.supabase.table('user_tasks').update({
+                        'proof_message_id': str(proof_message.id)
+                    }).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).eq('task_id', str(task_id)).execute()
+
+            # Success message
+            success_embed = discord.Embed(
+                title="✅ Task Submitted Successfully!",
+                description=f"Your proof for **{task_name}** has been submitted for review.",
+                color=discord.Color.green()
+            )
+            success_embed.add_field(name="📋 Status", value="⏳ Pending Review", inline=True)
+            if attachment_urls:
+                success_embed.add_field(name="📎 Files Uploaded", value=f"{len(attachment_urls)} file(s)", inline=True)
+            success_embed.add_field(name="💡 Next Steps", value="A moderator will review your submission.", inline=False)
+            
+            await interaction.followup.send(embed=success_embed, ephemeral=True)
+
+        except Exception as e:
+            print(f"Custom modal submission error: {e}")
+            import traceback
+            traceback.print_exc()
+            await interaction.followup.send(
+                "❌ An error occurred while processing your submission. Please try again.",
+                ephemeral=True
+            )
 
     def set_managers(self, data_manager, transaction_manager):
         """Set data and transaction managers"""
