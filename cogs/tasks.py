@@ -104,6 +104,173 @@ class TaskListPaginator(discord.ui.View):
             await interaction.response.send_message("❌ Already on last page.", ephemeral=True)
 
 
+class GeneralTaskProofModal(discord.ui.Modal):
+    """Modal for submitting proof for General tasks - user-friendly popup form with file upload support."""
+    
+    def __init__(self, task_id: int, task_name: str):
+        super().__init__(title=f"Submit Proof - Task #{task_id}")
+        self.task_id = task_id
+        self.task_name = task_name
+        
+        # Proof description input
+        self.proof_input = discord.ui.TextInput(
+            label="Proof of Completion",
+            placeholder="Describe how you completed this task, or paste a link to your proof...",
+            style=discord.TextStyle.paragraph,
+            required=True,
+            min_length=10,
+            max_length=1000
+        )
+        self.add_item(self.proof_input)
+        
+        # Optional notes
+        self.notes_input = discord.ui.TextInput(
+            label="Additional Notes (Optional)",
+            placeholder="Any extra information for the reviewer...",
+            style=discord.TextStyle.short,
+            required=False,
+            max_length=500
+        )
+        self.add_item(self.notes_input)
+        
+        # File upload component for proof attachments (New Discord feature - Oct 2025)
+        # Note: FileUpload support requires discord.py 2.7+ 
+        # If not available, we'll handle gracefully in on_submit
+        try:
+            if hasattr(discord.ui, 'FileUpload'):
+                self.file_upload = discord.ui.FileUpload(
+                    label="Upload Proof (Optional)",
+                    required=False,
+                    min_values=0,
+                    max_values=5  # Allow up to 5 proof images/files
+                )
+                self.add_item(self.file_upload)
+            else:
+                self.file_upload = None
+        except Exception:
+            self.file_upload = None
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        """Handle the modal submission - claim task and submit proof."""
+        await interaction.response.defer(ephemeral=True)
+        
+        guild_id = interaction.guild.id
+        user_id = interaction.user.id
+        proof = self.proof_input.value
+        notes = self.notes_input.value
+        
+        # Get file attachments if FileUpload component is available
+        attachments = []
+        attachment_urls = []
+        if self.file_upload is not None and hasattr(self.file_upload, 'attachments'):
+            attachments = self.file_upload.attachments or []
+            attachment_urls = [att.url for att in attachments if hasattr(att, 'url')]
+        
+        try:
+            # Get tasks cog
+            tasks_cog = interaction.client.get_cog('Tasks')
+            if not tasks_cog or not tasks_cog.task_manager:
+                await interaction.followup.send("❌ Task management system not available.", ephemeral=True)
+                return
+
+            # 1. Claim the task
+            claim_result = await tasks_cog.task_manager.claim_task(guild_id, user_id, self.task_id)
+            
+            if not claim_result['success']:
+                await interaction.followup.send(claim_result['error'], ephemeral=True)
+                return
+
+            task_data = claim_result['task']
+
+            # 2. Submit the proof
+            submit_result = await tasks_cog.task_manager.submit_task(guild_id, user_id, self.task_id, proof)
+            
+            if not submit_result['success']:
+                await interaction.followup.send(f"✅ Task claimed, but submission failed: {submit_result['error']}", ephemeral=True)
+                return
+
+            # 3. Update notes and attachments if provided
+            update_data = {}
+            if notes:
+                update_data['notes'] = notes
+            if attachment_urls:
+                update_data['proof_attachments'] = attachment_urls
+            
+            if update_data:
+                tasks_cog.data_manager.supabase.table('user_tasks').update(update_data).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).eq('task_id', str(self.task_id)).execute()
+
+            # 4. Post to Log Channel
+            settings = tasks_cog.data_manager.load_guild_data(str(guild_id), 'config')
+            log_channel_id = settings.get('logs_channel')
+            
+            if log_channel_id:
+                channel = interaction.guild.get_channel(int(log_channel_id))
+                if channel:
+                    proof_embed = discord.Embed(
+                        title="📨 General Task Submission",
+                        description=f"**{interaction.user.mention}** submitted proof for **{self.task_name}**",
+                        color=discord.Color.orange(),
+                        timestamp=datetime.now(timezone.utc)
+                    )
+                    proof_embed.add_field(name="📝 Proof Description", value=proof, inline=False)
+                    if notes:
+                        proof_embed.add_field(name="📋 Additional Notes", value=notes, inline=False)
+                    if attachment_urls:
+                        attachments_text = "\n".join([f"📎 [Attachment {i+1}]({url})" for i, url in enumerate(attachment_urls)])
+                        proof_embed.add_field(name="📁 Uploaded Files", value=attachments_text, inline=False)
+                        # Set the first image as the embed thumbnail if it's an image
+                        if attachment_urls and any(url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) for url in attachment_urls):
+                            for url in attachment_urls:
+                                if url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                                    proof_embed.set_image(url=url)
+                                    break
+                    proof_embed.add_field(name="🆔 Task ID", value=str(self.task_id), inline=True)
+                    proof_embed.add_field(name="👤 User ID", value=str(user_id), inline=True)
+
+                    # Add review buttons (use globals to get TaskReviewView which is defined later in file)
+                    ReviewView = globals().get('TaskReviewView')
+                    if ReviewView:
+                        view = ReviewView(self.task_id, user_id)
+                    else:
+                        view = None
+                    proof_message = await discord_operation_with_retry(
+                        lambda: channel.send(embed=proof_embed, view=view)
+                    )
+
+                    # Update proof_message_id in DB
+                    tasks_cog.data_manager.supabase.table('user_tasks').update({
+                        'proof_message_id': str(proof_message.id)
+                    }).eq('user_id', str(user_id)).eq('guild_id', str(guild_id)).eq('task_id', str(self.task_id)).execute()
+
+                    # Success message with nice embed
+                    success_embed = discord.Embed(
+                        title="✅ Task Submitted Successfully!",
+                        description=f"Your proof for **{self.task_name}** has been submitted for review.",
+                        color=discord.Color.green()
+                    )
+                    success_embed.add_field(name="📋 Status", value="⏳ Pending Review", inline=True)
+                    success_embed.add_field(name="💡 Next Steps", value="A moderator will review your submission.", inline=False)
+                    
+                    await interaction.followup.send(embed=success_embed, ephemeral=True)
+                else:
+                    await interaction.followup.send(
+                        "✅ Task claimed and submitted, but log channel not found. Please contact an admin.",
+                        ephemeral=True
+                    )
+            else:
+                await interaction.followup.send(
+                    "✅ Task claimed and submitted, but log channel is not configured. Please contact an admin.",
+                    ephemeral=True
+                )
+
+        except Exception as e:
+            print(f"GeneralTaskProofModal error: {e}")
+            await interaction.followup.send(
+                "❌ An error occurred. Please try again.",
+                ephemeral=True
+            )
+
+
 class TaskClaimView(discord.ui.View):
     """Persistent view for task claim button."""
 
@@ -135,34 +302,33 @@ class TaskClaimView(discord.ui.View):
             return
 
         try:
-            # Defer the response immediately
-            await interaction.response.defer(ephemeral=True)
-
             guild_id = interaction.guild.id
             user_id = interaction.user.id
 
             # Get tasks cog
             tasks_cog = interaction.client.get_cog('Tasks')
             if not tasks_cog or not tasks_cog.task_manager:
-                await interaction.followup.send("❌ Task management system not available.", ephemeral=True)
+                await interaction.response.send_message("❌ Task management system not available.", ephemeral=True)
                 return
 
-            # Check task category first
+            # Check task category BEFORE deferring (so we can show modal if needed)
             try:
-                task_check = tasks_cog.data_manager.supabase.table('tasks').select('category').eq('guild_id', str(guild_id)).eq('task_id', self.task_id).execute()
+                task_check = tasks_cog.data_manager.supabase.table('tasks').select('category, name').eq('guild_id', str(guild_id)).eq('task_id', self.task_id).execute()
                 if task_check.data and len(task_check.data) > 0:
                     category = task_check.data[0].get('category')
+                    task_name = task_check.data[0].get('name', f'Task #{self.task_id}')
+                    
                     if category == 'General':
-                        await interaction.followup.send(
-                            "⚠️ **General Task Requirement**\n"
-                            "This task requires proof of completion to claim.\n"
-                            f"Please use the command: `/task_claim_proof task_id:{self.task_id} proof:<your_proof> [attachment]`",
-                            ephemeral=True
-                        )
+                        # Show user-friendly modal popup for General tasks
+                        modal = GeneralTaskProofModal(self.task_id, task_name)
+                        await interaction.response.send_modal(modal)
                         return
             except Exception as e:
                 print(f"Error checking task category: {e}")
                 # Continue with normal claim if check fails (fallback)
+
+            # For non-General tasks, defer and process normally
+            await interaction.response.defer(ephemeral=True)
 
             # Use TaskManager to claim task (expects integers)
             result = await tasks_cog.task_manager.claim_task(guild_id, user_id, self.task_id)
