@@ -177,11 +177,16 @@ class TaskManager:
                     'updates': update_data
                 })
 
-            # Trigger task channel update
+            # Trigger task channel update or deletion if expired
             if self.bot and hasattr(self.bot, 'task_channel_monitor'):
                 # We need the full task object, so use the result data
                 updated_task = result.data[0]
-                await self.bot.task_channel_monitor.on_task_updated(str(guild_id), updated_task)
+                
+                # If task is now expired, delete the message instead of updating
+                if updated_task.get('status') == 'expired':
+                    await self.bot.task_channel_monitor.on_task_deleted(str(guild_id), str(task_id), updated_task)
+                else:
+                    await self.bot.task_channel_monitor.on_task_updated(str(guild_id), updated_task)
 
             return {'success': True, 'task': result.data[0]}
 
@@ -531,9 +536,9 @@ class TaskManager:
             logger.error(f"Task rejection failed: {e}")
             return {'success': False, 'error': "Failed to reject task."}
 
-    def expire_overdue_tasks(self, guild_id: int) -> int:
+    async def expire_overdue_tasks(self, guild_id: int) -> int:
         """
-        Expire tasks that have passed their deadline.
+        Expire tasks that have passed their deadline and delete their Discord messages.
 
         Args:
             guild_id: Guild ID
@@ -547,6 +552,7 @@ class TaskManager:
                 return 0
 
             expired_count = 0
+            expired_task_ids = []
             now = datetime.now(timezone.utc)
 
             # Check user tasks for expiry
@@ -565,9 +571,22 @@ class TaskManager:
                     if now > expires_at:
                         task['status'] = 'expired'
                         tasks_data['settings']['total_expired'] = tasks_data.get('settings', {}).get('total_expired', 0) + 1
+                        expired_task_ids.append(task_id)
+                        expired_count += 1
 
             if expired_count > 0:
                 self.data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
+                
+                # Delete Discord messages for expired tasks
+                if self.bot and hasattr(self.bot, 'task_channel_monitor') and expired_task_ids:
+                    for task_id in expired_task_ids:
+                        task = tasks_data['tasks'].get(task_id)
+                        if task:
+                            try:
+                                await self.bot.task_channel_monitor.on_task_deleted(str(guild_id), str(task_id), task)
+                                logger.info(f"Deleted message for expired task {task_id} in guild {guild_id}")
+                            except Exception as e:
+                                logger.error(f"Failed to delete message for expired task {task_id}: {e}")
 
             return expired_count
 
