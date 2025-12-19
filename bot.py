@@ -207,6 +207,13 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load ad claim cog: {e}")
 
+        try:
+            await bot.load_extension('cogs.server_boost')
+            logger.info("✓ Server Boost cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load server boost cog: {e}")
+
+
         # Register persistent views BEFORE on_ready to handle button interactions after bot restarts
         logger.info("Registering persistent views...")
         try:
