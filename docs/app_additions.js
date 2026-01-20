@@ -410,3 +410,111 @@ window.saveChannelSetting = async function (type) {
 };
 
 console.log('✅ CMS Enhancements Loaded');
+
+// ========== EMBED PREVIEW SYSTEM ==========
+
+/**
+ * Updates the embed preview in real-time as the user types
+ * Called by oninput events in the embed editor
+ */
+window.updateEmbedPreview = function () {
+    // Get inputs
+    const titleDetails = document.getElementById('embed-title');
+    const description = document.getElementById('embed-description');
+    const color = document.getElementById('embed-color');
+    const footer = document.getElementById('embed-footer');
+    const imageUrl = document.getElementById('embed-image-url');
+    const thumbnailUrl = document.getElementById('embed-thumbnail-url');
+
+    // Get preview elements
+    const pEmbed = document.getElementById('preview-embed');
+    const pTitle = document.getElementById('preview-embed-title');
+    const pDesc = document.getElementById('preview-embed-description');
+    const pImage = document.getElementById('preview-embed-image');
+    const pThumbnail = document.getElementById('preview-embed-thumbnail');
+    const pFooter = document.getElementById('preview-embed-footer');
+    const pFooterContainer = document.getElementById('preview-embed-footer-container');
+    const pThumbnailContainer = document.getElementById('preview-embed-thumbnail-container');
+
+    if (!pEmbed) return; // Guard clause if preview elements aren't loaded
+
+    // Update Title
+    if (titleDetails && titleDetails.value) {
+        pTitle.textContent = titleDetails.value;
+        pTitle.style.display = 'block';
+    } else {
+        pTitle.style.display = 'none';
+    }
+
+    // Update Description
+    if (description && description.value) {
+        pDesc.innerHTML = formatDiscordMarkdown(description.value);
+        pDesc.style.display = 'block';
+    } else {
+        pDesc.style.display = 'none';
+    }
+
+    // Update Color
+    if (color && pEmbed) {
+        pEmbed.style.borderLeftColor = color.value;
+    }
+
+    // Update Footer
+    if (footer && footer.value) {
+        pFooter.textContent = footer.value;
+        pFooterContainer.style.display = 'flex';
+    } else {
+        pFooterContainer.style.display = 'none';
+    }
+
+    // Update Image
+    if (imageUrl && imageUrl.value) {
+        pImage.src = imageUrl.value;
+        pImage.style.display = 'block';
+        pImage.onerror = function () { this.style.display = 'none'; };
+    } else {
+        pImage.style.display = 'none';
+    }
+
+    // Update Thumbnail
+    if (thumbnailUrl && thumbnailUrl.value) {
+        pThumbnail.src = thumbnailUrl.value;
+        pThumbnailContainer.style.display = 'block';
+        pThumbnail.onerror = function () { this.parentNode.style.display = 'none'; };
+    } else {
+        pThumbnailContainer.style.display = 'none';
+    }
+};
+
+/**
+ * Basic markdown formatter for Discord preview
+ */
+function formatDiscordMarkdown(text) {
+    if (!text) return '';
+    let html = text
+        .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') // Bold
+        .replace(/\*(.*?)\*/g, '<i>$1</i>')     // Italics
+        .replace(/__(.*?)__/g, '<u>$1</u>')     // Underline
+        .replace(/~~(.*?)~~/g, '<s>$1</s>')     // Strikethrough
+        .replace(/`(.*?)`/g, '<code>$1</code>') // Code
+        .replace(/\n/g, '<br>');                // Newlines
+    return html;
+}
+
+// Hook into modal opening to refresh preview
+// We use a MutationObserver to detect when the modal becomes visible
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('embed-modal');
+    if (modal) {
+        const observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+                if (mutation.attributeName === 'style' && modal.style.display !== 'none') {
+                    // Modal opened, update preview
+                    setTimeout(window.updateEmbedPreview, 50);
+                }
+            });
+        });
+
+        observer.observe(modal, { attributes: true });
+    }
+});

@@ -383,39 +383,85 @@
                 <span class="close" onclick="closeEmbedModal()">&times;</span>
                 <h2 id="embed-modal-title">Create Embed</h2>
                 <div class="modal-body">
-                    <form id="embed-form" onsubmit="saveEmbed(event)">
-                        <input type="hidden" id="embed-id">
-                        <div class="form-group">
-                            <label for="embed-title">Title</label>
-                            <input type="text" id="embed-title" class="form-control">
+                    <div class="modal-split-layout">
+                        <!-- Editor Column -->
+                        <div class="editor-column">
+                            <form id="embed-form" onsubmit="saveEmbed(event)">
+                                <input type="hidden" id="embed-id">
+                                <div class="form-group">
+                                    <label for="embed-title">Title</label>
+                                    <input type="text" id="embed-title" class="form-control"
+                                        oninput="updateEmbedPreview()">
+                                </div>
+                                <div class="form-group">
+                                    <label for="embed-description">Description</label>
+                                    <textarea id="embed-description" class="form-control" rows="4"
+                                        oninput="updateEmbedPreview()"></textarea>
+                                </div>
+                                <div class="form-group">
+                                    <label for="embed-color">Color (hex)</label>
+                                    <input type="color" id="embed-color" class="form-control" value="#5865F2"
+                                        oninput="updateEmbedPreview()">
+                                </div>
+                                <div class="form-group">
+                                    <label for="embed-footer">Footer Text</label>
+                                    <input type="text" id="embed-footer" class="form-control"
+                                        oninput="updateEmbedPreview()">
+                                </div>
+                                <div class="form-group">
+                                    <label for="embed-image-url">Image URL</label>
+                                    <input type="url" id="embed-image-url" class="form-control"
+                                        placeholder="https://..." oninput="updateEmbedPreview()">
+                                </div>
+                                <div class="form-group">
+                                    <label for="embed-thumbnail-url">Thumbnail URL</label>
+                                    <input type="url" id="embed-thumbnail-url" class="form-control"
+                                        placeholder="https://..." oninput="updateEmbedPreview()">
+                                </div>
+                                <div class="button-group">
+                                    <button type="submit" class="btn-success">Save Embed</button>
+                                    <button type="button" onclick="saveAndSendEmbed(event)" class="btn-primary">Save &
+                                        Send</button>
+                                    <button type="button" onclick="closeEmbedModal()"
+                                        class="btn-secondary">Cancel</button>
+                                </div>
+                            </form>
                         </div>
-                        <div class="form-group">
-                            <label for="embed-description">Description</label>
-                            <textarea id="embed-description" class="form-control" rows="4"></textarea>
+
+                        <!-- Preview Column -->
+                        <div class="preview-column">
+                            <div class="discord-preview-label">Live Preview</div>
+                            <div class="discord-preview-box">
+                                <div class="discord-message">
+                                    <div class="discord-message-avatar"></div>
+                                    <div class="discord-message-content">
+                                        <div class="discord-message-username">
+                                            EvolvedLotus Bot
+                                            <span class="discord-message-timestamp">Today at 12:00 PM</span>
+                                        </div>
+
+                                        <!-- Dynamic Embed -->
+                                        <div class="discord-embed" id="preview-embed">
+                                            <div id="preview-embed-thumbnail-container"
+                                                style="display:none; grid-column: 2; grid-row: 1/span 3;">
+                                                <img id="preview-embed-thumbnail" class="discord-embed-thumbnail">
+                                            </div>
+                                            <div class="discord-embed-title" id="preview-embed-title">Embed Title</div>
+                                            <div class="discord-embed-description" id="preview-embed-description">Embed
+                                                description goes here...</div>
+                                            <img id="preview-embed-image" class="discord-embed-image"
+                                                style="display:none;">
+                                            <div class="discord-embed-footer" id="preview-embed-footer-container"
+                                                style="display:none;">
+                                                <span class="discord-embed-footer-text"
+                                                    id="preview-embed-footer"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="embed-color">Color (hex)</label>
-                            <input type="color" id="embed-color" class="form-control" value="#5865F2">
-                        </div>
-                        <div class="form-group">
-                            <label for="embed-footer">Footer</label>
-                            <input type="text" id="embed-footer" class="form-control">
-                        </div>
-                        <div class="form-group">
-                            <label for="embed-image-url">Image URL</label>
-                            <input type="url" id="embed-image-url" class="form-control" placeholder="https://...">
-                        </div>
-                        <div class="form-group">
-                            <label for="embed-thumbnail-url">Thumbnail URL</label>
-                            <input type="url" id="embed-thumbnail-url" class="form-control" placeholder="https://...">
-                        </div>
-                        <div class="button-group">
-                            <button type="submit" class="btn-success">Save Embed</button>
-                            <button type="button" onclick="saveAndSendEmbed(event)" class="btn-primary">Save &
-                                Send</button>
-                            <button type="button" onclick="closeEmbedModal()" class="btn-secondary">Cancel</button>
-                        </div>
-                    </form>
+                    </div>
                 </div>
             </div>
         </div>
