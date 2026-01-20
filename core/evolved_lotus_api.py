@@ -38,8 +38,8 @@ class EvolvedLotusAPI:
                 "headline": "AI-Powered Tweet Replies",
                 "description": "Generate contextually relevant tweet replies in different tones instantly. Save hours of time and boost your Twitter engagement!",
                 "cta": "Try TweetCraft AI",
-                "url": "https://tools.evolvedlotus.com/TwitterReplyBot/",
-                "image": "https://tools.evolvedlotus.com/TwitterReplyBot/favicon.ico",
+                "url": "https://tools.evolvedlotus.com/twitterreplybot/",
+                "image": "https://tools.evolvedlotus.com/twitterreplybot/favicon.ico",
                 "color": "#1DA1F2"
             }
         ]

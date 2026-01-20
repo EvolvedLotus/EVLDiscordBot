@@ -39,7 +39,7 @@ def init_db():
                 INSERT INTO custom_ads (id, ad_type, title, headline, description, cta, url, image, color)
                 VALUES 
                 ('blog_yt_2026', 'blog', 'YouTube 2026: Trends & Growth Guide', 'Is Your Strategy Ready for 2026?', 'Master the 2026 YouTube algorithm with our complete guide.', 'Read Growth Guide', 'https://blog.evolvedlotus.com/blog/2026-01-14-youtube-2026-trends-tips-and-how-to-grow-your-channel/', 'https://blog.evolvedlotus.com/assets/blog/youtube-2026-trends--tips--and-how-to-grow-your-channel.png', '#FF0000'),
-                ('tool_tweetcraft', 'tool', 'TweetCraft AI', 'AI-Powered Tweet Replies', 'Generate contextually relevant tweet replies in different tones instantly.', 'Try TweetCraft AI', 'https://tools.evolvedlotus.com/TwitterReplyBot/', 'https://tools.evolvedlotus.com/TwitterReplyBot/favicon.ico', '#1DA1F2')
+                ('tool_tweetcraft', 'tool', 'TweetCraft AI', 'AI-Powered Tweet Replies', 'Generate contextually relevant tweet replies in different tones instantly.', 'Try TweetCraft AI', 'https://tools.evolvedlotus.com/twitterreplybot/', 'https://tools.evolvedlotus.com/twitterreplybot/favicon.ico', '#1DA1F2')
                 ON CONFLICT (id) DO NOTHING;
             """)
             logger.info("✅ Database initialized successfully")
