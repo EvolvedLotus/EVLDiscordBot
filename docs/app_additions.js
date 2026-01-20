@@ -135,6 +135,7 @@ async function onServerChange() {
 
         // Fetch Discord data for this server
         await fetchDiscordData(currentServerId);
+        await updateTierUI();
 
         // Reload current tab
         const activeTab = document.querySelector('.tab-button.active');
@@ -740,3 +741,32 @@ window.addEventListener('load', function () {
         await loadModerationConfigUI();
     };
 });
+
+// ========== TIER MANAGEMENT ==========
+
+async function updateTierUI() {
+    if (!currentServerId) return;
+    try {
+        const config = await apiCall(`/api/${currentServerId}/config`);
+        const tier = config.subscription_tier || 'free';
+
+        // Update Badge
+        const badgeContainer = document.getElementById('tier-badge-container');
+        if (badgeContainer) {
+            badgeContainer.innerHTML = `<span class="tier-badge tier-${tier}">${tier} Plan</span>`;
+        }
+
+        // Update Ads
+        const adContainer = document.getElementById('ad-container');
+        if (adContainer) {
+            adContainer.style.display = tier === 'free' ? 'block' : 'none';
+        }
+
+        // Store tier in global variable for other functions to check
+        window.currentGuildTier = tier;
+
+    } catch (e) {
+        console.error("Failed to update tier UI:", e);
+    }
+}
+

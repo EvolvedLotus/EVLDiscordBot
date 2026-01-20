@@ -343,6 +343,44 @@ class TaskClaimView(discord.ui.View):
     async def claim_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_claim(interaction)
 
+    @discord.ui.button(
+        label="Submit Proof",
+        style=discord.ButtonStyle.blurple,
+        custom_id="submit_proof",
+        emoji="📤"
+    )
+    async def submit_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """Handle proof submission request."""
+        # Check if user has claimed this task
+        guild_id = str(interaction.guild.id)
+        user_id = str(interaction.user.id)
+        
+        # Get Tasks cog
+        tasks_cog = interaction.client.get_cog('Tasks')
+        if not tasks_cog:
+            await interaction.response.send_message("System error.", ephemeral=True)
+            return
+
+        # Check DB for user claim
+        # We need to check 'user_tasks' table
+        try:
+            result = tasks_cog.data_manager.supabase.table('user_tasks').select('status').eq('user_id', user_id).eq('guild_id', guild_id).eq('task_id', self.task_id).execute()
+            
+            if not result.data or result.data[0]['status'] not in ['claimed', 'in_progress']:
+                await interaction.response.send_message("❌ You haven't claimed this task or it's already completed.", ephemeral=True)
+                return
+                
+            # Open submission modal
+            # Get task name for title
+            task_res = tasks_cog.data_manager.supabase.table('tasks').select('name').eq('guild_id', guild_id).eq('task_id', self.task_id).execute()
+            task_name = task_res.data[0]['name'] if task_res.data else f"Task #{self.task_id}"
+            
+            modal = GeneralTaskProofModal(self.task_id, task_name)
+            await interaction.response.send_modal(modal)
+            
+        except Exception as e:
+            await interaction.response.send_message(f"Error: {e}", ephemeral=True)
+
     async def handle_claim(self, interaction: discord.Interaction):
         """Handle task claim using TaskManager with proper error handling."""
         # Check if interaction already responded
@@ -618,6 +656,46 @@ def create_task_embed(task):
     embed.set_footer(text=f"Task ID: {task['task_id']}")
 
     return embed
+
+class MyTasksSelect(discord.ui.Select):
+    """Select menu to choose a task to submit proof for."""
+    def __init__(self, tasks_data):
+        options = []
+        # tasks_data is a list of dicts: {task_id, name, status}
+        for task in tasks_data[:25]:
+            label = task['name'][:100]
+            description = f"ID: {task['task_id']} | Status: {task['status'].title()}"
+            emoji = "📝" if task['status'] == 'in_progress' else "✅"
+            
+            options.append(discord.SelectOption(
+                label=label,
+                description=description,
+                value=str(task['task_id']),
+                emoji=emoji
+            ))
+            
+        super().__init__(
+            placeholder="Select a task to submit proof...",
+            min_values=1,
+            max_values=1,
+            options=options,
+            disabled=len(options) == 0
+        )
+
+    async def callback(self, interaction: discord.Interaction):
+        task_id = self.values[0]
+        # Find task details for the modal title
+        selected_option = next(opt for opt in self.options if opt.value == task_id)
+        task_name = selected_option.label
+        
+        # Open the GeneralTaskProofModal
+        modal = GeneralTaskProofModal(int(task_id), task_name)
+        await interaction.response.send_modal(modal)
+
+class MyTasksView(discord.ui.View):
+    def __init__(self, tasks_data):
+        super().__init__(timeout=180)
+        self.add_item(MyTasksSelect(tasks_data))
 
 class Tasks(commands.Cog):
     """Task management cog for Discord bot."""
@@ -1868,6 +1946,68 @@ class TaskReviewView(discord.ui.View):
             logger.error(f"Error deleting task message: {e}", exc_info=True)
 
 
+
+    @app_commands.command(name="mytasks", description="View your claimed tasks & Submit Proof")
+    @app_commands.guild_only()
+    async def mytasks(self, interaction: discord.Interaction):
+        """View your claimed tasks and submit proof via menu."""
+        await interaction.response.defer(ephemeral=True)
+        
+        guild_id = str(interaction.guild.id)
+        user_id = str(interaction.user.id)
+        
+        # Fetch user tasks from DB
+        try:
+            user_tasks_res = self.data_manager.supabase.table('user_tasks').select('*').eq('user_id', user_id).eq('guild_id', guild_id).in_('status', ['claimed', 'in_progress']).execute()
+            
+            if not user_tasks_res.data:
+                await interaction.followup.send("You don't have any active tasks.", ephemeral=True)
+                return
+
+            user_tasks = user_tasks_res.data
+            
+            # Prepare data for Select Menu
+            task_ids = [t['task_id'] for t in user_tasks]
+            
+            # Fetch task names
+            if task_ids:
+                tasks_res = self.data_manager.supabase.table('tasks').select('task_id, name').eq('guild_id', guild_id).in_('task_id', task_ids).execute()
+                task_map = {t['task_id']: t['name'] for t in tasks_res.data} if tasks_res.data else {}
+            else:
+                task_map = {}
+            
+            # Build list for View
+            view_data = []
+            embed_desc = ""
+            
+            for ut in user_tasks:
+                tid = ut['task_id']
+                name = task_map.get(tid, f"Task #{tid}")
+                status = ut['status']
+                deadline_ts = datetime.fromisoformat(ut['deadline']).timestamp() if ut.get('deadline') else None
+                deadline = f"<t:{int(deadline_ts)}:R>" if deadline_ts else "No deadline"
+                
+                view_data.append({
+                    'task_id': tid,
+                    'name': name,
+                    'status': status
+                })
+                
+                embed_desc += f"**{name}** (ID: `{tid}`)\nStatus: {status.title()} | Deadline: {deadline}\n\n"
+                
+            embed = discord.Embed(
+                title="📋 Your Active Tasks",
+                description=embed_desc or "No details available.",
+                color=discord.Color.blue()
+            )
+            embed.set_footer(text="Select a task below to submit proof")
+            
+            view = MyTasksView(view_data)
+            await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+            
+        except Exception as e:
+            logger.error(f"Error in mytasks: {e}")
+            await interaction.followup.send("An error occurred while fetching your tasks.", ephemeral=True)
 
 async def setup(bot):
     """Setup the tasks cog."""

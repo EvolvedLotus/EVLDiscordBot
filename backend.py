@@ -209,7 +209,9 @@ try:
     from core.sync_manager import SyncManager
     from core.sse_manager import sse_manager
     from core.discord_oauth import DiscordOAuthManager
+    from core.discord_oauth import DiscordOAuthManager
     from core.ad_claim_manager import AdClaimManager
+    from core.tier_manager import TierManager
 
     # Initialize managers
     data_manager = DataManager()
@@ -904,6 +906,26 @@ def get_tasks(server_id):
 def create_task(server_id):
     try:
         data = request.get_json()
+
+        # Check subscription tier limits
+        config = data_manager.load_guild_data(server_id, 'config')
+        tier = config.get('subscription_tier', 'free')
+        
+        # Get current task count
+        current_tasks = task_manager.get_tasks(server_id)
+        # Handle if get_tasks returns a dict (metadata wrapping tasks) or list
+        if isinstance(current_tasks, dict) and 'tasks' in current_tasks:
+             count = len(current_tasks['tasks'])
+        elif isinstance(current_tasks, dict):
+             count = len(current_tasks)
+        elif isinstance(current_tasks, list):
+             count = len(current_tasks)
+        else:
+             count = 0
+
+        if not TierManager.check_limit(tier, 'max_tasks', count):
+             limit = TierManager.get_limits(tier)["max_tasks"]
+             return jsonify({'error': f'Free tier limit reached ({limit} tasks). Upgrade to Premium for unlimited tasks!'}), 403
         
         if _bot_instance and _bot_instance.loop:
             future = asyncio.run_coroutine_threadsafe(
@@ -989,6 +1011,19 @@ def get_shop(server_id):
 def create_shop_item(server_id):
     try:
         data = request.get_json()
+        
+        # Check subscription tier limits
+        config = data_manager.load_guild_data(server_id, 'config')
+        tier = config.get('subscription_tier', 'free')
+        
+        # Get current shop item count
+        current_items = shop_manager.get_items(server_id)
+        # Handle if get_items returns list or dict
+        count = len(current_items) if isinstance(current_items, (list, dict)) else 0
+        
+        if not TierManager.check_limit(tier, 'max_shop_items', count):
+             limit = TierManager.get_limits(tier)["max_shop_items"]
+             return jsonify({'error': f'Free tier limit reached ({limit} items). Upgrade to Premium for unlimted items!'}), 403
         item = shop_manager.create_item(server_id, data)
         return jsonify(item), 201
     except Exception as e:

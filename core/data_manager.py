@@ -250,7 +250,8 @@ class DataManager:
                         'global_shop': guild_data.get('global_shop', False),
                         'global_tasks': guild_data.get('global_tasks', False),
                         'bot_status_message': guild_data.get('bot_status_message'),
-                        'bot_status_type': guild_data.get('bot_status_type', 'playing')
+                        'bot_status_type': guild_data.get('bot_status_type', 'playing'),
+                        'subscription_tier': guild_data.get('subscription_tier', 'free')
                     }
                 else:
                     # Guild not found, return defaults
@@ -565,7 +566,8 @@ class DataManager:
                         'global_shop': save_data.get('global_shop', False),
                         'global_tasks': save_data.get('global_tasks', False),
                         'bot_status_message': save_data.get('bot_status_message'),
-                        'bot_status_type': save_data.get('bot_status_type', 'playing')
+                        'bot_status_type': save_data.get('bot_status_type', 'playing'),
+                        'subscription_tier': save_data.get('subscription_tier', 'free')
                     }
 
                     # Save guild data
@@ -769,6 +771,7 @@ class DataManager:
                 'prefix': '!',
                 'currency_name': 'coins',
                 'currency_symbol': '🪙',
+                'subscription_tier': 'free',
                 'admin_roles': [],
                 'moderator_roles': [],
                 'log_channel_id': None,

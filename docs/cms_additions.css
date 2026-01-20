@@ -142,3 +142,91 @@
     color: var(--text-muted);
     font-size: 14px;
 }
+
+/* Ad Banner Styles */
+.ad-banner {
+    background-color: #2f3136;
+    color: #dcddde;
+    padding: 15px;
+    text-align: center;
+    border: 1px solid #202225;
+    margin: 20px 0;
+    border-radius: 8px;
+    font-size: 14px;
+    display: none;
+    /* Hidden by default */
+}
+
+.ad-banner-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.ad-banner .ad-text {
+    font-weight: 500;
+}
+
+.ad-upgrade-btn {
+    background: linear-gradient(90deg, #FFD700, #FFA500);
+    color: black;
+    border: none;
+    padding: 5px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+.ad-upgrade-btn:hover {
+    filter: brightness(1.1);
+}
+
+/* Tier Badges */
+.tier-badge {
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.tier-free {
+    background-color: #7289da;
+    color: white;
+}
+
+.tier-premium {
+    background: linear-gradient(45deg, #FFD700, #FFA500);
+    color: black;
+    box-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+}
+
+/* Usage Progress Bars */
+.usage-meter {
+    margin-top: 10px;
+    background: #40444b;
+    border-radius: 4px;
+    height: 6px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.usage-fill {
+    height: 100%;
+    background: #5865F2;
+    transition: width 0.3s ease;
+}
+
+.usage-fill.warning {
+    background: #faa61a;
+}
+
+.usage-fill.danger {
+    background: #ed4245;
+}

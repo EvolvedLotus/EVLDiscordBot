@@ -315,10 +315,10 @@ class General(commands.Cog):
 
         # Task commands
         task_cmds = (
-            "`/tasks` - Available tasks\n"
-            "`/claim <task_id>` - Claim a task\n"
-            "`/mytasks` - Your claimed tasks\n"
-            "`/task_submit <task_id> <proof>` - Submit task completion"
+            "`/tasks` - Browse available tasks\n"
+            "`/mytasks` - View your active tasks & **Submit Proof**\n"
+            "`/claim <task_id>` - Claim a task (or use buttons)\n"
+            "`/task_submit <task_id> <proof>` - Manual submission"
         )
         embed.add_field(name="📋 Tasks", value=task_cmds, inline=False)
 
