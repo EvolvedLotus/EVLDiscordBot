@@ -103,9 +103,16 @@ async function loadServers() {
             });
 
             // Auto-select first server if only one available or if none selected
-            if (data.servers.length > 0 && !currentServerId) {
-                serverSelect.value = data.servers[0].id;
-                currentServerId = data.servers[0].id;
+            if (data.servers.length > 0) {
+                // Always default to the first server if currentServerId is invalid or empty
+                const targetServer = currentServerId || data.servers[0].id;
+
+                // Verify the target server actually exists in the list
+                const exists = data.servers.some(s => s.id === targetServer);
+                const finalServerId = exists ? targetServer : data.servers[0].id;
+
+                serverSelect.value = finalServerId;
+                currentServerId = finalServerId;
                 await onServerChange();
             }
         }

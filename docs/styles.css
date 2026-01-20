@@ -34,12 +34,12 @@
     --border-secondary: #4e5058;
 
     /* Sidebar - Wider for full text */
-    --sidebar-width: 240px;
+    --sidebar-width: 280px;
 
     /* Transitions */
-    --transition-fast: 0.15s ease;
-    --transition-normal: 0.2s ease;
-    --transition-slow: 0.3s ease;
+    --transition-fast: 0.1s ease;
+    --transition-normal: 0.15s ease;
+    --transition-slow: 0.25s ease;
 }
 
 /* Global Reset */
@@ -73,12 +73,12 @@ body {
 
 .login-container {
     background-color: var(--bg-secondary);
-    border-radius: 12px;
-    padding: 40px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    border-radius: 8px;
+    padding: 32px;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
     border: 1px solid var(--border-primary);
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
     text-align: center;
 }
 
@@ -375,9 +375,9 @@ body {
 }
 
 .content-area {
-    padding: 32px 40px 40px 40px;
+    padding: 24px 32px 40px 32px;
     width: 100%;
-    max-width: 1600px;
+    max-width: 1400px;
     margin: 0 auto;
     min-height: calc(100vh - 80px);
 }
@@ -398,8 +398,8 @@ button,
 }
 
 .btn-primary {
-    height: 38px;
-    padding: 0 20px;
+    height: 36px;
+    padding: 0 16px;
     background-color: var(--discord-blurple);
     color: var(--text-primary);
 }
@@ -516,7 +516,7 @@ td {
 }
 
 tbody tr {
-    height: 72px;
+    height: 52px;
     transition: background var(--transition-fast);
 }
 
@@ -539,10 +539,10 @@ tbody tr:last-child td {
 }
 
 .stat-card {
-    height: 120px;
+    height: 100px;
     background-color: var(--bg-secondary);
-    border-radius: 12px;
-    padding: 20px 24px;
+    border-radius: 8px;
+    padding: 16px 20px;
     border: 1px solid var(--border-primary);
     display: flex;
     flex-direction: column;
@@ -742,11 +742,14 @@ tbody tr:last-child td {
 .form-control {
     width: 100%;
     padding: 12px 16px;
+    /* Increased height for premium feel */
+    min-height: 48px;
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
     border: 1px solid var(--border-secondary);
     border-radius: 8px;
-    font-size: 14px;
+    /* Larger font for better readability */
+    font-size: 16px;
     transition: all var(--transition-normal);
     font-family: inherit;
 }
