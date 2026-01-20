@@ -65,23 +65,51 @@ class Moderation(commands.Cog):
             # Scan message for profanity violations (always applies)
             profanity_matches = self.scanner.scan_message_for_profanity(message.guild.id, message.content)
 
-            # Check if user is exempt from link protection (admin/mod check)
+            # Check exemptions
             is_link_exempt = self.protection_manager.is_exempt_from_link_protection(message.guild.id, message.author)
+            is_file_exempt = self.protection_manager.is_exempt_from_file_protection(message.guild.id, message.author)
 
-            # Scan for links only if user is not exempt from link protection
-            all_links = []
+            # Lists to store violations
+            link_violations = []
+            file_violations = []
+
+            # 1. Scan for Links (if not exempt)
             if not is_link_exempt:
                 link_violations = self.scanner.scan_message_for_links(message.guild.id, message.content)
-                attachment_violations = self.scanner.scan_attachments_and_embeds(message.guild.id, message)
-                all_links = link_violations + [v for v in attachment_violations if v['type'] in ['embed_url', 'embed_description']]
+                # Check embeds for links too
+                embed_violations = self.scanner.scan_attachments_and_embeds(message.guild.id, message)
+                # Extract only url-based violations from embed scan
+                link_violations += [v for v in embed_violations if v['type'] in ['embed_url', 'embed_description']]
+
+            # 2. Scan for Files/Attachments (if not exempt)
+            if not is_file_exempt:
+                # Check actual attachments
+                if message.attachments:
+                    for attachment in message.attachments:
+                        file_violations.append({
+                            'type': 'file_violation',
+                            'filename': attachment.filename,
+                            'url': attachment.url,
+                            'reason': 'unauthorized_attachment'
+                        })
+                
+                # Check embeds that look like images (gifs/images linked)
+                if message.embeds:
+                    for embed in message.embeds:
+                        if embed.type in ['image', 'video', 'gifv']:
+                            file_violations.append({
+                                'type': 'file_violation',
+                                'url': embed.url,
+                                'reason': 'unauthorized_media_embed'
+                            })
 
             # If no violations, return
-            if not profanity_matches and not all_links:
+            if not profanity_matches and not link_violations and not file_violations:
                 return
 
             # Evaluate action plan
             action_plan = self.enforcer.evaluate_protection_action(
-                message.guild.id, message, profanity_matches, all_links
+                message.guild.id, message, profanity_matches, link_violations, file_violations
             )
 
             # Apply action
@@ -99,7 +127,8 @@ class Moderation(commands.Cog):
                         'reason': result['reason'],
                         'severity': action_plan.get('severity', 'low'),
                         'profanity_matches': len(profanity_matches),
-                        'link_violations': len(all_links)
+                        'link_violations': len(link_violations),
+                        'file_violations': len(file_violations)
                     }
                 )
 

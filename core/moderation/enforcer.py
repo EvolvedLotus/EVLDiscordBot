@@ -15,9 +15,11 @@ class ProtectionEnforcer:
         self.scanner = scanner
         self.bot = bot
 
-    def evaluate_protection_action(self, guild_id: int, message: discord.Message, matches: List[Dict], links: List[Dict]) -> Dict:
+    def evaluate_protection_action(self, guild_id: int, message: discord.Message, matches: List[Dict], links: List[Dict], file_violations: List[Dict] = None) -> Dict:
         """Decides action based on guild protection config and severity"""
         config = self.protection_manager.load_protection_config(guild_id)
+        
+        file_violations = file_violations or []
 
         if not config.get('enabled', True):
             return {'action': 'ignore', 'reason': 'protection_disabled'}
@@ -31,8 +33,9 @@ class ProtectionEnforcer:
             elif 'medium' in severities:
                 max_severity = 'medium'
 
-        # Check for links (all links are violations when link filtering is enabled)
+        # Check for presence of violations
         has_links = len(links) > 0
+        has_files = len(file_violations) > 0
 
         # Decide action based on config and severity
         action_plan = {
@@ -44,49 +47,90 @@ class ProtectionEnforcer:
 
         # Profanity actions
         if matches and config.get('profanity_filter', True):
-            auto_actions = config.get('auto_actions', {})
+            self._apply_violation_action(action_plan, 'profanity', max_severity, config)
 
-            if max_severity == 'high' and auto_actions.get('ban', False):
-                action_plan.update({
-                    'action': 'ban',
-                    'reason': 'high_severity_profanity',
-                    'notify': True
-                })
-            elif max_severity == 'high' and auto_actions.get('kick', False):
-                action_plan.update({
-                    'action': 'kick',
-                    'reason': 'high_severity_profanity',
-                    'notify': True
-                })
-            elif max_severity == 'high' and auto_actions.get('mute', False):
-                action_plan.update({
-                    'action': 'mute',
-                    'reason': 'high_severity_profanity',
-                    'notify': True
-                })
-            elif auto_actions.get('warn', True):
-                action_plan.update({
-                    'action': 'warn',
-                    'reason': 'profanity_detected',
-                    'notify': True
-                })
-            else:
+        # Link violation actions (override profanity if more severe or if strict)
+        if has_links and config.get('link_filter', True):
+             # Hard rule: unauthorized links -> delete/warn usually, but could be strict
+             # If action plan is already more severe (e.g. ban), keep it. Otherwise update.
+             # Default assumption: links are medium severity unless strict.
+             current_action_weight = self._get_action_weight(action_plan['action'])
+             
+             # Default logic for links: DELETE
+             if current_action_weight < self._get_action_weight('delete'):
                 action_plan.update({
                     'action': 'delete',
-                    'reason': 'profanity_detected',
-                    'notify': False
+                    'reason': 'unauthorized_link',
+                    'severity': 'medium',
+                    'notify': True
                 })
 
-        # Link violation actions (override profanity if more severe)
-        if has_links and config.get('link_filter', True):
-            action_plan.update({
-                'action': 'delete',
-                'reason': 'unauthorized_link',
-                'severity': 'medium',
-                'notify': True
-            })
+        # File/Media violation actions
+        if has_files and config.get('file_filter', False):
+             # Default logic for files: DELETE (or MUTE if requested/configured)
+             # User specifically asked for "block... meaning mute", so if this feature is on, we might want strictness.
+             # We'll check if auto_actions has specific overrides, otherwise default to DELETE + optional MUTE if strict.
+             
+             current_action_weight = self._get_action_weight(action_plan['action'])
+             
+             if current_action_weight < self._get_action_weight('delete'):
+                 action_plan.update({
+                    'action': 'delete',
+                    'reason': 'unauthorized_attachment_or_media',
+                    'severity': 'medium',
+                    'notify': True
+                 })
+                 
+             # Check if we should escalate to MUTE for files (as requested by user "block... meaning mute")
+             # We only do this if auto_actions.mute is explicitly enabled OR if we assume strictly blocking means muting.
+             # Given the user request, let's respect 'auto_actions.mute' for this if set, or if protection level is 'strict'.
+             if config.get('profanity_level') == 'strict' or config.get('auto_actions', {}).get('mute', False):
+                  if current_action_weight < self._get_action_weight('mute'):
+                      action_plan.update({
+                        'action': 'mute',
+                        'reason': 'unauthorized_attachment_or_media_strict',
+                        'severity': 'high',
+                        'notify': True
+                     })
 
         return action_plan
+
+    def _apply_violation_action(self, plan: Dict, type: str, severity: str, config: Dict):
+        """Helper to apply auto-actions based on config"""
+        auto_actions = config.get('auto_actions', {})
+        
+        # Calculate proposed action based on severity and config
+        proposed_action = 'delete' # Default minimum
+        
+        if severity == 'high':
+            if auto_actions.get('ban', False): proposed_action = 'ban'
+            elif auto_actions.get('kick', False): proposed_action = 'kick'
+            elif auto_actions.get('mute', False): proposed_action = 'mute'
+        elif severity == 'medium':
+            if auto_actions.get('mute', False): proposed_action = 'mute' # Medium severity can mute if enabled
+            elif auto_actions.get('warn', True): proposed_action = 'warn'
+        else: # Low
+             if auto_actions.get('warn', True): proposed_action = 'warn'
+        
+        # Only update plan if proposed action is "heavier" than current
+        if self._get_action_weight(proposed_action) > self._get_action_weight(plan['action']):
+            plan.update({
+                'action': proposed_action,
+                'reason': f'{type}_detected',
+                'notify': True
+            })
+            
+    def _get_action_weight(self, action: str) -> int:
+        """Returns relative weight of action for comparison"""
+        ranking = {
+            'ignore': 0,
+            'delete': 1,
+            'warn': 2,
+            'mute': 3,
+            'kick': 4,
+            'ban': 5
+        }
+        return ranking.get(action, 0)
 
     async def apply_protection_action(self, action_plan: Dict, message: discord.Message, moderator_context: str = None) -> Dict:
         """Executes the decided action"""

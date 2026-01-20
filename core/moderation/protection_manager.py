@@ -26,6 +26,7 @@ class ProtectionManager:
                 'enabled': True,
                 'profanity_filter': True,
                 'link_filter': True,
+                'file_filter': False, # New filter for files/images
                 'profanity_level': 'moderate',  # off, monitor, moderate, strict
                 'auto_actions': {
                     'warn': True,
@@ -36,7 +37,9 @@ class ProtectionManager:
                 'whitelist_domains': [],
                 'blacklist_domains': [],
                 'custom_profanity': [],
-                'exempt_roles': [],
+                'exempt_roles': [], # Global exemption
+                'exempt_roles_links': [], # New: Exempt from link checks
+                'exempt_roles_files': [], # New: Exempt from file/image checks
                 'exempt_channels': [],
                 'log_channel': None
             }
@@ -152,9 +155,17 @@ class ProtectionManager:
         return success
 
     def is_exempt_from_link_protection(self, guild_id: int, member: discord.Member) -> bool:
-        """Determines if a user is exempt from link protection (admin/mod check)"""
+        """Determines if a user is exempt from link protection (admin/mod check OR role config)"""
         # Check if user has Discord admin permission
         if member.guild_permissions.administrator:
+            return True
+
+        config = self.load_protection_config(guild_id)
+        
+        # Check specifically configured exempt roles for links
+        exempt_link_roles = config.get('exempt_roles_links', [])
+        user_role_ids = [role.id for role in member.roles]
+        if any(role_id in exempt_link_roles for role_id in user_role_ids):
             return True
 
         # Check Discord moderator permissions
@@ -167,16 +178,31 @@ class ProtectionManager:
 
         # Check custom admin/moderator roles from config
         try:
-            config = self.data_manager.load_guild_data(guild_id, 'config')
-            admin_roles = config.get("admin_roles", [])
-            moderator_roles = config.get("moderator_roles", [])
+            guild_config = self.data_manager.load_guild_data(guild_id, 'config')
+            admin_roles = guild_config.get("admin_roles", [])
+            moderator_roles = guild_config.get("moderator_roles", [])
 
-            user_role_ids = [role.id for role in member.roles]
             if any(role_id in (admin_roles + moderator_roles) for role_id in user_role_ids):
                 return True
         except Exception:
             pass
 
+        return False
+        
+    def is_exempt_from_file_protection(self, guild_id: int, member: discord.Member) -> bool:
+        """Determines if a user is exempt from file/image protection"""
+        # Check if user has Discord admin permission
+        if member.guild_permissions.administrator:
+            return True
+            
+        config = self.load_protection_config(guild_id)
+        
+        # Check specifically configured exempt roles for files
+        exempt_file_roles = config.get('exempt_roles_files', [])
+        user_role_ids = [role.id for role in member.roles]
+        if any(role_id in exempt_file_roles for role_id in user_role_ids):
+            return True
+            
         return False
 
     def is_exempt_from_protection(self, guild_id: int, user_id: int, channel_id: int, roles: List[discord.Role]) -> bool:
