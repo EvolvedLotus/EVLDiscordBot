@@ -665,7 +665,8 @@ def get_current_user():
         'user': {
             'id': user['id'],
             'username': user['username'],
-            'is_superadmin': user.get('is_superadmin', False)
+            'is_superadmin': user.get('is_superadmin', False),
+            'role': user.get('role', 'user')
         }
     }), 200
 
@@ -882,6 +883,18 @@ def get_servers():
 def get_server_config(server_id):
     try:
         config = data_manager.load_guild_data(server_id, 'config')
+        
+        # SECURITY PROTECTION: Redact bot status for non-superadmins
+        user = request.user
+        is_superadmin = user.get('is_superadmin', False) or user.get('role') == 'superadmin'
+        
+        if not is_superadmin:
+            # Create a copy so we don't modify the cache/file data
+            safe_config = config.copy()
+            safe_config.pop('bot_status_message', None)
+            safe_config.pop('bot_status_type', None)
+            return jsonify(safe_config), 200
+            
         return jsonify(config), 200
     except Exception as e:
         return safe_error_response(e)
@@ -892,6 +905,23 @@ def update_server_config(server_id):
     try:
         data = request.get_json()
         
+        # Define protected fields that only superadmins can change
+        protected_fields = [
+            'feature_tasks', 'feature_shop', 'feature_announcements', 
+            'feature_moderation', 'subscription_tier', 'bot_status_message', 
+            'bot_status_type'
+        ]
+        
+        # Check if any protected field is being modified
+        user = request.user
+        is_superadmin = user.get('is_superadmin', False) or user.get('role') == 'superadmin'
+        
+        if not is_superadmin:
+            for field in protected_fields:
+                if field in data:
+                    logger.warning(f"Unauthorized attempt to modify protected field '{field}' by user: {user.get('username')}")
+                    return jsonify({'error': f'Unauthorized. Master login required to modify {field}.'}), 403
+
         # Load current config to merge with updates
         current_config = data_manager.load_guild_data(server_id, 'config')
         
@@ -1500,6 +1530,13 @@ def get_logs(server_id):
 @app.route('/api/<server_id>/bot_status', methods=['POST'])
 @require_guild_access
 def update_bot_status(server_id):
+    """Update global bot status (Master Login Only)"""
+    # SECURITY CHECK: Only Super Admins (Master Login) can update bot status
+    user = request.user
+    if not (user.get('is_superadmin') or user.get('role') == 'superadmin'):
+        logger.warning(f"Unauthorized bot status update attempt by user: {user.get('username')}")
+        return jsonify({'error': 'Unauthorized. Master login required.'}), 403
+
     try:
         data = request.get_json()
         # Validate data

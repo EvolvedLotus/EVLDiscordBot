@@ -362,7 +362,8 @@ async function loadConfigTab() {
                     <span id="bot-behavior-status" class="status-text"></span>
                 </div>
 
-                <!-- Feature Toggles -->
+                <!-- Feature Toggles (ONLY for Super Admins) -->
+                ${(currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin === true)) ? `
                 <div class="section-card">
                     <h3>⚡ Feature Toggles</h3>
                     
@@ -402,6 +403,7 @@ async function loadConfigTab() {
                         <span id="feature-moderation-status" class="status-text"></span>
                     </div>
                 </div>
+                ` : ''}
             </div>
         `;
 
@@ -475,10 +477,15 @@ async function loadConfigTab() {
                 }
             }
 
-            // Show bot status section (only hide for server owners)
+            // Show bot status section (ONLY for Super Admins)
             const botStatusSection = document.getElementById('bot-status-section');
             if (botStatusSection) {
-                botStatusSection.style.display = 'block';
+                const isSuperAdmin = currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin === true);
+                if (isSuperAdmin) {
+                    botStatusSection.style.display = 'block';
+                } else {
+                    botStatusSection.style.display = 'none';
+                }
             }
         }, 100);
 
