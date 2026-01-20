@@ -411,8 +411,8 @@ button,
 }
 
 .btn-secondary {
-    height: 38px;
-    padding: 0 18px;
+    height: 36px;
+    padding: 0 16px;
     background-color: transparent;
     border: 1px solid var(--border-secondary);
     color: var(--text-secondary);
@@ -461,19 +461,57 @@ button,
 }
 
 .btn-large {
-    height: 44px;
+    height: 48px;
     padding: 0 24px;
     font-size: 16px;
 }
 
+.btn-discord {
+    background-color: var(--discord-blurple);
+    color: white;
+    border: none;
+    font-weight: 600;
+    transition: background-color 0.2s;
+    width: 100%;
+}
+
+.btn-discord:hover {
+    background-color: var(--discord-blurple-dark);
+}
+
+.login-divider {
+    margin: 20px 0;
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.login-divider::before,
+.login-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background-color: var(--border-primary);
+}
+
+.login-divider span {
+    padding: 0 10px;
+}
+
 /* Loading States */
 .loading,
-.empty-state,
-.error-state {
+.empty-state {
     text-align: center;
-    padding: 60px 20px;
+    padding: 80px 20px;
     color: var(--text-muted);
-    font-size: 16px;
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    border: 2px dashed var(--border-primary);
+    margin: 20px 0;
+    font-size: 15px;
 }
 
 .error-state {

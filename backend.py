@@ -403,110 +403,73 @@ def get_status():
 
 # ========== AUTHENTICATION ==========
 @app.route('/api/auth/login', methods=['POST'])
-@limiter.limit("5 per minute")  # Max 5 login attempts per minute per IP
+@limiter.limit("5 per minute")
 def login():
-    data = request.json
-    username = data.get('username')
-    password = data.get('password')
-
-    if not username or not password:
-        return jsonify({'success': False, 'error': 'Missing credentials'}), 400
-
-    client_ip = get_remote_address()
-    user = None
-
-    # 1. Check Environment Variables (Simple Mode) - PRIORITY
-    env_password = os.getenv('ADMIN_PASSWORD')
-    env_username = os.getenv('ADMIN_USERNAME', 'admin')
-
-    if env_password:
-        if username == env_username and password == env_password:
-            user = {
-                'id': 'admin-env-user',
-                'username': username,
-                'is_superadmin': True,
-                'role': 'superadmin',
-                'permissions': ['read', 'write', 'delete', 'admin', 'superadmin'],
-                'session_expires': datetime.now(timezone.utc) + timedelta(hours=24) # Helper for require_auth
-            }
-            logger.info(f"Login successful via Environment Variables for user: {username}")
-        else:
-            logger.warning(f"Failed env var login attempt for {username} from {client_ip}")
-            return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
-    else:
-        # 2. Database Mode (Fallback)
-        try:
-            # Check for account lockout
-            if client_ip in failed_login_attempts:
-                recent_failures = [
-                    (ts, u) for ts, u in failed_login_attempts[client_ip]
-                    if datetime.now() - ts < timedelta(minutes=15)
-                ]
-                failed_login_attempts[client_ip] = recent_failures
-
-                if len(recent_failures) >= 5:
-                    logger.warning(f"Account lockout triggered for IP: {client_ip}")
-                    return jsonify({
-                        'success': False,
-                        'error': 'Too many failed attempts. Try again in 15 minutes.'
-                    }), 429
-
-            # Authenticate against DB
-            user = auth_manager.authenticate_user(username, password)
-
-            if not user:
-                # Log failed attempt
-                if client_ip not in failed_login_attempts:
-                    failed_login_attempts[client_ip] = []
-                failed_login_attempts[client_ip].append((datetime.now(), username))
-
-                logger.warning(f"Failed DB login attempt for {username} from {client_ip}")
-                return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
-
-            # Clear failed attempts
-            if client_ip in failed_login_attempts:
-                del failed_login_attempts[client_ip]
-                
-        except Exception as e:
-            logger.exception(f"DB Login error: {e}")
-            return jsonify({'success': False, 'error': 'Server error'}), 500
-
+    """Login with username/password"""
     try:
-        # Create session (Fix: Use correct signature for AuthManager)
-        # AuthManager.create_session(user_data) -> session_id
-        session_token = auth_manager.create_session(user)
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
 
-        # Update last_login if it's a DB user (optional, skip for env user)
-        # Update last_login is handled internally by authenticate_user
+        username = data.get('username')
+        password = data.get('password')
 
-        response = jsonify({
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
+
+        # Check credentials using AuthManager
+        user = auth_manager.authenticate_user(username, password)
+
+        # Fallback: Check environment variables if AuthManager returns None
+        if not user:
+            env_username = os.getenv('ADMIN_USERNAME', 'admin')
+            env_password = os.getenv('ADMIN_PASSWORD')
+            
+            if env_password and username == env_username and password == env_password:
+                user = {
+                    'id': 'admin-env-user',
+                    'user_id': 'admin-env-user', # Maintain compatibility with different schemas
+                    'username': username,
+                    'is_superadmin': True,
+                    'role': 'superadmin',
+                    'permissions': ['read', 'write', 'delete', 'admin', 'superadmin']
+                }
+                logger.info(f"Login successful via Environment Variables for user: {username}")
+
+        if not user:
+            logger.warning(f"Failed login attempt for user: {username}")
+            return jsonify({'error': 'Invalid username or password'}), 401
+
+        # Create session
+        # Ensure we pass the ID correctly regardless of user object source
+        uid = user.get('id') or user.get('user_id')
+        session_token = auth_manager.create_session(uid)
+
+        # Create response
+        response = make_response(jsonify({
             'success': True,
-            'user': {
-                'id': user['id'],
-                'username': user['username'],
-                'is_superadmin': user.get('is_superadmin', False)
-            }
-        })
+            'user': user
+        }))
 
-        # Cookie settings
-        cookie_kwargs = {
-            'httponly': True,
-            'secure': IS_PRODUCTION,
-            'max_age': 86400   # 24 hours
-        }
-
-        if IS_PRODUCTION:
-            cookie_kwargs['samesite'] = 'None'
-        else:
-            cookie_kwargs['samesite'] = 'Lax'
-
-        response.set_cookie('session_token', session_token, **cookie_kwargs)
-
+        # Secure cookie settings
+        secure_cookie = IS_PRODUCTION
+        samesite = 'None' if IS_PRODUCTION else 'Lax'
+        
+        response.set_cookie(
+            'session_token', 
+            session_token, 
+            httponly=True,
+            secure=secure_cookie,
+            samesite=samesite,
+            max_age=86400  # 24 hours
+        )
+        
+        logger.info(f"User logged in successfully: {username}")
         return response
 
     except Exception as e:
-        logger.exception(f"Session creation error: {e}")
-        return jsonify({'success': False, 'error': 'Server error'}), 500
+        logger.error(f"Login error: {str(e)}")
+        return jsonify({'error': 'An internal server error occurred'}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
