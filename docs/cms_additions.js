@@ -248,6 +248,21 @@ function upgradeToPremium() {
 }
 // Whop & Promo Integration Helpers
 function populateWhopInfo() {
+    const section = document.getElementById('whop-info-section');
+    if (!section) return;
+
+    // SECURITY CHECK: Only show to Super Admins (env-based login)
+    // standard user roles should not see sensitive webhook/promo links
+    const isSuperAdmin = currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin === true);
+
+    if (!isSuperAdmin) {
+        section.style.display = 'none';
+        return;
+    }
+
+    // Show section for super admin
+    section.style.display = 'block';
+
     const webhookInput = document.getElementById('whop-webhook-url');
     const promoInput = document.getElementById('promo-card-url');
 
@@ -262,9 +277,8 @@ function populateWhopInfo() {
         promoInput.value = `${baseUrl}store-preview.html`;
 
         // If we have a selected server, append it to the promo link for easy testing
-        const serverSelect = document.getElementById('server-select');
-        if (serverSelect && serverSelect.value) {
-            promoInput.value += `?guild_id=${serverSelect.value}`;
+        if (currentServerId) {
+            promoInput.value += `?guild_id=${currentServerId}`;
         }
     }
 }
