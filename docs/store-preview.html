@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Link Preview / Open Graph Tags -->
+    <title>EVL Bot | Premium Discord Experience</title>
+    <meta name="description"
+        content="Unlock the full potential of your Discord server with EVL Bot. Robust economy, automated tasks, and stunning embed management.">
+    <meta property="og:title" content="🤖 EVL Bot - Premium Discord Dashboard">
+    <meta property="og:description"
+        content="Upgrade your community with advanced features: Unlimited Shop Items, Custom Tasks, and Ad-Free Experience.">
+    <meta property="og:image" content="./static/images/promo_banner.png">
+    <meta property="og:url" content="https://evolvedlotus.github.io/EVLDiscordBot/store-preview.html">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="EVL Bot | Premium Store">
+    <meta name="twitter:description" content="Level up your server today with EVL Bot Premium.">
+    <meta name="twitter:image" content="./static/images/promo_banner.png">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
+        rel="stylesheet">
+
+    <style>
+        :root {
+            --primary: #5865F2;
+            --primary-glow: rgba(88, 101, 242, 0.5);
+            --accent: #00f2ff;
+            --accent-purple: #9d50bb;
+            --bg-dark: #0f111a;
+            --card-bg: rgba(255, 255, 255, 0.05);
+            --text-main: #ffffff;
+            --text-dim: #b9bbbe;
+            --premium-gradient: linear-gradient(135deg, #00f2ff 0%, #5865F2 50%, #9d50bb 100%);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            background-image:
+                radial-gradient(circle at 20% 20%, rgba(88, 101, 242, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(0, 242, 255, 0.1) 0%, transparent 40%);
+        }
+
+        /* Animated Background Particles */
+        .bg-glow {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            background: var(--primary);
+            filter: blur(150px);
+            opacity: 0.2;
+            border-radius: 50%;
+            z-index: -1;
+            animation: move-glow 20s infinite alternate;
+        }
+
+        @keyframes move-glow {
+            from {
+                transform: translate(-50%, -50%);
+            }
+
+            to {
+                transform: translate(50%, 50%);
+            }
+        }
+
+        /* Promo Card */
+        .promo-card {
+            width: 90%;
+            max-width: 800px;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 40px 80px rgba(0, 0, 0, 0.5);
+            animation: fade-in-up 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes fade-in-up {
+            from {
+                opacity: 0;
+                transform: translateY(30px) scale(0.95);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        /* Header Image Section */
+        .banner {
+            width: 100%;
+            height: 300px;
+            position: relative;
+            background: #1e2124;
+            overflow: hidden;
+        }
+
+        .banner img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.8s ease;
+        }
+
+        .promo-card:hover .banner img {
+            transform: scale(1.05);
+        }
+
+        .banner-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 100px;
+            background: linear-gradient(to top, var(--bg-dark), transparent);
+        }
+
+        .tier-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--premium-gradient);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 100px;
+            font-weight: 700;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
+        }
+
+        /* Content Section */
+        .content {
+            padding: 40px;
+        }
+
+        .header {
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-family: 'Plus+Jakarta+Sans', sans-serif;
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(to right, #fff, #ffffffaa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .tagline {
+            color: var(--text-dim);
+            font-size: 18px;
+            line-height: 1.5;
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .feature-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .feature-icon {
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .feature-title {
+            font-weight: 600;
+            font-size: 16px;
+            color: #fff;
+        }
+
+        .feature-desc {
+            font-size: 13px;
+            color: var(--text-dim);
+            line-height: 1.4;
+        }
+
+        /* Premium Teaser */
+        .premium-teaser {
+            background: rgba(88, 101, 242, 0.1);
+            border: 1px dashed var(--primary);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .premium-teaser::before {
+            content: '⭐';
+            position: absolute;
+            right: -10px;
+            bottom: -10px;
+            font-size: 60px;
+            opacity: 0.1;
+        }
+
+        .teaser-title {
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .teaser-list {
+            list-style: none;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .teaser-list li {
+            font-size: 14px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .teaser-list li::before {
+            content: '✦';
+            color: var(--accent);
+        }
+
+        /* Action Section */
+        .actions {
+            display: flex;
+            gap: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 16px;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 700;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 15px var(--primary-glow);
+        }
+
+        .btn-primary:hover {
+            background: #4752c4;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px var(--primary-glow);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: white;
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 600px) {
+            .teaser-list {
+                grid-template-columns: 1fr;
+            }
+
+            .banner {
+                height: 200px;
+            }
+
+            .content {
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="bg-glow"></div>
+
+    <div class="promo-card">
+        <div class="banner">
+            <img src="./static/images/promo_banner.png" alt="EVL Bot Banner">
+            <div class="banner-overlay"></div>
+            <div class="tier-badge">Premium Ready</div>
+        </div>
+
+        <div class="content">
+            <div class="header">
+                <h1>🤖 EVL Discord Bot</h1>
+                <p class="tagline">The most advanced economy and server management bot for your community.</p>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-item">
+                    <span class="feature-icon">💰</span>
+                    <span class="feature-title">Economy</span>
+                    <span class="feature-desc">Full balance, shop, and transactional system.</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📋</span>
+                    <span class="feature-title">Tasks</span>
+                    <span class="feature-desc">Automated task lists for your members.</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📧</span>
+                    <span class="feature-title">Embeds</span>
+                    <span class="feature-desc">Interactive premium embed builder.</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📢</span>
+                    <span class="feature-title">Broadcast</span>
+                    <span class="feature-desc">Beautiful server-wide announcements.</span>
+                </div>
+            </div>
+
+            <div class="premium-teaser">
+                <div class="teaser-title">Premium Features Teaser</div>
+                <ul class="teaser-list">
+                    <li>Unlimited Shop Items</li>
+                    <li>Custom Bot Activity</li>
+                    <li>Ad-Free Dashboard</li>
+                    <li>Advanced Moderation</li>
+                    <li>Role-based Rewards</li>
+                    <li>Priority Support</li>
+                </ul>
+            </div>
+
+            <div class="actions">
+                <a href="https://whop.com/evolvedlotus" class="btn btn-primary" id="whop-btn">
+                    Visit Whop Store
+                </a>
+                <a href="./index.html" class="btn btn-outline">
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Check for guild_id in URL to personalize the store link if needed
+        const urlParams = new URLSearchParams(window.location.search);
+        const guildId = urlParams.get('guild_id');
+        const whopBtn = document.getElementById('whop-btn');
+
+        if (guildId && whopBtn) {
+            // If we have a guild ID, we can link directly to a checkout or specific plan
+            // or just append it as metadata if the store supports it
+            whopBtn.href = `https://whop.com/checkout/prod_I2gZHaMIztbL9?d2c=true&metadata[guild_id]=${guildId}`;
+            whopBtn.innerHTML = "Get Premium for your Server";
+        }
+    </script>
+</body>
+
+</html>

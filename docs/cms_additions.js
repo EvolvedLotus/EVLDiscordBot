@@ -246,3 +246,61 @@ function upgradeToPremium() {
     // Open in new tab
     window.open(checkoutUrl, '_blank');
 }
+// Whop & Promo Integration Helpers
+function populateWhopInfo() {
+    const webhookInput = document.getElementById('whop-webhook-url');
+    const promoInput = document.getElementById('promo-card-url');
+
+    if (webhookInput) {
+        // Base URL from current location
+        const baseUrl = window.location.origin;
+        webhookInput.value = `${baseUrl}/api/webhooks/whop`;
+    }
+
+    if (promoInput) {
+        const baseUrl = window.location.href.split('index.html')[0];
+        promoInput.value = `${baseUrl}store-preview.html`;
+
+        // If we have a selected server, append it to the promo link for easy testing
+        const serverSelect = document.getElementById('server-select');
+        if (serverSelect && serverSelect.value) {
+            promoInput.value += `?guild_id=${serverSelect.value}`;
+        }
+    }
+}
+
+function copyToClipboard(elementId) {
+    const input = document.getElementById(elementId);
+    if (!input) return;
+
+    input.select();
+    input.setSelectionRange(0, 99999); /* For mobile devices */
+
+    try {
+        navigator.clipboard.writeText(input.value);
+        showNotification('Copied to clipboard!', 'success');
+    } catch (err) {
+        // Fallback for older browsers
+        document.execCommand('copy');
+        showNotification('Copied to clipboard!', 'success');
+    }
+}
+
+// Hook into tab switching to populate Whop info
+const originalShowTab = window.showTab;
+window.showTab = function (tabName) {
+    if (typeof originalShowTab === 'function') {
+        originalShowTab(tabName);
+    }
+
+    if (tabName === 'config') {
+        setTimeout(populateWhopInfo, 100);
+    }
+};
+
+// Initialize on load if config is already active
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('config')?.classList.contains('active')) {
+        populateWhopInfo();
+    }
+});
