@@ -744,6 +744,34 @@ window.addEventListener('load', function () {
 
 // ========== TIER MANAGEMENT ==========
 
+async function loadAd() {
+    const adSlot = document.getElementById('ad-slot-1');
+    if (!adSlot) return;
+
+    try {
+        const ad = await apiCall('/api/ad');
+        if (!ad) return;
+
+        adSlot.innerHTML = `
+            <a href="${ad.url}" target="_blank" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%; height: 100%; padding: 0 15px;">
+                ${ad.image ? `<img src="${ad.image}" alt="${ad.title}" style="height: 60px; width: 60px; object-fit: contain; margin-right: 15px; border-radius: 4px;">` : ''}
+                <div style="flex: 1; text-align: left;">
+                    <div style="font-weight: bold; color: ${ad.color || '#fff'}; margin-bottom: 2px;">${ad.title}</div>
+                    <div style="font-size: 12px; color: #b9bbbe;">${ad.description}</div>
+                </div>
+                <div style="background-color: ${ad.color || '#5865F2'}; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-left: 15px;">
+                    ${ad.cta}
+                </div>
+            </a>
+        `;
+        // Remove default placeholder styling that might conflict
+        adSlot.style.display = 'flex';
+
+    } catch (e) {
+        console.error("Failed to load ad:", e);
+    }
+}
+
 async function updateTierUI() {
     if (!currentServerId) return;
     try {
@@ -759,7 +787,12 @@ async function updateTierUI() {
         // Update Ads
         const adContainer = document.getElementById('ad-container');
         if (adContainer) {
-            adContainer.style.display = tier === 'free' ? 'block' : 'none';
+            if (tier === 'free') {
+                adContainer.style.display = 'block';
+                loadAd();
+            } else {
+                adContainer.style.display = 'none';
+            }
         }
 
         // Store tier in global variable for other functions to check

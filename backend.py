@@ -212,6 +212,7 @@ try:
     from core.discord_oauth import DiscordOAuthManager
     from core.ad_claim_manager import AdClaimManager
     from core.tier_manager import TierManager
+    from core.evolved_lotus_api import evolved_lotus_api
 
     # Initialize managers
     data_manager = DataManager()
@@ -423,6 +424,16 @@ def get_status():
         'uptime': uptime_str,
         'servers': server_count
     })
+
+@app.route('/api/ad', methods=['GET'])
+def get_ad():
+    """Get a random ad from EvolvedLotus API"""
+    try:
+        ad = evolved_lotus_api.get_random_ad()
+        return jsonify(ad)
+    except Exception as e:
+        logger.error(f"Error fetching ad: {e}")
+        return safe_error_response(e)
 
 # ========== AUTHENTICATION ==========
 @app.route('/api/auth/login', methods=['POST'])
