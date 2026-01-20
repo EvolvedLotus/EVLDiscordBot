@@ -1,5 +1,8 @@
 import random
 import logging
+import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -8,11 +11,15 @@ class EvolvedLotusAPI:
     """
     EvolvedLotus Promotional API
     Serves custom ads for EvolvedLotus blog posts and tools.
+    Uses Railway PostgreSQL for storage.
     """
     
-    def __init__(self):
-        # Initial ad pool generated from blog posts and tools
-        self.ads = [
+    def __init__(self, supabase_client=None):
+        self.supabase_client = supabase_client
+        self.db_url = os.getenv('DATABASE_URL')
+        
+        # Fallback ad pool if database is empty or unavailable
+        self._fallback_ads = [
             {
                 "id": "blog_yt_2026",
                 "type": "blog",
@@ -25,17 +32,6 @@ class EvolvedLotusAPI:
                 "color": "#FF0000"
             },
             {
-                "id": "blog_tiktok_views",
-                "type": "blog",
-                "title": "Skyrocket Your TikTok Views",
-                "headline": "Stuck at 200 Views?",
-                "description": "Discover the simple content strategy that actually works. We jumped from 300 to 3,000 views in just 7 days!",
-                "cta": "Get More Views",
-                "url": "https://blog.evolvedlotus.com/blog/2025-05-13-how-to-skyrocket-your-tiktok-views-and-engagement-a-simple-content-strategy/",
-                "image": "https://blog.evolvedlotus.com/assets/blog/how-to-skyrocket-your-tiktok-views-and-engagement-a-simple-content-strategy.png",
-                "color": "#EE1D52"
-            },
-            {
                 "id": "tool_tweetcraft",
                 "type": "tool",
                 "title": "TweetCraft AI",
@@ -45,46 +41,57 @@ class EvolvedLotusAPI:
                 "url": "https://tools.evolvedlotus.com/TwitterReplyBot/",
                 "image": "https://tools.evolvedlotus.com/TwitterReplyBot/favicon.ico",
                 "color": "#1DA1F2"
-            },
-            {
-                "id": "tool_this_weeks_yt",
-                "type": "tool",
-                "title": "This Week's YouTube",
-                "headline": "What's Trending on YouTube?",
-                "description": "The most engaging YouTube content of the week, curated for you. See what's viral before everyone else.",
-                "cta": "See Trending Now",
-                "url": "https://tools.evolvedlotus.com/ThisWeeksYT/",
-                "image": "https://cdn.pixabay.com/photo/2016/07/03/18/36/youtube-1495277_1280.png",
-                "color": "#FFC107"
-            },
-            {
-                "id": "blog_viral_caption",
-                "type": "blog",
-                "title": "Viral Captions for 2025",
-                "headline": "Stop Writing Boring Captions",
-                "description": "Learn how to write viral captions that drive engagement across all social platforms. Complete 2025 strategy inside!",
-                "cta": "Read Guide",
-                "url": "https://blog.evolvedlotus.com/blog/2025-01-29-how-to-write-a-viral-caption-for-social-media/",
-                "image": "https://blog.evolvedlotus.com/assets/blog/how-to-write-a-viral-caption-for-social-media.png",
-                "color": "#9C27B0"
             }
         ]
-        logger.info(f"✅ EvolvedLotusAPI initialized with {len(self.ads)} ad creatives")
+        logger.info(f"✅ EvolvedLotusAPI initialized (PostgreSQL: {'Yes' if self.db_url else 'No'})")
+
+    def _get_db_connection(self):
+        """Creates a connection to Railway PostgreSQL"""
+        if not self.db_url:
+            return None
+        try:
+            return psycopg2.connect(self.db_url)
+        except Exception as e:
+            logger.error(f"Failed to connect to Railway PostgreSQL: {e}")
+            return None
 
     def get_random_ad(self) -> Dict:
-        """Returns a random ad from the pool"""
-        return random.choice(self.ads)
+        """Returns a random ad from the pool (prefers Railway DB)"""
+        ads = self.get_all_ads()
+        return random.choice(ads) if ads else random.choice(self._fallback_ads)
     
-    def get_ad_by_id(self, ad_id: str) -> Optional[Dict]:
-        """Returns a specific ad by ID"""
-        for ad in self.ads:
-            if ad['id'] == ad_id:
-                return ad
-        return None
-
     def get_all_ads(self) -> List[Dict]:
-        """Returns all available ads"""
-        return self.ads
+        """Returns all available ads from Railway PostgreSQL with fallback"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("SELECT * FROM custom_ads WHERE is_active = TRUE")
+                    rows = cur.fetchall()
+                    
+                    if rows:
+                        formatted_ads = []
+                        for ad in rows:
+                            formatted_ads.append({
+                                "id": ad['id'],
+                                "type": ad['ad_type'],
+                                "title": ad['title'],
+                                "headline": ad.get('headline'),
+                                "description": ad['description'],
+                                "cta": ad.get('cta', 'Learn More'),
+                                "url": ad['url'],
+                                "image": ad.get('image'),
+                                "color": ad.get('color', '#007bff')
+                            })
+                        return formatted_ads
+            except Exception as e:
+                logger.error(f"Error fetching ads from Railway PostgreSQL: {e}")
+            finally:
+                conn.close()
+        
+        # If Railway fails, DO NOT use Supabase as the user wants this isolated
+        # Use hardcoded fallback instead
+        return self._fallback_ads
 
 # Singleton instance
 evolved_lotus_api = EvolvedLotusAPI()

@@ -1206,6 +1206,31 @@ CREATE TABLE IF NOT EXISTS ad_views (
 );
 
 -- =====================================================
+-- CUSTOM ADS TABLE (EvolvedLotus Promotional Ads)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS custom_ads (
+    id TEXT PRIMARY KEY,
+    ad_type TEXT NOT NULL, -- 'blog', 'tool', etc.
+    title TEXT NOT NULL,
+    headline TEXT,
+    description TEXT,
+    cta TEXT,
+    url TEXT NOT NULL,
+    image TEXT,
+    color TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSONB DEFAULT '{}'
+);
+
+-- Insert initial ads
+INSERT INTO custom_ads (id, ad_type, title, headline, description, cta, url, image, color)
+VALUES 
+('blog_yt_2026', 'blog', 'YouTube 2026: Trends & Growth Guide', 'Is Your Strategy Ready for 2026?', 'Master the 2026 YouTube algorithm with our complete guide.', 'Read Growth Guide', 'https://blog.evolvedlotus.com/blog/2026-01-14-youtube-2026-trends-tips-and-how-to-grow-your-channel/', 'https://blog.evolvedlotus.com/assets/blog/youtube-2026-trends--tips--and-how-to-grow-your-channel.png', '#FF0000'),
+('tool_tweetcraft', 'tool', 'TweetCraft AI', 'AI-Powered Tweet Replies', 'Generate contextually relevant tweet replies in different tones instantly.', 'Try TweetCraft AI', 'https://tools.evolvedlotus.com/TwitterReplyBot/', 'https://tools.evolvedlotus.com/TwitterReplyBot/favicon.ico', '#1DA1F2')
+ON CONFLICT (id) DO NOTHING;
+
+-- =====================================================
 -- GLOBAL TASKS TABLE (Cross-Server Permanent Tasks)
 -- =====================================================
 CREATE TABLE IF NOT EXISTS global_tasks (
