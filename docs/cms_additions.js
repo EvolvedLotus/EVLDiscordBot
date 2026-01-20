@@ -44,21 +44,39 @@ async function loadServerManagement() {
 
         let html = '<div class="server-list">';
 
-        response.servers.forEach(server => {
+        // We need to fetch config for each server to get the tier
+        // This might be slow for many servers, but ok for admin panel
+        const enhancedServers = await Promise.all(response.servers.map(async (server) => {
+            try {
+                const config = await apiCall(`/api/${server.id}/config`);
+                return { ...server, tier: config.subscription_tier || 'free' };
+            } catch (e) {
+                return { ...server, tier: 'unknown' };
+            }
+        }));
+
+        enhancedServers.forEach(server => {
             const serverName = escapeHtml(server.name);
+            const tierBadge = server.tier === 'premium' ? '🏆 Premium' : '🆓 Free';
+
             html += `
                 <div class="server-item" data-server-id="${server.id}">
                     <div class="server-info">
-                        <div class="server-name">${serverName}</div>
+                        <div class="server-name">${serverName} <span class="tier-badge tier-${server.tier}">${tierBadge}</span></div>
                         <div class="server-id">ID: ${server.id}</div>
                         <div class="server-members">👥 ${server.member_count || 'N/A'} members</div>
                     </div>
                     <div class="server-actions">
+                         <button class="btn-primary" 
+                                style="padding: 5px 10px; font-size: 12px; height: auto;"
+                                onclick="updateServerTier('${server.id}', '${serverName}', '${server.tier}')">
+                            💎 Edit Tier
+                        </button>
                         <button class="btn-leave-server"
                                 data-server-id="${server.id}"
                                 data-server-name="${serverName}"
                                 title="Leave this server">
-                            🚪 Leave Server
+                            🚪 Leave
                         </button>
                     </div>
                 </div>
@@ -80,6 +98,34 @@ async function loadServerManagement() {
     } catch (error) {
         console.error('Failed to load servers:', error);
         container.innerHTML = '<div class="empty-server-list">Failed to load servers</div>';
+    }
+}
+
+async function updateServerTier(serverId, serverName, currentTier) {
+    const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
+
+    if (!newTier || (newTier !== 'free' && newTier !== 'premium')) {
+        if (newTier) alert("Invalid tier. Please enter 'free' or 'premium'.");
+        return;
+    }
+
+    if (newTier === currentTier) return;
+
+    try {
+        const response = await apiCall(`/api/${serverId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({ subscription_tier: newTier })
+        });
+
+        if (response && (response.success || response.config)) {
+            showNotification(`Updated ${serverName} to ${newTier.toUpperCase()}`, 'success');
+            loadServerManagement(); // Reload list
+        } else {
+            showNotification('Failed to update tier', 'error');
+        }
+    } catch (e) {
+        console.error("Tier update failed:", e);
+        showNotification('Error updating tier', 'error');
     }
 }
 
