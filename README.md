@@ -19,7 +19,7 @@ EVL Discord Bot is a feature-rich, multi-server Discord bot designed for communi
 - 📢 **Announcements & Embeds** - Rich embed creator with scheduling capabilities
 - 🤖 **AI Chat Integration** - Built-in AI assistant for server members
 - 📊 **Web Admin Dashboard** - Full-featured CMS for managing all bot functions
-- 💸 **Ad Reward System** - Monetag integration allowing users to earn currency by watching ads
+- 💸 **Ad Reward System** - Rotate between Monetag ads and custom EvolvedLotus promotional ads (blog posts & tools) to earn currency.
 - 🔄 **Real-time Sync** - Live updates between Discord and the web dashboard
 - 🌐 **Multi-Server Support** - Manage multiple Discord servers with isolated data
 

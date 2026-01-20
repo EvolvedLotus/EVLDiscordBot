@@ -6,6 +6,8 @@ Handles Monetag ad viewing and reward distribution for the permanent global task
 import logging
 import secrets
 import hashlib
+import random
+from core.evolved_lotus_api import evolved_lotus_api
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 
@@ -37,12 +39,21 @@ class AdClaimManager:
             # Generate unique session ID
             session_id = self._generate_session_id(user_id, guild_id)
             
+            # Decide ad type (50/50 rotation between Monetag and Custom EvolvedLotus ads)
+            ad_type = 'monetag_interstitial'
+            custom_ad = None
+            
+            if random.random() > 0.5:
+                custom_ad = evolved_lotus_api.get_random_ad()
+                ad_type = 'custom_promo'
+                logger.info(f"Selected custom ad {custom_ad['id']} for session {session_id}")
+
             # Create ad view record
             result = self.data_manager.admin_client.table('ad_views').insert({
                 'user_id': user_id,
                 'guild_id': guild_id,
                 'ad_session_id': session_id,
-                'ad_type': 'monetag_interstitial',
+                'ad_type': ad_type,
                 'is_verified': False,
                 'reward_amount': 10,
                 'reward_granted': False,
@@ -50,7 +61,8 @@ class AdClaimManager:
                 'user_agent': user_agent,
                 'metadata': {
                     'created_via': 'api',
-                    'timestamp': datetime.now(timezone.utc).isoformat()
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'custom_ad': custom_ad
                 }
             }).execute()
             

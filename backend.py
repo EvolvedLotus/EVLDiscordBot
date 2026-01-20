@@ -1902,6 +1902,36 @@ def get_ad_stats(server_id, user_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/ad-claim/session/<session_id>', methods=['GET'])
+def get_ad_session(session_id):
+    """Get ad session details for the viewer"""
+    try:
+        # Fetch from database via ad_claim_manager
+        result = data_manager.admin_client.table('ad_views') \
+            .select('*') \
+            .eq('ad_session_id', session_id) \
+            .execute()
+            
+        if not result.data:
+            return jsonify({'error': 'Session not found'}), 404
+            
+        ad_view = result.data[0]
+        
+        # Format response
+        response = {
+            'session_id': ad_view['ad_session_id'],
+            'ad_type': ad_view['ad_type'],
+            'reward_amount': ad_view['reward_amount'],
+            'is_verified': ad_view['is_verified'],
+            'custom_ad': ad_view.get('metadata', {}).get('custom_ad')
+        }
+        
+        return jsonify(response), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching ad session {session_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/global-tasks', methods=['GET'])
 def get_global_tasks():
     """Get all active global tasks (including ad claim task)"""

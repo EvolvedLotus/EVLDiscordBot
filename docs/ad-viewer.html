@@ -31,6 +31,8 @@
             width: 100%;
             padding: 40px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
         }
 
         h1 {
@@ -59,13 +61,15 @@
 
         .ad-container {
             margin: 30px 0;
-            min-height: 300px;
+            min-height: 350px;
             background: #f5f5f5;
-            border-radius: 10px;
+            border-radius: 15px;
             padding: 20px;
             display: flex;
             align-items: center;
             justify-content: center;
+            border: 2px dashed #ddd;
+            transition: all 0.3s ease;
         }
 
         .loading {
@@ -101,6 +105,7 @@
             background: #f9f9f9;
             border-radius: 10px;
             line-height: 1.6;
+            text-align: left;
         }
 
         .status-message {
@@ -108,6 +113,7 @@
             border-radius: 10px;
             margin: 20px 0;
             font-size: 1.1em;
+            transition: all 0.3s ease;
         }
 
         .status-success {
@@ -141,7 +147,7 @@
             margin-top: 20px;
         }
 
-        .verify-button:hover {
+        .verify-button:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
         }
@@ -150,15 +156,97 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
+
+        /* Custom Promo Styles */
+        .custom-promo {
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+            padding: 20px;
+        }
+
+        .promo-tag {
+            background: #e9ecef;
+            color: #495057;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            display: inline-block;
+        }
+
+        .promo-header {
+            font-size: 2em;
+            color: #333;
+            margin-bottom: 15px;
+            line-height: 1.2;
+        }
+
+        .promo-image {
+            width: 100%;
+            max-height: 250px;
+            object-fit: contain;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .promo-description {
+            font-size: 1.1em;
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 25px;
+        }
+
+        .promo-cta-btn {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            padding: 12px 30px;
+            border-radius: 30px;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .timer-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .timer-bar-bg {
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .timer-bar-fill {
+            width: 100%;
+            height: 100%;
+            background: #28a745;
+            transition: width 1s linear;
+        }
+
+        .timer-text {
+            font-weight: bold;
+            color: #333;
+        }
     </style>
 </head>
 
 <body>
     <div class="container">
-        <h1>🎁 Watch Ad & Earn!</h1>
-        <p class="subtitle">Watch the ad below to earn your reward</p>
+        <h1 id="pageTitle">🎁 Watch Ad & Earn!</h1>
+        <p id="pageSubtitle" class="subtitle">Watch the ad below to earn your reward</p>
 
-        <div class="reward-badge">
+        <div class="reward-badge" id="rewardBadge">
             +10 Points
         </div>
 
@@ -171,15 +259,22 @@
             </div>
         </div>
 
+        <div id="timerContainer" class="timer-container" style="display: none;">
+            <p class="timer-text">Reward unlock in: <span id="secondsRemaining">30</span>s</p>
+            <div class="timer-bar-bg">
+                <div id="timerBarFill" class="timer-bar-fill"></div>
+            </div>
+        </div>
+
         <button id="verifyButton" class="verify-button" style="display: none;" disabled>
             Claim Reward
         </button>
 
-        <div class="disclaimer">
-            <strong>Disclaimer:</strong> Please note that the ads displayed are from third-party networks (like
-            Monetag).
-            We have no control over the content of these advertisements and are not affiliated with, nor do we endorse,
-            any claims made within them.
+        <div class="disclaimer" id="adDisclaimer">
+            <strong>Disclaimer:</strong> Please note that the ads displayed are from third-party networks or our own
+            promotions.
+            We have no control over third-party content. For our own promotions, we aim to provide valuable content and
+            tools.
         </div>
     </div>
 
@@ -190,6 +285,7 @@
         // Get session ID from URL
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session');
+        let currentAdData = null;
 
         if (!sessionId) {
             showStatus('error', 'Invalid session. Please try again from Discord.');
@@ -203,53 +299,133 @@
             statusDiv.textContent = message;
         }
 
-        function initializeAdViewer() {
-            // Show loading message
-            showStatus('info', 'Loading ad... Please wait.');
+        async function initializeAdViewer() {
+            showStatus('info', 'Loading ad session... Please wait.');
+
+            try {
+                // Fetch the ad session details from the backend
+                const response = await fetch(`/api/ad-claim/session/${sessionId}`);
+                if (!response.ok) throw new Error('Failed to fetch session');
+
+                const data = await response.json();
+                currentAdData = data;
+
+                if (data.is_verified) {
+                    showStatus('success', 'You have already claimed the reward for this session.');
+                    document.getElementById('adContainer').innerHTML = `
+                        <div style="padding: 40px; text-align: center;">
+                            <h2 style="color: #4caf50; margin-bottom: 20px;">✅ Already Claimed</h2>
+                            <p>This reward has already been issued to your account.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                if (data.ad_type === 'custom_promo' && data.custom_ad) {
+                    displayCustomAd(data.custom_ad);
+                } else {
+                    displayMonetagAd();
+                }
+            } catch (error) {
+                console.error('Error initializing ad:', error);
+                showStatus('error', 'Failed to load ad. Please try again later.');
+                document.getElementById('adContainer').innerHTML = `
+                    <div style="padding: 40px; text-align: center;">
+                        <h2 style="color: #f44336; margin-bottom: 20px;">⚠️ Connection Error</h2>
+                        <p>Could not connect to the ad server.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayMonetagAd() {
+            showStatus('info', 'Loading Monetag ad...');
 
             // Trigger Monetag Rewarded Interstitial
             // Pass the session ID as ymid for tracking
-            show_9376937({ ymid: sessionId }).then((result) => {
-                // Ad was successfully shown and completed
-                console.log('Monetag ad completed:', result);
+            if (typeof show_9376937 === 'function') {
+                show_9376937({ ymid: sessionId }).then((result) => {
+                    console.log('Monetag ad completed:', result);
+                    handleAdCompletion();
+                }).catch((error) => {
+                    console.error('Monetag ad error:', error);
+                    showStatus('error', 'The ad failed to load. Please try again later.');
+                    document.getElementById('adContainer').innerHTML = `
+                        <div style="padding: 40px; text-align: center;">
+                            <h2 style="color: #f44336; margin-bottom: 20px;">⚠️ Ad Not Available</h2>
+                            <p>Third-party ad could not be loaded at this time.</p>
+                        </div>
+                    `;
+                });
+            } else {
+                showStatus('error', 'Monetag SDK not loaded. Please disable ad-blockers.');
+            }
+        }
 
-                // Update UI to show ad was watched
-                document.getElementById('adContainer').innerHTML = `
-                    <div style="padding: 40px; text-align: center;">
-                        <h2 style="color: #4caf50; margin-bottom: 20px;">✅ Ad Completed!</h2>
-                        <p style="color: #666; margin-bottom: 20px;">
-                            Thank you for watching the ad!
-                        </p>
-                        <p style="color: #999; font-size: 0.9em;">
-                            Click the button below to claim your reward.
-                        </p>
-                    </div>
-                `;
+        function displayCustomAd(ad) {
+            showStatus('success', 'EvolvedLotus Recommendation');
 
-                // Enable claim button immediately
-                const verifyButton = document.getElementById('verifyButton');
-                verifyButton.style.display = 'inline-block';
-                verifyButton.disabled = false;
-                showStatus('success', 'Ad viewed successfully! Click below to claim your 10 points.');
+            const adHtml = `
+                <div class="custom-promo">
+                    <div class="promo-tag">${ad.type} Promotion</div>
+                    <h2 class="promo-header">${ad.headline || ad.title}</h2>
+                    ${ad.image ? `<img src="${ad.image}" class="promo-image" alt="${ad.title}">` : ''}
+                    <p class="promo-description">${ad.description}</p>
+                    <a href="${ad.url}" target="_blank" class="promo-cta-btn" style="background-color: ${ad.color || '#007bff'}">
+                        ${ad.cta}
+                    </a>
+                </div>
+            `;
 
-            }).catch((error) => {
-                // Ad failed to load or was skipped
-                console.error('Monetag ad error:', error);
+            document.getElementById('adContainer').innerHTML = adHtml;
+            document.getElementById('adContainer').style.border = `2px solid ${ad.color || '#007bff'}`;
 
-                document.getElementById('adContainer').innerHTML = `
-                    <div style="padding: 40px; text-align: center;">
-                        <h2 style="color: #f44336; margin-bottom: 20px;">⚠️ Ad Not Available</h2>
-                        <p style="color: #666; margin-bottom: 20px;">
-                            The ad could not be loaded at this time.
-                        </p>
-                        <p style="color: #999; font-size: 0.9em;">
-                            Please try again later or contact support if this persists.
-                        </p>
-                    </div>
-                `;
+            // Start the timer
+            startCustomAdTimer(30);
+        }
 
-                showStatus('error', 'Ad failed to load. Please try again later.');
-            });
+        function startCustomAdTimer(seconds) {
+            const timerContainer = document.getElementById('timerContainer');
+            const secondsText = document.getElementById('secondsRemaining');
+            const timerBarFill = document.getElementById('timerBarFill');
+
+            timerContainer.style.display = 'block';
+            let remaining = seconds;
+
+            const interval = setInterval(() => {
+                remaining--;
+                secondsText.textContent = remaining;
+
+                const percent = (remaining / seconds) * 100;
+                timerBarFill.style.width = `${percent}%`;
+
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    timerContainer.style.display = 'none';
+                    handleAdCompletion();
+                }
+            }, 1000);
+        }
+
+        function handleAdCompletion() {
+            // Update UI to show ad was watched
+            document.getElementById('adContainer').innerHTML = `
+                <div style="padding: 40px; text-align: center;">
+                    <h2 style="color: #4caf50; margin-bottom: 20px;">✅ Promotion Completed!</h2>
+                    <p style="color: #666; margin-bottom: 20px;">
+                        Thank you for your attention!
+                    </p>
+                    <p style="color: #999; font-size: 0.9em;">
+                        Click the button below to claim your reward.
+                    </p>
+                </div>
+            `;
+
+            // Enable claim button
+            const verifyButton = document.getElementById('verifyButton');
+            verifyButton.style.display = 'inline-block';
+            verifyButton.disabled = false;
+            showStatus('success', 'Reward unlocked! You can now claim your 10 points.');
         }
 
         document.getElementById('verifyButton').addEventListener('click', async () => {

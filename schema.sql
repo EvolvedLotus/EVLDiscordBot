@@ -1202,7 +1202,7 @@ CREATE TABLE IF NOT EXISTS ad_views (
     
     -- Metadata
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    metadata JSONB DEFAULT '{}'
+    metadata JSONB DEFAULT '{}' -- Stores custom_ad data for 'custom_promo' type
 );
 
 -- =====================================================
