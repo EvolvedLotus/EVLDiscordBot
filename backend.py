@@ -230,6 +230,27 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️  Some managers not available: {e}")
 
+# Global bot instance reference
+_bot_instance = None
+
+def set_bot_instance(bot):
+    """Set the global bot instance"""
+    global _bot_instance
+    _bot_instance = bot
+    # Update managers that need bot reference
+    if announcement_manager:
+        announcement_manager.set_bot(bot)
+    logger.info("✅ Bot instance attached to backend")
+
+def set_data_manager(dm):
+    """Set the global data manager (called from bot.py)"""
+    global data_manager
+    data_manager = dm
+    # Update dependent managers
+    if auth_manager:
+        auth_manager.data_manager = dm
+    logger.info("✅ Data manager updated from bot")
+
 # Bot communication functions for Railway internal networking
 def get_bot_webhook_url():
     """Get the bot webhook URL for Railway internal communication"""
@@ -1143,6 +1164,11 @@ def create_embed(server_id):
         embed_data = embed_builder.create_embed(server_id, data)
         
         # Save to database
+        # Prepare JSONB fields
+        footer_data = {'text': embed_data.get('footer')} if embed_data.get('footer') else None
+        thumbnail_data = {'url': embed_data.get('thumbnail_url')} if embed_data.get('thumbnail_url') else None
+        image_data = {'url': embed_data.get('image_url')} if embed_data.get('image_url') else None
+
         data_manager.admin_client.table('embeds').upsert({
             'embed_id': embed_data['embed_id'],
             'guild_id': str(server_id),
@@ -1150,9 +1176,9 @@ def create_embed(server_id):
             'description': embed_data.get('description'),
             'color': embed_data.get('color'),
             'fields': embed_data.get('fields', []),
-            'footer': embed_data.get('footer'),
-            'thumbnail': embed_data.get('thumbnail_url'),
-            'image': embed_data.get('image_url'),
+            'footer': footer_data,
+            'thumbnail': thumbnail_data,
+            'image': image_data,
             'channel_id': embed_data.get('channel_id'),
             'created_by': request.user.get('id', 'unknown'),
             'created_at': embed_data['created_at']
@@ -1919,6 +1945,14 @@ def not_found(e):
 def internal_error(e):
     logger.error(f"Internal error: {e}")
     return jsonify({'error': 'Internal server error'}), 500
+
+# ========== STARTUP ==========
+def run_backend():
+    """Run the Flask app (called from railway_start.py)"""
+    port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting Flask on 0.0.0.0:{port}")
+    # Disable debug mode and reloader to prevent main thread issues
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 # ========== STARTUP ==========
 if __name__ == '__main__':
