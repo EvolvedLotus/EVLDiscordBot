@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 import asyncio
 from threading import Thread
 import hashlib
+import hmac
 import secrets
 import json
 from functools import wraps
@@ -478,9 +479,9 @@ def whop_webhook():
                 ).hexdigest()
                 
                 # Check if the header matches directly or contains the signature
-                if signature != computed_sig:
+                if not hmac.compare_digest(signature, computed_sig):
                      logger.warning(f"Invalid Whop signature. Received: {signature}, Computed: {computed_sig}")
-                     # return jsonify({'error': 'Invalid signature'}), 401 # Uncomment to enforce
+                     # return jsonify({'error': 'Invalid signature'}), 401 # Uncomment to enforce after confirming production format
             except Exception as sig_error:
                 logger.error(f"Error verifying signature: {sig_error}")
 

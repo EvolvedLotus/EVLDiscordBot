@@ -170,6 +170,7 @@
             margin-bottom: 8px;
             background: linear-gradient(to right, #fff, #ffffffaa);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
@@ -400,9 +401,8 @@
         const whopBtn = document.getElementById('whop-btn');
 
         if (guildId && whopBtn) {
-            // If we have a guild ID, we can link directly to a checkout or specific plan
-            // or just append it as metadata if the store supports it
-            whopBtn.href = `https://whop.com/checkout/prod_I2gZHaMIztbL9?d2c=true&metadata[guild_id]=${guildId}`;
+            // Updated to use the general store URL with metadata as requested (not a specific product)
+            whopBtn.href = `https://whop.com/evolvedlotus?d2c=true&metadata[guild_id]=${guildId}`;
             whopBtn.innerHTML = "Get Premium for your Server";
         }
     </script>

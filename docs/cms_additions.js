@@ -238,13 +238,13 @@ function upgradeToPremium() {
         return;
     }
 
-    // Opens Whop checkout with guild_id metadata
-    // Product: EVL Premium (Growth Insider) - prod_I2gZHaMIztbL9
-    // We attach the guild_id so the webhook knows which server to upgrade
-    const checkoutUrl = `https://whop.com/checkout/prod_I2gZHaMIztbL9?d2c=true&metadata[guild_id]=${selectedServerId}`;
+    // Link to the newly created Promo Card / Link Preview page
+    // This page showcases features and hints at premium before going to Whop
+    const baseUrl = window.location.href.split('index.html')[0];
+    const previewUrl = `${baseUrl}store-preview.html?guild_id=${selectedServerId}`;
 
     // Open in new tab
-    window.open(checkoutUrl, '_blank');
+    window.open(previewUrl, '_blank');
 }
 // Whop & Promo Integration Helpers
 function populateWhopInfo() {
