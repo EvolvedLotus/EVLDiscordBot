@@ -1443,6 +1443,69 @@ def get_discord_message(server_id, channel_id, message_id):
         logger.error(f"Error in get_discord_message: {e}")
         return safe_error_response(e)
 
+@app.route('/api/<server_id>/messages/<channel_id>/<message_id>', methods=['PATCH', 'PUT'])
+@require_guild_access
+def edit_discord_message(server_id, channel_id, message_id):
+    """Edit an existing message in Discord"""
+    try:
+        if not _bot_instance:
+            return jsonify({'error': 'Bot instance not available'}), 503
+            
+        data = request.get_json()
+        
+        async def edit_message():
+            guild = _bot_instance.get_guild(int(server_id))
+            if not guild:
+                return {'error': 'Guild not found'}, 404
+                
+            channel = guild.get_channel(int(channel_id))
+            if not channel:
+                return {'error': 'Channel not found'}, 404
+                
+            try:
+                message = await channel.fetch_message(int(message_id))
+                
+                # Format embed from data
+                import discord
+                # Handle possible color formats
+                color_val = data.get('color', '#5865F2')
+                if isinstance(color_val, str) and color_val.startswith('#'):
+                    color_int = int(color_val.strip('#'), 16)
+                else:
+                    color_int = int(color_val) if color_val else 0x5865F2
+
+                embed = discord.Embed(
+                    title=data.get('title'),
+                    description=data.get('description'),
+                    color=color_int
+                )
+                
+                if data.get('footer'):
+                    footer_text = data['footer']
+                    if isinstance(footer_text, dict):
+                        footer_text = footer_text.get('text', '')
+                    embed.set_footer(text=footer_text)
+                if data.get('image_url'):
+                    embed.set_image(url=data.get('image_url'))
+                if data.get('thumbnail_url'):
+                    embed.set_thumbnail(url=data.get('thumbnail_url'))
+                    
+                await message.edit(embed=embed)
+                return {'success': True, 'message': 'Message edited successfully'}, 200
+            except Exception as e:
+                logger.error(f"Error editing message {message_id}: {e}")
+                return {'error': f'Failed to edit message: {str(e)}'}, 404
+
+        # Run async function in bot's loop
+        import asyncio
+        future = asyncio.run_coroutine_threadsafe(edit_message(), _bot_instance.loop)
+        result, status = future.result(timeout=10)
+        
+        return jsonify(result), status
+    except Exception as e:
+        logger.error(f"Error in edit_discord_message: {e}")
+        return safe_error_response(e)
+
 # ========== MODERATION ENDPOINTS ==========
 @app.route('/api/<server_id>/admin/cache/clear', methods=['POST'])
 @require_guild_access

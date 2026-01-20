@@ -271,6 +271,68 @@
         }
     };
 
+    // Store original saveEmbed to call if not editing message
+    const originalSaveEmbed = window.saveEmbed;
+    window.saveEmbed = async function (event) {
+        const messageId = document.getElementById('embed-id').dataset.messageId;
+        const channelId = document.getElementById('embed-id').dataset.channelId;
+
+        // If not editing a specific Discord message, use original saving logic
+        if (!messageId || !channelId) {
+            if (typeof originalSaveEmbed === 'function') {
+                return originalSaveEmbed(event);
+            } else if (typeof window.saveEmbed === 'function' && window.saveEmbed !== this) {
+                // Try again if it was overwritten
+                return window.saveEmbed(event);
+            }
+            // Fallback to custom save if original not found
+            showNotification('Saving to database...', 'info');
+        }
+
+        if (event) event.preventDefault();
+
+        const embedData = {
+            title: document.getElementById('embed-title').value,
+            description: document.getElementById('embed-description').value,
+            color: document.getElementById('embed-color').value,
+            footer: document.getElementById('embed-footer').value,
+            image_url: document.getElementById('embed-image-url').value,
+            thumbnail_url: document.getElementById('embed-thumbnail-url').value
+        };
+
+        try {
+            if (messageId && channelId) {
+                showNotification('Updating message in Discord...', 'info');
+                await apiCall(`/api/${window.currentServerId}/messages/${channelId}/${messageId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(embedData)
+                });
+                showNotification('Discord message updated successfully!', 'success');
+                closeEmbedModal();
+            } else {
+                // Standard save logic if originalSaveEmbed failed
+                const embedId = document.getElementById('embed-id').value;
+                if (embedId) {
+                    await apiCall(`/api/${window.currentServerId}/embeds/${embedId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(embedData)
+                    });
+                } else {
+                    await apiCall(`/api/${window.currentServerId}/embeds`, {
+                        method: 'POST',
+                        body: JSON.stringify(embedData)
+                    });
+                }
+                showNotification('Embed saved to database', 'success');
+                closeEmbedModal();
+                if (typeof loadEmbeds === 'function') loadEmbeds();
+            }
+        } catch (error) {
+            console.error('Save embed error:', error);
+            showNotification('Failed to save embed: ' + error.message, 'error');
+        }
+    };
+
     // ========== HELPER FUNCTIONS ==========
 
     function escapeHtml(text) {
