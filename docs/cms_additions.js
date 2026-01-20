@@ -227,3 +227,22 @@ if (typeof loadConfigTab === 'function') {
         }
     });
 }
+
+// Upgrade to Premium functionality
+function upgradeToPremium() {
+    const serverSelect = document.getElementById('server-select');
+    const selectedServerId = serverSelect ? serverSelect.value : null;
+
+    if (!selectedServerId) {
+        showNotification("Please select a server to upgrade.", "warning");
+        return;
+    }
+
+    // Opens Whop checkout with guild_id metadata
+    // Product: EVL Premium (Growth Insider) - prod_I2gZHaMIztbL9
+    // We attach the guild_id so the webhook knows which server to upgrade
+    const checkoutUrl = `https://whop.com/checkout/prod_I2gZHaMIztbL9?d2c=true&metadata[guild_id]=${selectedServerId}`;
+
+    // Open in new tab
+    window.open(checkoutUrl, '_blank');
+}
