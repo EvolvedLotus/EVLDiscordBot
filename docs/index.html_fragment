@@ -1,0 +1,72 @@
+                </div>
+            </div>
+
+            <!-- Bot Status Section -->
+            <div id="bot-status-section" class="content-area" style="margin-top: 20px; display: none;">
+                <h3>🤖 Bot Status Configuration</h3>
+                <div class="bot-status-control">
+                    <div class="form-group">
+                        <label for="bot-status-type">Status Type:</label>
+                        <select id="bot-status-type" name="bot_status_type" class="form-control">
+                            <option value="playing">Playing</option>
+                            <option value="watching">Watching</option>
+                            <option value="listening">Listening to</option>
+                            <option value="competing">Competing in</option>
+                            <option value="streaming">Streaming</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="bot-status-message">Status Message:</label>
+                        <input type="text" id="bot-status-message" name="bot_status_message" maxlength="128"
+                            placeholder="Enter custom status message" class="form-control">
+                        <small>Max 128 characters. Example: "with the economy" or "your requests"</small>
+                    </div>
+
+                    <button type="button" onclick="updateBotStatus()" class="btn-primary">Update Bot Status</button>
+                    <div id="bot-status-preview" class="status-preview">
+                        <strong>Preview:</strong> <span id="status-preview-text"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Whop Integration Section -->
+            <div id="whop-info-section" class="content-area" style="margin-top: 20px; display: none;">
+                <h3>🔗 Whop & Promo Integration</h3>
+                <div class="card"
+                    style="background: var(--bg-secondary); border: 1px solid var(--border-secondary); padding: 15px; border-radius: 8px;">
+                    <div class="form-group">
+                        <label>Whop Webhook URL:</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="whop-webhook-url" class="form-control" readonly
+                                style="background: var(--bg-tertiary); cursor: text;">
+                            <button onclick="copyToClipboard('whop-webhook-url')" class="btn-secondary">Copy</button>
+                        </div>
+                        <small>Paste this into Whop Developer Dashboard -> Webhooks</small>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label>Store Promo Card (Link Preview):</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="promo-card-url" class="form-control" readonly
+                                style="background: var(--bg-tertiary); cursor: text;">
+                            <button onclick="copyToClipboard('promo-card-url')" class="btn-secondary">Copy</button>
+                        </div>
+                        <small>This page is optimized for Discord/Whop link previews with premium teasers.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EVL API Configuration Section -->
+            <div id="api-clients-section" class="content-area" style="margin-top: 20px; display: none;">
+                <h3>🔌 EVL API Configuration</h3>
+                <div class="card"
+                    style="background: var(--bg-secondary); border: 1px solid var(--border-secondary); padding: 15px; border-radius: 8px;">
+                    <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;">Manage priorities and weights for
+                        platforms using the EVL API.</p>
+                    <div id="api-clients-list">
+                        <!-- Populated via JS -->
+                        <div class="loading">Loading API clients...</div>
+                    </div>
+                </div>
+            </div>
+        </div>

@@ -281,6 +281,83 @@ function populateWhopInfo() {
             promoInput.value += `?guild_id=${currentServerId}`;
         }
     }
+
+    populateApiClients();
+}
+
+async function populateApiClients() {
+    const section = document.getElementById('api-clients-section');
+    const list = document.getElementById('api-clients-list');
+    if (!section || !list) return;
+
+    // SECURITY CHECK: Matches populateWhopInfo
+    const isSuperAdmin = currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin === true);
+    if (!isSuperAdmin) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+
+    try {
+        const data = await apiCall('/api/admin/ad-clients');
+        if (!data || !data.clients) {
+            list.innerHTML = '<p>No API clients found.</p>';
+            return;
+        }
+
+        let html = '<div class="api-clients-grid">';
+        data.clients.forEach(client => {
+            html += `
+                <div class="api-client-card" style="margin-bottom: 15px; border-bottom: 1px solid var(--border-secondary); padding-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <strong>${client.name} (${client.client_id})</strong>
+                        <span class="status-badge" style="background: ${client.is_active ? '#43b581' : '#f04747'}">
+                            ${client.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label style="font-size: 11px;">Priority (Higher = Sooner)</label>
+                            <input type="number" id="client-priority-${client.client_id}" value="${client.priority}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size: 11px;">Weight (Higher = More frequent)</label>
+                            <input type="number" id="client-weight-${client.client_id}" value="${client.weight}" class="form-control">
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px; text-align: right;">
+                        <button onclick="updateApiClient('${client.client_id}')" class="btn-primary btn-small">Update Settings</button>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        list.innerHTML = html;
+    } catch (e) {
+        console.error("Failed to load API clients:", e);
+        list.innerHTML = '<p class="error">Failed to load API clients.</p>';
+    }
+}
+
+async function updateApiClient(clientId) {
+    const priority = parseInt(document.getElementById(`client-priority-${clientId}`).value);
+    const weight = parseInt(document.getElementById(`client-weight-${clientId}`).value);
+
+    try {
+        const result = await apiCall(`/api/admin/ad-clients/${clientId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ priority, weight })
+        });
+
+        if (result && result.success) {
+            showNotification(`Updated ${clientId} successfully`, 'success');
+            populateApiClients();
+        }
+    } catch (e) {
+        console.error(`Failed to update client ${clientId}:`, e);
+        showNotification(`Failed to update ${clientId}`, 'error');
+    }
 }
 
 function copyToClipboard(elementId) {

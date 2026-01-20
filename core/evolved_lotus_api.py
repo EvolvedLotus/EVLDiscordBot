@@ -55,11 +55,30 @@ class EvolvedLotusAPI:
             logger.error(f"Failed to connect to Railway PostgreSQL: {e}")
             return None
 
-    def get_random_ad(self) -> Dict:
+    def get_random_ad(self, client_id: Optional[str] = None) -> Dict:
         """Returns a random ad from the pool (prefers Railway DB)"""
+        if client_id:
+            self.track_client_request(client_id)
+            
         ads = self.get_all_ads()
         return random.choice(ads) if ads else random.choice(self._fallback_ads)
     
+    def track_client_request(self, client_id: str):
+        """Update last_request_at for a client"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE ad_clients SET last_request_at = NOW() WHERE client_id = %s",
+                        (client_id,)
+                    )
+                conn.commit()
+            except Exception as e:
+                logger.error(f"Error tracking client request {client_id}: {e}")
+            finally:
+                conn.close()
+
     def get_all_ads(self) -> List[Dict]:
         """Returns all available ads from Railway PostgreSQL with fallback"""
         conn = self._get_db_connection()
@@ -92,6 +111,47 @@ class EvolvedLotusAPI:
         # If Railway fails, DO NOT use Supabase as the user wants this isolated
         # Use hardcoded fallback instead
         return self._fallback_ads
+
+    def get_ad_clients(self) -> List[Dict]:
+        """Get all registered ad clients"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute("SELECT * FROM ad_clients ORDER BY priority DESC, weight DESC")
+                    return cur.fetchall()
+            except Exception as e:
+                logger.error(f"Error fetching ad clients: {e}")
+            finally:
+                conn.close()
+        return []
+
+    def update_ad_client(self, client_id: str, data: Dict) -> bool:
+        """Update ad client settings"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    fields = []
+                    params = []
+                    for key in ['name', 'priority', 'weight', 'is_active']:
+                        if key in data:
+                            fields.append(f"{key} = %s")
+                            params.append(data[key])
+                    
+                    if not fields:
+                        return True
+                        
+                    params.append(client_id)
+                    query = f"UPDATE ad_clients SET {', '.join(fields)} WHERE client_id = %s"
+                    cur.execute(query, tuple(params))
+                conn.commit()
+                return True
+            except Exception as e:
+                logger.error(f"Error updating ad client {client_id}: {e}")
+            finally:
+                conn.close()
+        return False
 
 # Singleton instance
 evolved_lotus_api = EvolvedLotusAPI()

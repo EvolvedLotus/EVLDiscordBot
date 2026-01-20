@@ -430,6 +430,7 @@ def get_status():
 def get_ad():
     """Get a random ad from EvolvedLotus API"""
     try:
+        client_id = request.args.get('client_id')
         if 'evolved_lotus_api' not in globals() or evolved_lotus_api is None:
              # Fallback if module failed to load
              return jsonify({
@@ -440,10 +441,49 @@ def get_ad():
                  "color": "#7289da"
              })
 
-        ad = evolved_lotus_api.get_random_ad()
+        ad = evolved_lotus_api.get_random_ad(client_id=client_id)
         return jsonify(ad)
     except Exception as e:
         logger.error(f"Error fetching ad: {e}")
+        return safe_error_response(e)
+
+# ========== AD API CONFIGURATION (MASTER LOGIN ONLY) ==========
+@app.route('/api/admin/ad-clients', methods=['GET'])
+@require_auth
+def get_ad_clients():
+    """Get all ad clients (Master Login Only)"""
+    user = request.user
+    if not (user.get('is_superadmin') or user.get('role') == 'superadmin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    try:
+        if 'evolved_lotus_api' not in globals() or evolved_lotus_api is None:
+            return jsonify({'error': 'EvolvedLotus API not initialized'}), 503
+            
+        clients = evolved_lotus_api.get_ad_clients()
+        return jsonify({'clients': clients}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/admin/ad-clients/<client_id>', methods=['PUT'])
+@require_auth
+def update_ad_client(client_id):
+    """Update ad client priority/weight (Master Login Only)"""
+    user = request.user
+    if not (user.get('is_superadmin') or user.get('role') == 'superadmin'):
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    try:
+        data = request.get_json()
+        if 'evolved_lotus_api' not in globals() or evolved_lotus_api is None:
+            return jsonify({'error': 'EvolvedLotus API not initialized'}), 503
+            
+        success = evolved_lotus_api.update_ad_client(client_id, data)
+        if success:
+            return jsonify({'success': True}), 200
+        else:
+            return jsonify({'error': 'Failed to update client'}), 500
+    except Exception as e:
         return safe_error_response(e)
 
 @app.route('/api/webhooks/whop', methods=['POST'])

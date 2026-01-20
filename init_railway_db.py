@@ -33,6 +33,19 @@ def init_db():
                     metadata JSONB DEFAULT '{}'
                 );
             """)
+
+            logger.info("Creating ad_clients table...")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS ad_clients (
+                    client_id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    priority INTEGER DEFAULT 1,
+                    weight INTEGER DEFAULT 10,
+                    is_active BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                    last_request_at TIMESTAMP WITH TIME ZONE
+                );
+            """)
             
             logger.info("Inserting initial ads...")
             cur.execute("""
@@ -41,6 +54,16 @@ def init_db():
                 ('blog_yt_2026', 'blog', 'YouTube 2026: Trends & Growth Guide', 'Is Your Strategy Ready for 2026?', 'Master the 2026 YouTube algorithm with our complete guide.', 'Read Growth Guide', 'https://blog.evolvedlotus.com/blog/2026-01-14-youtube-2026-trends-tips-and-how-to-grow-your-channel/', 'https://blog.evolvedlotus.com/assets/blog/youtube-2026-trends--tips--and-how-to-grow-your-channel.png', '#FF0000'),
                 ('tool_tweetcraft', 'tool', 'TweetCraft AI', 'AI-Powered Tweet Replies', 'Generate contextually relevant tweet replies in different tones instantly.', 'Try TweetCraft AI', 'https://tools.evolvedlotus.com/twitterreplybot/', 'https://tools.evolvedlotus.com/twitterreplybot/favicon.ico', '#1DA1F2')
                 ON CONFLICT (id) DO NOTHING;
+            """)
+
+            logger.info("Inserting initial ad clients...")
+            cur.execute("""
+                INSERT INTO ad_clients (client_id, name, priority, weight)
+                VALUES 
+                ('tools', 'EVL Tools', 1, 40),
+                ('blog', 'EVL Blog', 1, 30),
+                ('main', 'Main Website', 2, 30)
+                ON CONFLICT (client_id) DO NOTHING;
             """)
             logger.info("✅ Database initialized successfully")
         conn.close()
