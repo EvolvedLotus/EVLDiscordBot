@@ -429,6 +429,16 @@ def get_status():
 def get_ad():
     """Get a random ad from EvolvedLotus API"""
     try:
+        if 'evolved_lotus_api' not in globals() or evolved_lotus_api is None:
+             # Fallback if module failed to load
+             return jsonify({
+                 "title": "EvolvedLotus Ads",
+                 "description": "Promote your content here!",
+                 "cta": "Contact Us",
+                 "url": "https://evolvedlotus.com",
+                 "color": "#7289da"
+             })
+
         ad = evolved_lotus_api.get_random_ad()
         return jsonify(ad)
     except Exception as e:
