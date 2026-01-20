@@ -462,9 +462,8 @@ def login():
             return jsonify({'error': 'Invalid username or password'}), 401
 
         # Create session
-        # Ensure we pass the ID correctly regardless of user object source
-        uid = user.get('id') or user.get('user_id')
-        session_token = auth_manager.create_session(uid)
+        # Pass the full user object to create_session (it expects user_data dict, not just ID)
+        session_token = auth_manager.create_session(user)
 
         # Create response
         response = make_response(jsonify({
