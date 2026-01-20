@@ -90,6 +90,9 @@ class Config:
             return [
                 'https://evolvedlotus.github.io',
                 'https://evolvedlotus.github.io/EVLDiscordBot',
+                'https://blog.evolvedlotus.com',
+                'https://evolvedlotus.com',
+                'https://tools.evolvedlotus.com',
             ]
         else:
             return [
@@ -98,6 +101,8 @@ class Config:
                 'http://127.0.0.1:3000',
                 'http://127.0.0.1:5000',
                 'https://evolvedlotus.github.io',
+                'https://blog.evolvedlotus.com',
+                'https://evolvedlotus.com',
             ]
 
     def _validate_config(self):
