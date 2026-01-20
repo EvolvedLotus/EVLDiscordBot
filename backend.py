@@ -1383,6 +1383,66 @@ def update_bot_status(server_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/<server_id>/messages/<channel_id>/<message_id>', methods=['GET'])
+@require_guild_access
+def get_discord_message(server_id, channel_id, message_id):
+    """Fetch a message from Discord to extract its content/embeds"""
+    try:
+        if not _bot_instance:
+            return jsonify({'error': 'Bot instance not available'}), 503
+            
+        async def fetch_message():
+            guild = _bot_instance.get_guild(int(server_id))
+            if not guild:
+                return {'error': 'Guild not found'}, 404
+                
+            channel = guild.get_channel(int(channel_id))
+            if not channel:
+                return {'error': 'Channel not found'}, 404
+                
+            try:
+                message = await channel.fetch_message(int(message_id))
+                
+                # Format embeds for frontend
+                embeds = []
+                for embed in message.embeds:
+                    embed_dict = {
+                        'title': embed.title,
+                        'description': embed.description,
+                        'color': embed.color.value if embed.color else None,
+                        'fields': [{'name': f.name, 'value': f.value, 'inline': f.inline} for f in embed.fields],
+                        'footer': {'text': embed.footer.text, 'icon_url': embed.footer.icon_url} if embed.footer else None,
+                        'image': {'url': embed.image.url} if embed.image else None,
+                        'thumbnail': {'url': embed.thumbnail.url} if embed.thumbnail else None,
+                        'author': {'name': embed.author.name, 'url': embed.author.url, 'icon_url': embed.author.icon_url} if embed.author else None
+                    }
+                    embeds.append(embed_dict)
+                    
+                return {
+                    'id': str(message.id),
+                    'content': message.content,
+                    'author': {
+                        'id': str(message.author.id),
+                        'username': message.author.name,
+                        'avatar': str(message.author.display_avatar.url) if message.author.display_avatar else None
+                    },
+                    'embeds': embeds,
+                    'created_at': message.created_at.isoformat()
+                }, 200
+            except Exception as e:
+                logger.error(f"Error fetching message {message_id}: {e}")
+                return {'error': f'Failed to fetch message: {str(e)}'}, 404
+
+        # Run async function in bot's loop
+        import asyncio
+        future = asyncio.run_coroutine_threadsafe(fetch_message(), _bot_instance.loop)
+        result, status = future.result(timeout=10)
+        
+        return jsonify(result), status
+    except Exception as e:
+        logger.error(f"Error in get_discord_message: {e}")
+        return safe_error_response(e)
+
 # ========== MODERATION ENDPOINTS ==========
 @app.route('/api/<server_id>/admin/cache/clear', methods=['POST'])
 @require_guild_access
