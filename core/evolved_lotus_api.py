@@ -4,6 +4,7 @@ import os
 import psycopg2
 import json
 import urllib.request
+import requests
 from psycopg2.extras import RealDictCursor
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
@@ -94,20 +95,20 @@ class EvolvedLotusAPI:
                 return self._blog_cache
         
         try:
-            with urllib.request.urlopen(self.blog_api_url, timeout=10) as response:
-                if response.status == 200:
-                    data = json.loads(response.read().decode('utf-8'))
-                    # The API uses 'blog' as the key for blog posts
-                    posts = data.get('blog', data.get('posts', data)) if isinstance(data, dict) else data
-                    
-                    # Filter out drafts and sort by date (newest first)
-                    active_posts = [p for p in posts if not p.get('draft', False)]
-                    active_posts.sort(key=lambda x: x.get('date', ''), reverse=True)
-                    
-                    self._blog_cache = active_posts
-                    self._blog_cache_time = now
-                    logger.info(f"📝 Fetched {len(active_posts)} blog posts for rotation")
-                    return active_posts
+            response = requests.get(self.blog_api_url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                # The API uses 'blog' as the key for blog posts
+                posts = data.get('blog', data.get('posts', data)) if isinstance(data, dict) else data
+                
+                # Filter out drafts and sort by date (newest first)
+                active_posts = [p for p in posts if not p.get('draft', False)]
+                active_posts.sort(key=lambda x: x.get('date', ''), reverse=True)
+                
+                self._blog_cache = active_posts
+                self._blog_cache_time = now
+                logger.info(f"📝 Fetched {len(active_posts)} blog posts for rotation")
+                return active_posts
         except Exception as e:
             logger.warning(f"Failed to fetch blog posts for rotation: {e}")
         
@@ -170,35 +171,6 @@ class EvolvedLotusAPI:
             "color": self._get_blog_color(post)
         }
 
-    def get_blog_posts(self, force_refresh: bool = False) -> List[Dict]:
-        """Fetch all blog posts from the blog API with caching"""
-        now = datetime.now()
-        
-        # Return cached if still valid
-        if not force_refresh and self._blog_cache and self._blog_cache_time:
-            if now - self._blog_cache_time < self._blog_cache_duration:
-                return self._blog_cache
-        
-        try:
-            response = requests.get(self.blog_api_url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                # The API uses 'blog' as the key for blog posts
-                posts = data.get('blog', data.get('posts', data)) if isinstance(data, dict) else data
-                
-                # Filter out drafts and sort by date (newest first)
-                active_posts = [p for p in posts if not p.get('draft', False)]
-                active_posts.sort(key=lambda x: x.get('date', ''), reverse=True)
-                
-                self._blog_cache = active_posts
-                self._blog_cache_time = now
-                logger.info(f"📝 Fetched {len(active_posts)} blog posts for rotation")
-                return active_posts
-        except Exception as e:
-            logger.warning(f"Failed to fetch blog posts for rotation: {e}")
-        
-        return self._blog_cache if self._blog_cache else []
-
     def get_rotating_blog_ad(self) -> Optional[Dict]:
         """Get a random blog post formatted as an ad"""
         posts = self.get_blog_posts()
@@ -213,13 +185,14 @@ class EvolvedLotusAPI:
         
         Args:
             client_id: Optional client ID for tracking
-            include_rotating_blog: If True, 40% chance to return a rotating blog ad
+            include_rotating_blog: If True, 50% chance to return a rotating blog ad
         """
         if client_id:
             self.track_client_request(client_id)
         
         # Check if we should return a rotating blog ad
-        if include_rotating_blog and random.random() < 0.4:  # 40% chance for blog rotation
+        rotation_chance = 0.5 if include_rotating_blog else 0.0
+        if include_rotating_blog and random.random() < rotation_chance:  # 50% chance for blog rotation
             blog_ad = self.get_rotating_blog_ad()
             if blog_ad:
                 logger.debug(f"🔄 Serving rotating blog ad: {blog_ad.get('title')}")
@@ -227,9 +200,42 @@ class EvolvedLotusAPI:
         
         # Regular ad selection
         ads = self.get_all_ads()
-        return random.choice(ads) if ads else random.choice(self._fallback_ads)
+        if not ads:
+            return random.choice(self._fallback_ads)
+            
+        ad = random.choice(ads)
+        # Increment impressions for static ads
+        if isinstance(ad.get('id'), int):
+            self.increment_impressions(ad['id'])
+            
+        return ad
 
-    
+    def increment_impressions(self, ad_id: int):
+        """Increment impression count for a static ad"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE custom_ads SET impressions = impressions + 1 WHERE id = %s", (ad_id,))
+                conn.commit()
+            except Exception as e:
+                logger.error(f"Error incrementing impressions: {e}")
+            finally:
+                conn.close()
+
+    def increment_clicks(self, ad_id: int):
+        """Increment click count for a static ad"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("UPDATE custom_ads SET clicks = clicks + 1 WHERE id = %s", (ad_id,))
+                conn.commit()
+            except Exception as e:
+                logger.error(f"Error incrementing clicks: {e}")
+            finally:
+                conn.close()
+
     def track_client_request(self, client_id: str):
         """Update last_request_at for a client"""
         conn = self._get_db_connection()
@@ -246,38 +252,158 @@ class EvolvedLotusAPI:
             finally:
                 conn.close()
 
-    def get_all_ads(self) -> List[Dict]:
-        """Returns all available ads from Railway PostgreSQL with fallback"""
+    def get_all_ads(self, active_only: bool = True) -> List[Dict]:
+        """Returns ads from Railway PostgreSQL with fallback"""
         conn = self._get_db_connection()
         if conn:
             try:
                 with conn.cursor(cursor_factory=RealDictCursor) as cur:
-                    cur.execute("SELECT * FROM custom_ads WHERE is_active = TRUE")
+                    query = "SELECT * FROM custom_ads"
+                    if active_only:
+                        query += " WHERE is_active = TRUE"
+                    query += " ORDER BY id DESC"
+                    cur.execute(query)
                     rows = cur.fetchall()
                     
                     if rows:
                         formatted_ads = []
                         for ad in rows:
+                            # Ensure all expected fields are present
                             formatted_ads.append({
                                 "id": ad['id'],
-                                "type": ad['ad_type'],
+                                "ad_type": ad.get('ad_type', 'static'), # Use DB field name
+                                "type": ad.get('ad_type', 'static'),    # Legacy compatibility
                                 "title": ad['title'],
                                 "headline": ad.get('headline'),
                                 "description": ad['description'],
                                 "cta": ad.get('cta', 'Learn More'),
                                 "url": ad['url'],
                                 "image": ad.get('image'),
-                                "color": ad.get('color', '#007bff')
+                                "color": ad.get('color', '#007bff'),
+                                "is_active": ad.get('is_active', True),
+                                "impressions": ad.get('impressions', 0),
+                                "clicks": ad.get('clicks', 0)
                             })
                         return formatted_ads
+                    elif not active_only:
+                        return []
             except Exception as e:
                 logger.error(f"Error fetching ads from Railway PostgreSQL: {e}")
             finally:
                 conn.close()
         
-        # If Railway fails, DO NOT use Supabase as the user wants this isolated
-        # Use hardcoded fallback instead
-        return self._fallback_ads
+        return self._fallback_ads if active_only else []
+
+    def create_ad(self, data: Dict) -> bool:
+        """Create a new custom ad"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        INSERT INTO custom_ads (title, description, url, image, ad_type, color, headline, cta, is_active)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (
+                            data.get('title'),
+                            data.get('description'),
+                            data.get('url'),
+                            data.get('image'),
+                            data.get('ad_type', 'static'),
+                            data.get('color', '#007bff'),
+                            data.get('headline'),
+                            data.get('cta', 'Learn More'),
+                            data.get('is_active', True)
+                        )
+                    )
+                conn.commit()
+                return True
+            except Exception as e:
+                logger.error(f"Error creating ad: {e}")
+            finally:
+                conn.close()
+        return False
+
+    def update_ad(self, ad_id: int, data: Dict) -> bool:
+        """Update an existing ad"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    fields = []
+                    params = []
+                    valid_fields = ['title', 'description', 'url', 'image', 'ad_type', 'color', 'headline', 'cta', 'is_active']
+                    for key in valid_fields:
+                        if key in data:
+                            fields.append(f"{key} = %s")
+                            params.append(data[key])
+                    
+                    if not fields:
+                        return True
+                        
+                    params.append(ad_id)
+                    query = f"UPDATE custom_ads SET {', '.join(fields)} WHERE id = %s"
+                    cur.execute(query, tuple(params))
+                conn.commit()
+                return True
+            except Exception as e:
+                logger.error(f"Error updating ad {ad_id}: {e}")
+            finally:
+                conn.close()
+        return False
+
+    def delete_ad(self, ad_id: int) -> bool:
+        """Delete an ad"""
+        conn = self._get_db_connection()
+        if conn:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM custom_ads WHERE id = %s", (ad_id,))
+                conn.commit()
+                return True
+            except Exception as e:
+                logger.error(f"Error deleting ad {ad_id}: {e}")
+            finally:
+                conn.close()
+        return False
+
+    def get_stats(self) -> Dict:
+        """Get aggregate statistics for ads and clients"""
+        conn = self._get_db_connection()
+        stats = {
+            "total_ads": 0,
+            "total_impressions": 0,
+            "total_clicks": 0,
+            "ctr": 0,
+            "active_clients": 0
+        }
+        
+        if conn:
+            try:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    # Ad stats
+                    cur.execute("SELECT COUNT(*) as count, SUM(impressions) as impressions, SUM(clicks) as clicks FROM custom_ads")
+                    ad_row = cur.fetchone()
+                    if ad_row:
+                        stats["total_ads"] = ad_row["count"] or 0
+                        stats["total_impressions"] = int(ad_row["impressions"] or 0)
+                        stats["total_clicks"] = int(ad_row["clicks"] or 0)
+                        if stats["total_impressions"] > 0:
+                            stats["ctr"] = round((stats["total_clicks"] / stats["total_impressions"]) * 100, 2)
+                    
+                    # Client stats
+                    cur.execute("SELECT COUNT(*) as count FROM ad_clients WHERE is_active = TRUE")
+                    client_row = cur.fetchone()
+                    if client_row:
+                        stats["active_clients"] = client_row["count"] or 0
+                        
+            except Exception as e:
+                logger.error(f"Error fetching stats: {e}")
+            finally:
+                conn.close()
+        return stats
+
 
     def get_ad_clients(self) -> List[Dict]:
         """Get all registered ad clients"""

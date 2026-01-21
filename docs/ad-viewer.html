@@ -371,7 +371,7 @@
                     <h2 class="promo-header">${ad.headline || ad.title}</h2>
                     ${ad.image ? `<img src="${ad.image}" class="promo-image" alt="${ad.title}">` : ''}
                     <p class="promo-description">${ad.description}</p>
-                    <a href="${ad.url}" target="_blank" class="promo-cta-btn" style="background-color: ${ad.color || '#007bff'}">
+                    <a href="${typeof ad.id === 'number' ? '/api/ad/click/' + ad.id : ad.url}" target="_blank" class="promo-cta-btn" style="background-color: ${ad.color || '#007bff'}">
                         ${ad.cta}
                     </a>
                 </div>

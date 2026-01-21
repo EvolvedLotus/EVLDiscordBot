@@ -455,6 +455,23 @@ def get_ad():
         logger.error(f"Error fetching ad: {e}")
         return safe_error_response(e)
 
+@app.route('/api/ad/click/<int:ad_id>', methods=['GET'])
+def track_ad_click(ad_id):
+    """Track a click on an EvolvedLotus ad and redirect"""
+    try:
+        # Get the ad to find its URL
+        ads = evolved_lotus_api.get_all_ads()
+        target_ad = next((ad for ad in ads if ad['id'] == ad_id), None)
+        
+        if target_ad:
+            # Increment clicks
+            evolved_lotus_api.increment_clicks(ad_id)
+            return redirect(target_ad['url'])
+        return "Ad not found", 404
+    except Exception as e:
+        logger.error(f"Error tracking click {ad_id}: {e}")
+        return "Internal error", 500
+
 @app.route('/api/admin/ad-stats', methods=['GET'])
 @require_auth
 def get_ad_stats():

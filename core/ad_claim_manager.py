@@ -39,14 +39,14 @@ class AdClaimManager:
             # Generate unique session ID
             session_id = self._generate_session_id(user_id, guild_id)
             
-            # Decide ad type (50/50 rotation between Monetag and Custom EvolvedLotus ads)
+            # Decide ad type (60/40 rotation between Custom EvolvedLotus ads and Monetag)
             ad_type = 'monetag_interstitial'
             custom_ad = None
             
-            if random.random() > 0.5:
-                custom_ad = evolved_lotus_api.get_random_ad()
+            if random.random() < 0.6:  # 60% chance for Custom Ad (increased from 50%)
+                custom_ad = evolved_lotus_api.get_random_ad(client_id='discord-task', include_rotating_blog=True)
                 ad_type = 'custom_promo'
-                logger.info(f"Selected custom ad {custom_ad['id']} for session {session_id}")
+                logger.info(f"Selected custom ad {custom_ad.get('id')} for session {session_id}")
 
             # Create ad view record
             result = self.data_manager.admin_client.table('ad_views').insert({
