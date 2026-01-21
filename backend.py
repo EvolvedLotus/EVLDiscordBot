@@ -540,6 +540,119 @@ def update_ad_client(client_id):
     except Exception as e:
         return safe_error_response(e)
 
+# ========== AD CLAIM ENDPOINTS (For ad-viewer.html) ==========
+@app.route('/api/ad-claim/session/<session_id>', methods=['GET'])
+def get_ad_session(session_id):
+    """Get ad session details for the ad-viewer page"""
+    try:
+        if 'ad_claim_manager' not in globals() or ad_claim_manager is None:
+            return jsonify({'error': 'Ad claim system not available'}), 503
+            
+        # Fetch the session from database
+        result = data_manager.admin_client.table('ad_views') \
+            .select('*') \
+            .eq('ad_session_id', session_id) \
+            .execute()
+        
+        if not result.data or len(result.data) == 0:
+            return jsonify({'error': 'Session not found'}), 404
+            
+        session_data = result.data[0]
+        
+        # Extract custom ad from metadata if present
+        custom_ad = None
+        metadata = session_data.get('metadata', {})
+        if isinstance(metadata, dict):
+            custom_ad = metadata.get('custom_ad')
+        
+        return jsonify({
+            'success': True,
+            'session_id': session_id,
+            'user_id': session_data.get('user_id'),
+            'guild_id': session_data.get('guild_id'),
+            'ad_type': session_data.get('ad_type', 'monetag_interstitial'),
+            'is_verified': session_data.get('is_verified', False),
+            'reward_amount': session_data.get('reward_amount', 10),
+            'custom_ad': custom_ad
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching ad session {session_id}: {e}")
+        return safe_error_response(e)
+
+@app.route('/api/ad-claim/verify', methods=['POST'])
+def verify_ad_claim():
+    """Verify ad was watched and grant reward"""
+    try:
+        if 'ad_claim_manager' not in globals() or ad_claim_manager is None:
+            return jsonify({'error': 'Ad claim system not available'}), 503
+            
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        session_id = data.get('session_id')
+        if not session_id:
+            return jsonify({'error': 'Missing session_id'}), 400
+        
+        # Verify and grant reward
+        result = ad_claim_manager.verify_ad_view(session_id)
+        
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'reward_amount': result.get('reward_amount', 10),
+                'new_balance': result.get('new_balance'),
+                'message': 'Reward claimed successfully!'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Failed to verify ad view')
+            }), 400
+            
+    except Exception as e:
+        logger.error(f"Error verifying ad claim: {e}")
+        return safe_error_response(e)
+
+@app.route('/api/ad-claim/create', methods=['POST'])
+def create_ad_session():
+    """Create a new ad session (called by Discord bot or CMS)"""
+    try:
+        if 'ad_claim_manager' not in globals() or ad_claim_manager is None:
+            return jsonify({'error': 'Ad claim system not available'}), 503
+            
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+            
+        user_id = data.get('user_id')
+        guild_id = data.get('guild_id')
+        
+        if not user_id or not guild_id:
+            return jsonify({'error': 'Missing user_id or guild_id'}), 400
+        
+        # Get client info for fraud prevention
+        ip_address = get_remote_address()
+        user_agent = request.headers.get('User-Agent')
+        
+        # Create session
+        result = ad_claim_manager.create_ad_session(
+            user_id=user_id,
+            guild_id=guild_id,
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        
+        if result.get('success'):
+            return jsonify(result)
+        else:
+            return jsonify({'error': result.get('error', 'Failed to create session')}), 500
+            
+    except Exception as e:
+        logger.error(f"Error creating ad session: {e}")
+        return safe_error_response(e)
+
 @app.route('/api/webhooks/whop', methods=['POST'])
 def whop_webhook():
     """
