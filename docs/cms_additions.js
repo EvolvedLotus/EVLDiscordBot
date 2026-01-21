@@ -299,8 +299,11 @@ async function populateApiClients() {
 
     section.style.display = 'block';
 
+    const adApiBase = window.EVL_AD_API_BASE || 'https://cooperative-renewal-production.up.railway.app';
     try {
-        const data = await apiCall('/api/admin/ad-clients');
+        const response = await fetch(`${adApiBase}/api/admin/ad-clients`, { credentials: 'include' });
+        const data = await response.json();
+
         if (!data || !data.clients) {
             list.innerHTML = '<p>No API clients found.</p>';
             return;
@@ -344,11 +347,16 @@ async function updateApiClient(clientId) {
     const priority = parseInt(document.getElementById(`client-priority-${clientId}`).value);
     const weight = parseInt(document.getElementById(`client-weight-${clientId}`).value);
 
+    const adApiBase = window.EVL_AD_API_BASE || 'https://cooperative-renewal-production.up.railway.app';
     try {
-        const result = await apiCall(`/api/admin/ad-clients/${clientId}`, {
+        const response = await fetch(`${adApiBase}/api/admin/ad-clients/${clientId}`, {
             method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ priority, weight })
         });
+        const result = await response.json();
+
 
         if (result && result.success) {
             showNotification(`Updated ${clientId} successfully`, 'success');
