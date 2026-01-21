@@ -2190,7 +2190,7 @@ def create_ad_session(server_id):
 
 @app.route('/api/<server_id>/ad-claim/stats/<user_id>', methods=['GET'])
 @require_guild_access
-def get_ad_stats(server_id, user_id):
+def get_user_ad_stats(server_id, user_id):
     """Get ad viewing statistics for a user"""
     try:
         result = ad_claim_manager.get_user_ad_stats(user_id, server_id)

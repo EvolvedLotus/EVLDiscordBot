@@ -2,7 +2,8 @@ import random
 import logging
 import os
 import psycopg2
-import requests
+import json
+import urllib.request
 from psycopg2.extras import RealDictCursor
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
@@ -82,6 +83,35 @@ class EvolvedLotusAPI:
         except Exception as e:
             logger.error(f"Failed to connect to Railway PostgreSQL: {e}")
             return None
+
+    def get_blog_posts(self, force_refresh: bool = False) -> List[Dict]:
+        """Fetch all blog posts from the blog API with caching"""
+        now = datetime.now()
+        
+        # Return cached if still valid
+        if not force_refresh and self._blog_cache and self._blog_cache_time:
+            if now - self._blog_cache_time < self._blog_cache_duration:
+                return self._blog_cache
+        
+        try:
+            with urllib.request.urlopen(self.blog_api_url, timeout=10) as response:
+                if response.status == 200:
+                    data = json.loads(response.read().decode('utf-8'))
+                    # The API uses 'blog' as the key for blog posts
+                    posts = data.get('blog', data.get('posts', data)) if isinstance(data, dict) else data
+                    
+                    # Filter out drafts and sort by date (newest first)
+                    active_posts = [p for p in posts if not p.get('draft', False)]
+                    active_posts.sort(key=lambda x: x.get('date', ''), reverse=True)
+                    
+                    self._blog_cache = active_posts
+                    self._blog_cache_time = now
+                    logger.info(f"📝 Fetched {len(active_posts)} blog posts for rotation")
+                    return active_posts
+        except Exception as e:
+            logger.warning(f"Failed to fetch blog posts for rotation: {e}")
+        
+        return self._blog_cache if self._blog_cache else []
 
     def _get_blog_color(self, post: Dict) -> str:
         """Determine ad color based on blog post tags/category"""
