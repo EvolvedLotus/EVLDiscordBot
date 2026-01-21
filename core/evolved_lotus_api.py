@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-# Blog colors based on category/tags
+# Blog colors based on categorry/tags
 BLOG_CATEGORY_COLORS = {
     'youtube': '#FF0000',
     'tiktok': '#000000',
