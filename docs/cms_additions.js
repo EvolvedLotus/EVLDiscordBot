@@ -299,7 +299,7 @@ async function populateApiClients() {
 
     section.style.display = 'block';
 
-    const adApiBase = window.EVL_AD_API_BASE || 'https://cooperative-renewal-production.up.railway.app';
+    const adApiBase = window.EVL_AD_API_BASE || 'https://cooperative-renewal-production-41ce.up.railway.app';
     try {
         const response = await fetch(`${adApiBase}/api/admin/ad-clients`, { credentials: 'include' });
         const data = await response.json();
@@ -347,7 +347,7 @@ async function updateApiClient(clientId) {
     const priority = parseInt(document.getElementById(`client-priority-${clientId}`).value);
     const weight = parseInt(document.getElementById(`client-weight-${clientId}`).value);
 
-    const adApiBase = window.EVL_AD_API_BASE || 'https://cooperative-renewal-production.up.railway.app';
+    const adApiBase = window.EVL_AD_API_BASE || 'https://cooperative-renewal-production-41ce.up.railway.app';
     try {
         const response = await fetch(`${adApiBase}/api/admin/ad-clients/${clientId}`, {
             method: 'PUT',
