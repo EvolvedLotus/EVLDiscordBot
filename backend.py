@@ -428,9 +428,17 @@ def get_status():
 
 @app.route('/api/ad', methods=['GET'])
 def get_ad():
-    """Get a random ad from EvolvedLotus API"""
+    """
+    Get a random ad from EvolvedLotus API.
+    
+    Query params:
+        client_id: Optional client identifier for tracking
+        include_blogs: If 'true', enables rotating blog ads (40% chance to show a random blog post)
+    """
     try:
         client_id = request.args.get('client_id')
+        include_blogs = request.args.get('include_blogs', 'false').lower() == 'true'
+        
         if 'evolved_lotus_api' not in globals() or evolved_lotus_api is None:
              # Fallback if module failed to load
              return jsonify({
@@ -441,7 +449,7 @@ def get_ad():
                  "color": "#7289da"
              })
 
-        ad = evolved_lotus_api.get_random_ad(client_id=client_id)
+        ad = evolved_lotus_api.get_random_ad(client_id=client_id, include_rotating_blog=include_blogs)
         return jsonify(ad)
     except Exception as e:
         logger.error(f"Error fetching ad: {e}")
