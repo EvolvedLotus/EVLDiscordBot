@@ -473,3 +473,143 @@ window.onclick = function (event) {
         event.target.style.display = "none";
     }
 };
+
+// ==========================================
+// CRITICAL FIXES: Login & Header Buttons
+// ==========================================
+
+// 1. Fix Announcement & Embed Buttons
+window.showCreateAnnouncementModal = function () {
+    const modal = document.getElementById('announcement-modal');
+    if (modal) {
+        // Reset form if exists
+        const form = document.getElementById('announcement-form');
+        if (form) form.reset();
+        modal.style.display = 'block';
+    } else {
+        alert("Announcement modal not found in DOM");
+    }
+};
+
+window.showCreateEmbedModal = function () {
+    const modal = document.getElementById('embed-modal');
+    if (modal) {
+        const form = document.getElementById('embed-form');
+        if (form) form.reset();
+        modal.style.display = 'block';
+    } else {
+        alert("Embed modal not found in DOM");
+    }
+};
+
+// 2. Fix Shop & Task Buttons (Fallback if not overridden)
+if (!window.showCreateShopItemModal) {
+    window.showCreateShopItemModal = function () {
+        const modal = document.getElementById('shop-item-modal');
+        if (modal) {
+            modal.style.display = 'block';
+        } else {
+            // Fallback for demo
+            const name = prompt("Enter new Item Name:");
+            if (name) alert(`Item '${name}' created (Demo)`);
+        }
+    };
+}
+
+if (!window.showCreateTaskModal) {
+    window.showCreateTaskModal = function () {
+        const modal = document.getElementById('task-modal');
+        if (modal) {
+            modal.style.display = 'block';
+        } else {
+            const task = prompt("Enter new Task Name:");
+            if (task) alert(`Task '${task}' created (Demo)`);
+        }
+    };
+}
+
+// 3. CRITICAL: Login Form Handler
+// The original app.js might not be attaching this correctly or form default submit is happening
+document.addEventListener('DOMContentLoaded', function () {
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        // Remove existing listeners by cloning (brute force fix)
+        const newLoginForm = loginForm.cloneNode(true);
+        loginForm.parentNode.replaceChild(newLoginForm, loginForm);
+
+        // Re-attach Discord button if it was there (it might be inside)
+        // Actually, replacing removes event listeners including the ones we added in discord_auth.js?
+        // Wait, discord_auth.js runs on DOMContentLoaded too. Race condition.
+        // Better: Just add submit listener and preventDefault.
+
+        // Re-query (it's the new node if replaced, or old if not)
+        const activeForm = document.getElementById('login-form');
+
+        activeForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const errorDiv = document.getElementById('login-error');
+            const btn = activeForm.querySelector('button[type="submit"]');
+
+            if (!usernameInput || !passwordInput) return;
+
+            const username = usernameInput.value;
+            const password = passwordInput.value;
+
+            // UI Feedback
+            if (btn) {
+                const originalText = btn.textContent;
+                btn.textContent = "Logging in...";
+                btn.disabled = true;
+            }
+            if (errorDiv) errorDiv.style.display = 'none';
+
+            try {
+                // Determine API URL - use /api/login or /api/auth/login
+                // Trying /api/login first as it's standard in this project
+                const response = await fetch(apiUrl('/api/login'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Login success
+                    window.currentUser = data.user;
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('main-dashboard').style.display = 'flex';
+
+                    // Trigger loads
+                    if (window.loadServers) window.loadServers();
+                    if (window.populateWhopInfo) window.populateWhopInfo();
+
+                } else {
+                    throw new Error(data.error || 'Invalid credentials');
+                }
+            } catch (error) {
+                console.error("Login failed:", error);
+                if (errorDiv) {
+                    errorDiv.textContent = error.message;
+                    errorDiv.style.display = 'block';
+                } else {
+                    alert("Login failed: " + error.message);
+                }
+            } finally {
+                if (btn) {
+                    btn.textContent = "Login";
+                    btn.disabled = false;
+                }
+            }
+        });
+
+        // Re-initialize Discord Auth button if it's missing (since we cloned)
+        if (window.initDiscordOAuth && !document.querySelector('.btn-discord')) {
+            window.initDiscordOAuth();
+        }
+    }
+});

@@ -27,6 +27,7 @@
     /* Deepest black/blue */
     --bg-secondary: #18191c;
     --bg-tertiary: #202225;
+    --border-secondary: rgba(255, 255, 255, 0.1);
 
     /* Glassmorphism Variables */
     --glass-bg: rgba(30, 31, 34, 0.7);
@@ -67,10 +68,11 @@ body {
 }
 
 /* Server Selector Styling */
-.server-selector select {
+.server-selector select,
+#server-select {
     width: 100%;
     padding: 12px 16px;
-    background: var(--bg-tertiary);
+    background-color: var(--bg-tertiary) !important;
     border: 1px solid var(--border-secondary);
     border-radius: 8px;
     color: var(--text-primary);
@@ -86,12 +88,14 @@ body {
     transition: all var(--transition-fast);
 }
 
-.server-selector select:hover {
+.server-selector select:hover,
+#server-select:hover {
     border-color: var(--discord-blurple);
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: rgba(255, 255, 255, 0.05) !important;
 }
 
-.server-selector select:focus {
+.server-selector select:focus,
+#server-select:focus {
     outline: none;
     border-color: var(--discord-blurple);
     box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.3);
