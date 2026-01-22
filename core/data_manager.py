@@ -1800,6 +1800,24 @@ class AtomicTransactionContext:
             logger.error(f"execute failed: {e}")
             raise
 
+    def invalidate_cache(self, guild_id: int, data_type: str = None):
+        """Invalidate cache for a guild, optionally for specific data type"""
+        if data_type:
+             cache_key = f"{guild_id}_{data_type}"
+             if cache_key in self._cache:
+                 del self._cache[cache_key]
+                 if cache_key in self._cache_timestamps:
+                     del self._cache_timestamps[cache_key]
+        else:
+             # Invalidate all for guild
+             keys_to_remove = [k for k in self._cache.keys() if k.startswith(f"{guild_id}_")]
+             for k in keys_to_remove:
+                 del self._cache[k]
+                 if k in self._cache_timestamps:
+                     del self._cache_timestamps[k]
+        
+        logger.info(f"Invalidated cache for guild {guild_id} type={data_type}")
+
     async def fetch(self, query: str, *args):
         """
         Fetch multiple rows from the database (PostgreSQL-compatible interface for Supabase).

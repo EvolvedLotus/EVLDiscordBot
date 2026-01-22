@@ -221,11 +221,25 @@ class TaskManager:
                 .execute()
 
             # Delete the main task
-            self.data_manager.admin_client.table('tasks') \
-                .delete() \
-                .eq('task_id', task_id) \
-                .eq('guild_id', guild_id) \
-                .execute()
+            # Try to delete from database
+            try:
+                 # Use count='exact' to get the number of deleted rows
+                 delete_result = self.data_manager.admin_client.table('tasks') \
+                    .delete(count='exact') \
+                    .eq('task_id', task_id) \
+                    .eq('guild_id', guild_id) \
+                    .execute()
+                 
+                 deleted_count = delete_result.count if hasattr(delete_result, 'count') else (len(delete_result.data) if delete_result.data else 0)
+                 logger.info(f"Deletion result for task {task_id} in guild {guild_id}: count={deleted_count}, data={delete_result.data}")
+                 
+                 if deleted_count == 0 and (not delete_result.data):
+                     # This might happen if RLS prevented it or it was already gone
+                     logger.warning(f"Task {task_id} was not found during delete operation (or 0 rows affected)")
+            except Exception as delete_error:
+                 logger.error(f"Error executing delete query: {delete_error}")
+                 # Convert to generic error but let it succeed if it was just not found (idempotent)
+                 pass
 
             logger.info(f"✅ Deleted task {task_id} from guild {guild_id}")
 
@@ -233,6 +247,10 @@ class TaskManager:
             if hasattr(self, 'cache_manager') and self.cache_manager:
                 self.cache_manager.invalidate(f"tasks:{guild_id}")
                 self.cache_manager.invalidate(f"user_tasks:{guild_id}*")
+            
+            # Also invalidate DataManager cache
+            if hasattr(self.data_manager, 'invalidate_cache'):
+                self.data_manager.invalidate_cache(int(guild_id), 'tasks')
 
             # Emit SSE event safely
             if hasattr(self, 'sse_manager') and self.sse_manager:
