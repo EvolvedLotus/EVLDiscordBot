@@ -276,7 +276,7 @@ COMMENT ON COLUMN guilds.boost_reward_enabled IS 'Whether boost rewards are enab
 COMMENT ON COLUMN guilds.boost_reward_amount IS 'Amount of coins to reward per boost';
 COMMENT ON COLUMN guilds.boost_log_channel_id IS 'Channel to log boost events';
 
--- GUILD ROLES table (for syncing)
+-- GUILD ROLES table (for synciing)
 CREATE TABLE IF NOT EXISTS guild_roles (
     guild_id TEXT REFERENCES guilds(guild_id) ON DELETE CASCADE,
     role_id TEXT,
