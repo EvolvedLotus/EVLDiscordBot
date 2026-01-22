@@ -6985,315 +6985,307 @@ window.loadConfigTab = async function () {
 
 console.log('✅ Channel Lock Schedules JS loaded');
 /**
- * BUTTON FIXES - Ensures all buttons work properly
- * This file runs LAST to guarantee all functions are attached to window
+ * COMPREHENSIVE BUTTON FIXES v4.0
+ * Ensures every button in the CMS works properly and logs its activity.
  */
 
-console.log('[ButtonFixes] Loading...');
+console.log('[CMS] Applying final button overrides...');
 
-// ========== MODAL SHOW FUNCTIONS ==========
-
-// Shop Item Modal
-window.showCreateShopItemModal = function () {
-    console.log('[ButtonFixes] showCreateShopItemModal called');
-    const modal = document.getElementById('shop-item-modal');
-    if (modal) {
-        const form = document.getElementById('shop-item-form');
-        if (form) form.reset();
-        const idField = document.getElementById('shop-item-id');
-        if (idField) idField.value = '';
-        modal.style.display = 'block';
-    } else {
-        console.error('[ButtonFixes] shop-item-modal not found!');
-        alert('Shop Item modal not found. Please refresh the page.');
-    }
-};
-
-// Task Modal
-window.showCreateTaskModal = function () {
-    console.log('[ButtonFixes] showCreateTaskModal called');
-    const modal = document.getElementById('task-modal');
-    if (modal) {
-        const form = document.getElementById('task-form');
-        if (form) form.reset();
-        const idField = document.getElementById('task-id');
-        if (idField) idField.value = '';
-        modal.style.display = 'block';
-    } else {
-        console.error('[ButtonFixes] task-modal not found!');
-        alert('Task modal not found. Please refresh the page.');
-    }
-};
-
-// Announcement Modal
-window.showCreateAnnouncementModal = function () {
-    console.log('[ButtonFixes] showCreateAnnouncementModal called');
-    const modal = document.getElementById('announcement-modal');
-    if (modal) {
-        const form = document.getElementById('announcement-form');
-        if (form) form.reset();
-        modal.style.display = 'block';
-
-        // Populate channel dropdown
-        const channelSelect = document.getElementById('announcement-channel');
-        if (channelSelect && window.discordDataCache && window.discordDataCache.channels) {
-            let html = '<option value="">Select a channel...</option>';
-            Object.values(window.discordDataCache.channels).forEach(ch => {
-                html += `<option value="${ch.id}">#${ch.name}</option>`;
-            });
-            channelSelect.innerHTML = html;
-        }
-    } else {
-        console.error('[ButtonFixes] announcement-modal not found!');
-        alert('Announcement modal not found. Please refresh the page.');
-    }
-};
-
-// Embed Modal
-window.showCreateEmbedModal = function () {
-    console.log('[ButtonFixes] showCreateEmbedModal called');
-    const modal = document.getElementById('embed-modal');
-    if (modal) {
-        const form = document.getElementById('embed-form');
-        if (form) form.reset();
-        const idField = document.getElementById('embed-id');
-        if (idField) idField.value = '';
-        modal.style.display = 'block';
-
-        // Initialize preview if function exists
-        if (typeof updateEmbedPreview === 'function') {
-            updateEmbedPreview();
-        }
-    } else {
-        console.error('[ButtonFixes] embed-modal not found!');
-        alert('Embed modal not found. Please refresh the page.');
-    }
-};
-
-// ========== SHOP STATISTICS & VALIDATION ==========
-
-window.viewShopStatistics = async function () {
-    console.log('[ButtonFixes] viewShopStatistics called');
-    if (!window.currentServerId) {
-        alert('Please select a server first.');
-        return;
-    }
-
+// ========== ACTIVITY LOGGING HELPER ==========
+async function logCmsAction(action, details = {}, success = true, guildId = null) {
+    console.log(`[ACTION] ${action}`, details);
     try {
-        // Try to fetch actual stats
-        const data = await window.apiCall(`/api/${window.currentServerId}/shop/stats`);
-        if (data) {
-            alert(`Shop Statistics:\n\n- Total Items: ${data.total_items || 0}\n- Total Sales: ${data.total_sales || 0}\n- Total Revenue: ${data.total_revenue || 0} coins`);
-        }
-    } catch (e) {
-        // Fallback
-        alert('Shop Statistics:\n\n- Statistics are being calculated...\n- Try refreshing the shop to see updated data.');
-    }
-};
-
-window.validateShopIntegrity = async function () {
-    console.log('[ButtonFixes] validateShopIntegrity called');
-    if (!window.currentServerId) {
-        alert('Please select a server first.');
-        return;
-    }
-
-    if (window.showNotification) {
-        window.showNotification('Validating shop integrity...', 'info');
-    }
-
-    try {
-        const data = await window.apiCall(`/api/${window.currentServerId}/shop`);
-        if (data && data.items) {
-            const issues = [];
-            data.items.forEach(item => {
-                if (!item.name) issues.push(`Item ${item.item_id} has no name`);
-                if (item.price < 0) issues.push(`${item.name} has negative price`);
-            });
-
-            if (issues.length === 0) {
-                if (window.showNotification) {
-                    window.showNotification('✅ Shop integrity check passed! All items valid.', 'success');
-                } else {
-                    alert('✅ Shop integrity check passed! All items valid.');
-                }
-            } else {
-                alert('⚠️ Issues found:\n\n' + issues.join('\n'));
-            }
-        }
-    } catch (e) {
-        if (window.showNotification) {
-            window.showNotification('Failed to validate shop', 'error');
-        }
-    }
-};
-
-// ========== SAVE HANDLERS ==========
-
-window.saveShopItem = async function (event) {
-    if (event) event.preventDefault();
-    console.log('[ButtonFixes] saveShopItem called');
-
-    const itemId = document.getElementById('shop-item-id')?.value;
-    const name = document.getElementById('item-name')?.value;
-    const price = document.getElementById('item-price')?.value;
-    const description = document.getElementById('item-description')?.value || '';
-    const roleId = document.getElementById('item-role-id')?.value || null;
-    const stock = document.getElementById('item-stock')?.value || -1;
-
-    if (!name || !price) {
-        alert('Please fill in Item Name and Price.');
-        return;
-    }
-
-    const payload = {
-        name,
-        price: parseInt(price),
-        description,
-        role_id: roleId,
-        stock: parseInt(stock)
-    };
-
-    try {
-        let url = `/api/${window.currentServerId}/shop`;
-        let method = 'POST';
-
-        if (itemId) {
-            url += `/${itemId}`;
-            method = 'PUT';
-        }
-
-        const response = await window.apiCall(url, {
-            method: method,
-            body: JSON.stringify(payload)
+        await apiCall('/api/admin/log_cms_action', {
+            method: 'POST',
+            body: JSON.stringify({
+                action,
+                details,
+                success,
+                guild_id: guildId || window.currentServerId || 0
+            })
         });
-
-        if (response) {
-            if (window.showNotification) {
-                window.showNotification(itemId ? 'Item updated!' : 'Item created!', 'success');
-            }
-            document.getElementById('shop-item-modal').style.display = 'none';
-            if (window.loadShop) window.loadShop();
-        }
     } catch (e) {
-        console.error('[ButtonFixes] saveShopItem error:', e);
-        if (window.showNotification) {
-            window.showNotification('Error saving item: ' + e.message, 'error');
-        } else {
-            alert('Error saving item: ' + e.message);
-        }
+        console.warn('Backend logging failed:', e);
     }
-};
-
-window.saveTask = async function (event) {
-    if (event) event.preventDefault();
-    console.log('[ButtonFixes] saveTask called');
-
-    const taskId = document.getElementById('task-id')?.value;
-    const content = document.getElementById('task-content')?.value;
-    const reward = document.getElementById('task-reward')?.value;
-    const type = document.getElementById('task-type')?.value || 'manual';
-    const target = document.getElementById('task-target')?.value || null;
-
-    if (!content || !reward) {
-        alert('Please fill in Task Description and Reward.');
-        return;
-    }
-
-    const payload = {
-        content,
-        reward: parseInt(reward),
-        type,
-        target
-    };
-
-    try {
-        let url = `/api/${window.currentServerId}/tasks`;
-        let method = 'POST';
-
-        if (taskId) {
-            url += `/${taskId}`;
-            method = 'PUT';
-        }
-
-        const response = await window.apiCall(url, {
-            method: method,
-            body: JSON.stringify(payload)
-        });
-
-        if (response) {
-            if (window.showNotification) {
-                window.showNotification(taskId ? 'Task updated!' : 'Task created!', 'success');
-            }
-            document.getElementById('task-modal').style.display = 'none';
-            if (window.loadTasks) window.loadTasks();
-        }
-    } catch (e) {
-        console.error('[ButtonFixes] saveTask error:', e);
-        if (window.showNotification) {
-            window.showNotification('Error saving task: ' + e.message, 'error');
-        } else {
-            alert('Error saving task: ' + e.message);
-        }
-    }
-};
-
-// ========== CLOSE MODAL HANDLER ==========
-
-window.closeModal = function () {
-    // Close any visible dynamic modal
-    const dynamicModal = document.getElementById('dynamic-modal');
-    if (dynamicModal) dynamicModal.remove();
-
-    // Also hide common modals
-    ['shop-item-modal', 'task-modal', 'announcement-modal', 'embed-modal', 'channel-schedule-modal'].forEach(id => {
-        const modal = document.getElementById(id);
-        if (modal) modal.style.display = 'none';
-    });
-};
-
-// ========== CLICK OUTSIDE TO CLOSE ==========
-
-document.addEventListener('click', function (e) {
-    if (e.target.classList.contains('modal')) {
-        e.target.style.display = 'none';
-    }
-});
-
-// ========== ENSURE updateServerTier IS GLOBAL ==========
-
-// This will be defined in cms_additions.js but we ensure it's callable
-if (typeof window.updateServerTier !== 'function') {
-    window.updateServerTier = async function (serverId, serverName, currentTier) {
-        console.log('[ButtonFixes] updateServerTier fallback called');
-        const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
-
-        if (!newTier || (newTier !== 'free' && newTier !== 'premium')) {
-            if (newTier) alert("Invalid tier. Please enter 'free' or 'premium'.");
-            return;
-        }
-
-        if (newTier === currentTier) return;
-
-        try {
-            const response = await window.apiCall(`/api/${serverId}/config`, {
-                method: 'PUT',
-                body: JSON.stringify({ subscription_tier: newTier })
-            });
-
-            if (response) {
-                if (window.showNotification) {
-                    window.showNotification(`Updated ${serverName} to ${newTier.toUpperCase()}`, 'success');
-                }
-                if (window.loadServerManagement) window.loadServerManagement();
-            }
-        } catch (e) {
-            console.error('[ButtonFixes] updateServerTier error:', e);
-            if (window.showNotification) {
-                window.showNotification('Error updating tier', 'error');
-            }
-        }
-    };
 }
 
-console.log('[ButtonFixes] All button handlers attached to window ✅');
+// ========== UTILS ==========
+function closeModal(id = null) {
+    if (id) {
+        const m = document.getElementById(id);
+        if (m) m.style.display = 'none';
+    } else {
+        // Universal close for all modals
+        document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+        const dynamic = document.getElementById('dynamic-modal');
+        if (dynamic) dynamic.remove();
+    }
+}
+
+// Attach to window so HTML can see it
+window.closeModal = closeModal;
+window.closeAnnouncementModal = () => closeModal('announcement-modal');
+window.closeEmbedModal = () => closeModal('embed-modal');
+window.closeSendEmbedModal = () => closeModal('send-embed-modal');
+
+// ========== SHOP ACTIONS ==========
+window.deleteShopItem = async function (itemId) {
+    if (!confirm('Are you sure you want to delete this shop item?')) return;
+    logCmsAction('delete_shop_item_start', { item_id: itemId });
+    try {
+        await apiCall(`/api/${currentServerId}/shop/${itemId}`, { method: 'DELETE' });
+        showNotification('Item deleted', 'success');
+        logCmsAction('delete_shop_item_success', { item_id: itemId });
+        loadShop();
+    } catch (e) {
+        showNotification('Delete failed: ' + e.message, 'error');
+        logCmsAction('delete_shop_item_failed', { item_id: itemId, error: e.message }, false);
+    }
+};
+
+// ========== TASK ACTIONS ==========
+window.deleteTask = async function (taskId) {
+    if (!confirm('Are you sure you want to delete this task?')) return;
+    logCmsAction('delete_task_start', { task_id: taskId });
+    try {
+        await apiCall(`/api/${currentServerId}/tasks/${taskId}`, { method: 'DELETE' });
+        showNotification('Task deleted', 'success');
+        logCmsAction('delete_task_success', { task_id: taskId });
+        loadTasks();
+    } catch (e) {
+        showNotification('Delete failed: ' + e.message, 'error');
+        logCmsAction('delete_task_failed', { task_id: taskId, error: e.message }, false);
+    }
+};
+
+// ========== ANNOUNCEMENT ACTIONS ==========
+window.editAnnouncement = async function (announcementId) {
+    logCmsAction('edit_announcement_click', { announcement_id: announcementId });
+    try {
+        const data = await apiCall(`/api/${currentServerId}/announcements`);
+        const item = data.announcements.find(a => a.announcement_id === announcementId);
+        if (!item) return showNotification('Announcement not found', 'error');
+
+        document.getElementById('announcement-modal-title').textContent = 'Edit Announcement';
+        document.getElementById('announcement-id').value = announcementId;
+        document.getElementById('announcement-title').value = item.title || '';
+        document.getElementById('announcement-content').value = item.content || '';
+        document.getElementById('announcement-channel').value = item.channel_id || '';
+        document.getElementById('announcement-pinned').checked = !!item.is_pinned;
+        document.getElementById('announcement-modal').style.display = 'block';
+    } catch (e) {
+        showNotification('Load failed: ' + e.message, 'error');
+    }
+};
+
+window.deleteAnnouncement = async function (announcementId) {
+    if (!confirm('Are you sure you want to delete this announcement?')) return;
+    logCmsAction('delete_announcement_start', { announcement_id: announcementId });
+    try {
+        await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, { method: 'DELETE' });
+        showNotification('Announcement deleted', 'success');
+        logCmsAction('delete_announcement_success', { announcement_id: announcementId });
+        loadAnnouncements();
+    } catch (e) {
+        showNotification('Delete failed: ' + e.message, 'error');
+        logCmsAction('delete_announcement_failed', { announcement_id: announcementId, error: e.message }, false);
+    }
+};
+
+window.saveAnnouncement = async function (event) {
+    if (event) event.preventDefault();
+    const id = document.getElementById('announcement-id').value;
+    const body = {
+        title: document.getElementById('announcement-title').value,
+        content: document.getElementById('announcement-content').value,
+        channel_id: document.getElementById('announcement-channel').value,
+        is_pinned: document.getElementById('announcement-pinned').checked
+    };
+    logCmsAction('save_announcement_start', { id, body });
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/${currentServerId}/announcements/${id}` : `/api/${currentServerId}/announcements`;
+        await apiCall(url, { method, body: JSON.stringify(body) });
+        showNotification(id ? 'Announcement updated' : 'Announcement created', 'success');
+        logCmsAction('save_announcement_success', { id });
+        closeModal('announcement-modal');
+        loadAnnouncements();
+    } catch (e) {
+        showNotification('Save failed: ' + e.message, 'error');
+        logCmsAction('save_announcement_failed', { id, error: e.message }, false);
+    }
+};
+
+// ========== EMBED ACTIONS ==========
+window.editEmbed = async function (embedId) {
+    logCmsAction('edit_embed_click', { embed_id: embedId });
+    try {
+        const data = await apiCall(`/api/${currentServerId}/embeds`);
+        const item = data.embeds.find(e => e.embed_id === embedId);
+        if (!item) return showNotification('Embed not found', 'error');
+
+        document.getElementById('embed-modal-title').textContent = 'Edit Embed';
+        document.getElementById('embed-id').value = embedId;
+        document.getElementById('embed-title').value = item.title || '';
+        document.getElementById('embed-description').value = item.description || '';
+        document.getElementById('embed-color').value = item.color || '#5865F2';
+        document.getElementById('embed-footer').value = item.footer || '';
+        document.getElementById('embed-image-url').value = item.image || '';
+        document.getElementById('embed-thumbnail-url').value = item.thumbnail || '';
+        document.getElementById('embed-modal').style.display = 'block';
+        if (typeof updateEmbedPreview === 'function') updateEmbedPreview();
+    } catch (e) {
+        showNotification('Load failed: ' + e.message, 'error');
+    }
+};
+
+window.deleteEmbed = async function (embedId) {
+    if (!confirm('Are you sure you want to delete this embed?')) return;
+    logCmsAction('delete_embed_start', { embed_id: embedId });
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, { method: 'DELETE' });
+        showNotification('Embed deleted', 'success');
+        logCmsAction('delete_embed_success', { embed_id: embedId });
+        loadEmbeds();
+    } catch (e) {
+        showNotification('Delete failed: ' + e.message, 'error');
+        logCmsAction('delete_embed_failed', { embed_id: embedId, error: e.message }, false);
+    }
+};
+
+window.sendEmbed = function (embedId) {
+    document.getElementById('send-embed-id').value = embedId;
+    const channelSelect = document.getElementById('send-embed-channel');
+    if (channelSelect && window.discordDataCache && window.discordDataCache.channels) {
+        let html = '<option value="">Select a channel...</option>';
+        Object.values(window.discordDataCache.channels).forEach(ch => {
+            html += `<option value="${ch.id}">#${ch.name}</option>`;
+        });
+        channelSelect.innerHTML = html;
+    }
+    document.getElementById('send-embed-modal').style.display = 'block';
+};
+
+window.confirmSendEmbed = async function (embedId) {
+    const channelId = document.getElementById('send-embed-channel')?.value;
+    if (!channelId) return showNotification('Select a channel', 'warning');
+    logCmsAction('send_embed_start', { embed_id: embedId, channel_id: channelId });
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+            method: 'POST',
+            body: JSON.stringify({ channel_id: channelId })
+        });
+        showNotification('Embed sent!', 'success');
+        logCmsAction('send_embed_success', { embed_id: embedId });
+        closeModal('send-embed-modal');
+    } catch (e) {
+        showNotification('Send failed: ' + e.message, 'error');
+        logCmsAction('send_embed_failed', { embed_id: embedId, error: e.message }, false);
+    }
+};
+
+// Override the HTML form onsubmit if needed
+window.sendEmbedToChannel = function (event) {
+    if (event) event.preventDefault();
+    const embedId = document.getElementById('send-embed-id').value;
+    window.confirmSendEmbed(embedId);
+};
+
+// ========== SERVER TIER GLOBAL FIX ==========
+window.updateServerTier = async function (serverId, serverName, currentTier) {
+    logCmsAction('edit_tier_click', { server_id: serverId, server_name: serverName, current: currentTier });
+    const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
+    if (!newTier || (newTier !== 'free' && newTier !== 'premium')) return;
+    if (newTier === currentTier) return;
+    try {
+        await apiCall(`/api/${serverId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({ subscription_tier: newTier })
+        });
+        showNotification(`Updated ${serverName} to ${newTier.toUpperCase()}`, 'success');
+        logCmsAction('edit_tier_success', { server_id: serverId, new_tier: newTier });
+        if (window.loadServerManagement) window.loadServerManagement();
+    } catch (e) {
+        showNotification('Tier update failed', 'error');
+        logCmsAction('edit_tier_failed', { server_id: serverId, error: e.message }, false);
+    }
+};
+
+// ========== NAVIGATION & SYSTEM ==========
+window.logout = async function () {
+    window.logCmsAction('logout_start');
+    try {
+        await fetch(apiUrl('/api/logout'), { method: 'POST', credentials: 'include' });
+    } catch (e) { console.warn('Logout request failed', e); }
+    currentUser = null;
+    currentServerId = '';
+    localStorage.removeItem('lastSelectedServer');
+    showLoginScreen();
+};
+
+window.onServerChange = async function () {
+    const serverSelect = document.getElementById('server-select');
+    if (!serverSelect) return;
+    currentServerId = serverSelect.value;
+    if (currentServerId) {
+        localStorage.setItem('lastSelectedServer', currentServerId);
+        window.logCmsAction('server_changed', { id: currentServerId });
+        await fetchDiscordData(currentServerId);
+        const activeTab = document.querySelector('.tab-button.active');
+        if (activeTab) showTab(activeTab.getAttribute('data-tab'));
+    }
+};
+
+window.clearLogs = async function () {
+    if (!confirm('Clear all system logs?')) return;
+    window.logCmsAction('clear_logs_start');
+    try {
+        await apiCall(`/api/admin/logs/clear`, { method: 'POST' });
+        showNotification('Logs cleared', 'success');
+        loadLogs();
+    } catch (e) {
+        showNotification('Failed to clear logs', 'error');
+    }
+};
+
+// ========== MODAL SHOW FIXES (Ensuring Consistency) ==========
+window.showCreateAnnouncementModal = function () {
+    window.logCmsAction('show_create_announcement_modal');
+    document.getElementById('announcement-modal-title').textContent = 'Create Announcement';
+    document.getElementById('announcement-form').reset();
+    document.getElementById('announcement-id').value = '';
+    // Populate channels
+    const chSelect = document.getElementById('announcement-channel');
+    if (chSelect && window.discordDataCache.channels) {
+        chSelect.innerHTML = '<option value="">Select a channel...</option>' +
+            Object.values(window.discordDataCache.channels).map(ch => `<option value="${ch.id}">#${ch.name}</option>`).join('');
+    }
+    document.getElementById('announcement-modal').style.display = 'block';
+};
+
+window.showCreateEmbedModal = function () {
+    window.logCmsAction('show_create_embed_modal');
+    document.getElementById('embed-modal-title').textContent = 'Create Embed';
+    document.getElementById('embed-form').reset();
+    document.getElementById('embed-id').value = '';
+    document.getElementById('embed-modal').style.display = 'block';
+    if (typeof updateEmbedPreview === 'function') updateEmbedPreview();
+};
+
+window.showCreateShopItemModal = function () {
+    window.logCmsAction('show_create_shop_item_modal');
+    document.getElementById('shop-item-modal').style.display = 'block';
+    const form = document.getElementById('shop-item-form');
+    if (form) form.reset();
+    document.getElementById('shop-item-id').value = '';
+};
+
+window.showCreateTaskModal = function () {
+    window.logCmsAction('show_create_task_modal');
+    document.getElementById('task-modal').style.display = 'block';
+    const form = document.getElementById('task-form');
+    if (form) form.reset();
+    document.getElementById('task-id').value = '';
+};
+
+console.log('[CMS] All button handlers successfully overridden and fixed ✅');
