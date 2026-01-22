@@ -927,3 +927,290 @@ tbody tr:hover {
     border-radius: 4px;
     margin-left: 16px;
 }
+
+/* ========================================
+   COMPREHENSIVE MODAL OVERHAUL - SPACIOUS & CLEAN
+   ======================================== */
+
+/* Modal Overlay - Full screen with blur */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: none;
+    overflow-y: auto;
+    padding: 40px 20px;
+}
+
+/* Modal Content - SPACIOUS */
+.modal-content {
+    background: linear-gradient(180deg, #1e1f22 0%, #18191c 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.6);
+    width: 90vw;
+    max-width: 900px;
+    margin: 20px auto;
+    animation: modalSlideIn 0.3s ease-out;
+    overflow: hidden;
+}
+
+/* Larger modals for complex content */
+#embed-modal .modal-content,
+#announcement-modal .modal-content {
+    max-width: 1200px;
+}
+
+/* Modal Header */
+.modal-content h2 {
+    background: rgba(0, 0, 0, 0.3);
+    margin: 0;
+    padding: 24px 32px;
+    font-size: 22px;
+    font-weight: 600;
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Close Button */
+.modal-content .close {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    font-size: 32px;
+    color: #72767d;
+    cursor: pointer;
+    transition: color 0.2s, transform 0.2s;
+    line-height: 1;
+    z-index: 10;
+}
+
+.modal-content .close:hover {
+    color: #fff;
+    transform: scale(1.1);
+}
+
+/* Modal Body - SPACIOUS PADDING */
+.modal-body {
+    padding: 32px 40px 40px 40px;
+    overflow-y: auto;
+    max-height: calc(90vh - 120px);
+}
+
+/* Form Groups - More Breathing Room */
+.modal-body .form-group {
+    margin-bottom: 24px;
+}
+
+.modal-body .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.modal-body label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: #b9bbbe;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.modal-body .form-control {
+    width: 100%;
+    padding: 14px 18px;
+    font-size: 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.modal-body .form-control:focus {
+    border-color: var(--discord-blurple);
+    box-shadow: 0 0 0 3px rgba(88, 101, 242, 0.2);
+    outline: none;
+}
+
+.modal-body textarea.form-control {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.modal-body small {
+    display: block;
+    margin-top: 8px;
+    font-size: 13px;
+    color: #72767d;
+}
+
+/* Button Group - Spacious */
+.button-group {
+    display: flex;
+    gap: 16px;
+    margin-top: 32px;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.button-group button {
+    padding: 14px 28px;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+/* Split Layout for Embed/Announcement Modals */
+.modal-split-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    width: 100%;
+}
+
+.editor-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.preview-column {
+    background: #313338;
+    border-radius: 12px;
+    padding: 24px;
+    min-height: 400px;
+}
+
+@media (max-width: 1000px) {
+    .modal-split-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-column {
+        order: -1;
+    }
+}
+
+/* Server Management Section Styling */
+.server-management-section {
+    background: var(--glass-bg);
+    border: var(--glass-border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-top: 24px;
+}
+
+.server-management-section h3 {
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.server-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.server-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s;
+}
+
+.server-item:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.server-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.server-name {
+    font-weight: 600;
+    color: #fff;
+    font-size: 16px;
+}
+
+.server-id,
+.server-members {
+    font-size: 13px;
+    color: #72767d;
+}
+
+.tier-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 10px;
+}
+
+.tier-free {
+    background: rgba(114, 118, 125, 0.3);
+    color: #b9bbbe;
+}
+
+.tier-premium {
+    background: linear-gradient(135deg, #ffd700 0%, #ffaa00 100%);
+    color: #000;
+}
+
+.server-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.server-actions button {
+    padding: 10px 16px;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+}
+
+.btn-leave-server {
+    background: rgba(237, 66, 69, 0.2);
+    color: #ed4245;
+    border: 1px solid rgba(237, 66, 69, 0.3);
+}
+
+.btn-leave-server:hover {
+    background: rgba(237, 66, 69, 0.4);
+}
+
+/* Ensure all buttons are clickable */
+button,
+.btn-primary,
+.btn-success,
+.btn-secondary,
+.btn-danger {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+}
+
+/* Header Action Buttons - Ensure Clickable */
+.header-actions button {
+    position: relative;
+    z-index: 10;
+}

@@ -583,100 +583,99 @@
                 </form>
             </div>
         </div>
+    </div>
 
-        <!-- Shop Item Modal -->
-        <div id="shop-item-modal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <span class="close"
-                    onclick="document.getElementById('shop-item-modal').style.display='none'">&times;</span>
-                <h2>➕ Add Shop Item</h2>
-                <div class="modal-body">
-                    <form id="shop-item-form" onsubmit="window.saveShopItem(event)">
-                        <input type="hidden" id="shop-item-id">
-                        <div class="form-group">
-                            <label for="item-name">Item Name *</label>
-                            <input type="text" id="item-name" class="form-control" required
-                                placeholder="e.g. specialized-role">
-                        </div>
-                        <div class="form-group">
-                            <label for="item-price">Price (Coins) *</label>
-                            <input type="number" id="item-price" class="form-control" required min="0"
-                                placeholder="1000">
-                        </div>
-                        <div class="form-group">
-                            <label for="item-description">Description</label>
-                            <textarea id="item-description" class="form-control" rows="3"
-                                placeholder="What does this item do?"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="item-role-id">Role Reward (ID)</label>
-                            <input type="text" id="item-role-id" class="form-control"
-                                placeholder="Optional: ID of role to give">
-                        </div>
-                        <div class="form-group">
-                            <label for="item-stock">Stock (-1 for infinite)</label>
-                            <input type="number" id="item-stock" class="form-control" value="-1">
-                        </div>
-                        <div class="button-group">
-                            <button type="submit" class="btn-success">Save Item</button>
-                            <button type="button"
-                                onclick="document.getElementById('shop-item-modal').style.display='none'"
-                                class="btn-secondary">Cancel</button>
-                        </div>
-                    </form>
-                </div>
+    <!-- Shop Item Modal (OUTSIDE other modals) -->
+    <div id="shop-item-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('shop-item-modal').style.display='none'">&times;</span>
+            <h2>➕ Add Shop Item</h2>
+            <div class="modal-body">
+                <form id="shop-item-form" onsubmit="window.saveShopItem(event)">
+                    <input type="hidden" id="shop-item-id">
+                    <div class="form-group">
+                        <label for="item-name">Item Name *</label>
+                        <input type="text" id="item-name" class="form-control" required
+                            placeholder="e.g. specialized-role">
+                    </div>
+                    <div class="form-group">
+                        <label for="item-price">Price (Coins) *</label>
+                        <input type="number" id="item-price" class="form-control" required min="0" placeholder="1000">
+                    </div>
+                    <div class="form-group">
+                        <label for="item-description">Description</label>
+                        <textarea id="item-description" class="form-control" rows="3"
+                            placeholder="What does this item do?"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-role-id">Role Reward (ID)</label>
+                        <input type="text" id="item-role-id" class="form-control"
+                            placeholder="Optional: ID of role to give">
+                    </div>
+                    <div class="form-group">
+                        <label for="item-stock">Stock (-1 for infinite)</label>
+                        <input type="number" id="item-stock" class="form-control" value="-1">
+                    </div>
+                    <div class="button-group">
+                        <button type="submit" class="btn-success">Save Item</button>
+                        <button type="button" onclick="document.getElementById('shop-item-modal').style.display='none'"
+                            class="btn-secondary">Cancel</button>
+                    </div>
+                </form>
             </div>
         </div>
+    </div>
 
-        <!-- Task Modal -->
-        <div id="task-modal" class="modal" style="display: none;">
-            <div class="modal-content">
-                <span class="close" onclick="document.getElementById('task-modal').style.display='none'">&times;</span>
-                <h2>➕ Add New Task</h2>
-                <div class="modal-body">
-                    <form id="task-form" onsubmit="window.saveTask(event)">
-                        <input type="hidden" id="task-id">
-                        <div class="form-group">
-                            <label for="task-content">Task Description *</label>
-                            <textarea id="task-content" class="form-control" rows="3" required
-                                placeholder="e.g. Follow us on Twitter"></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label for="task-reward">Reward (Coins) *</label>
-                            <input type="number" id="task-reward" class="form-control" required min="1"
-                                placeholder="500">
-                        </div>
-                        <div class="form-group">
-                            <label for="task-type">Verification Type</label>
-                            <select id="task-type" class="form-control">
-                                <option value="manual">Manual Proof (Screenshot)</option>
-                                <option value="code">Secret Code</option>
-                                <option value="link">Link Visit</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="task-target">Target/Code (URL or Secret)</label>
-                            <input type="text" id="task-target" class="form-control"
-                                placeholder="https://... or SecretCode123">
-                        </div>
-                        <div class="button-group">
-                            <button type="submit" class="btn-success">Save Task</button>
-                            <button type="button" onclick="document.getElementById('task-modal').style.display='none'"
-                                class="btn-secondary">Cancel</button>
-                        </div>
-                    </form>
-                </div>
+    <!-- Task Modal (OUTSIDE other modals) -->
+    <div id="task-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="document.getElementById('task-modal').style.display='none'">&times;</span>
+            <h2>➕ Add New Task</h2>
+            <div class="modal-body">
+                <form id="task-form" onsubmit="window.saveTask(event)">
+                    <input type="hidden" id="task-id">
+                    <div class="form-group">
+                        <label for="task-content">Task Description *</label>
+                        <textarea id="task-content" class="form-control" rows="3" required
+                            placeholder="e.g. Follow us on Twitter"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="task-reward">Reward (Coins) *</label>
+                        <input type="number" id="task-reward" class="form-control" required min="1" placeholder="500">
+                    </div>
+                    <div class="form-group">
+                        <label for="task-type">Verification Type</label>
+                        <select id="task-type" class="form-control">
+                            <option value="manual">Manual Proof (Screenshot)</option>
+                            <option value="code">Secret Code</option>
+                            <option value="link">Link Visit</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="task-target">Target/Code (URL or Secret)</label>
+                        <input type="text" id="task-target" class="form-control"
+                            placeholder="https://... or SecretCode123">
+                    </div>
+                    <div class="button-group">
+                        <button type="submit" class="btn-success">Save Task</button>
+                        <button type="button" onclick="document.getElementById('task-modal').style.display='none'"
+                            class="btn-secondary">Cancel</button>
+                    </div>
+                </form>
             </div>
         </div>
+    </div>
 
-        <script src="./app.js?v=13"></script>
-        <script src="./app_fixes.js?v=4"></script>
-        <script src="./app_additions.js?v=1"></script>
-        <script src="./discord_auth.js?v=1"></script>
-        <script src="./cms_additions.js"></script>
-        <script src="./mobile.js"></script>
-        <script src="./modal_fixes.js?v=1"></script>
-        <script src="./channel_schedules.js?v=1"></script>
+    <script src="./app.js?v=13"></script>
+    <script src="./app_fixes.js?v=4"></script>
+    <script src="./app_additions.js?v=1"></script>
+    <script src="./discord_auth.js?v=1"></script>
+    <script src="./cms_additions.js?v=2"></script>
+    <script src="./mobile.js"></script>
+    <script src="./modal_fixes.js?v=1"></script>
+    <script src="./channel_schedules.js?v=2"></script>
+    <!-- Button fixes MUST load last to override any broken handlers -->
+    <script src="./button_fixes.js?v=1"></script>
 
 </body>
 
