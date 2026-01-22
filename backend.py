@@ -2293,7 +2293,7 @@ def test_stream():
 # ========== AD CLAIM SYSTEM (PERMANENT GLOBAL TASK) ==========
 @app.route('/api/<server_id>/ad-claim/create-session', methods=['POST'])
 @require_guild_access
-def create_ad_session(server_id):
+def create_guild_ad_session(server_id):
     """Create a new ad viewing session for a user"""
     try:
         data = request.get_json()
@@ -2331,35 +2331,6 @@ def get_user_ad_stats(server_id, user_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/ad-claim/session/<session_id>', methods=['GET'])
-def get_ad_session(session_id):
-    """Get ad session details for the viewer"""
-    try:
-        # Fetch from database via ad_claim_manager
-        result = data_manager.admin_client.table('ad_views') \
-            .select('*') \
-            .eq('ad_session_id', session_id) \
-            .execute()
-            
-        if not result.data:
-            return jsonify({'error': 'Session not found'}), 404
-            
-        ad_view = result.data[0]
-        
-        # Format response
-        response = {
-            'session_id': ad_view['ad_session_id'],
-            'ad_type': ad_view['ad_type'],
-            'reward_amount': ad_view['reward_amount'],
-            'is_verified': ad_view['is_verified'],
-            'custom_ad': ad_view.get('metadata', {}).get('custom_ad')
-        }
-        
-        return jsonify(response), 200
-        
-    except Exception as e:
-        logger.error(f"Error fetching ad session {session_id}: {e}")
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/global-tasks', methods=['GET'])
 def get_global_tasks():
@@ -2403,44 +2374,6 @@ def monetag_postback():
         logger.error(f"Error processing Monetag postback: {e}")
         # Still return 200 to Monetag to prevent retries
         return jsonify({'success': False, 'error': str(e)}), 200
-
-# ========== AD CLAIM ENDPOINTS ==========
-@app.route('/api/ad-claim/verify', methods=['POST'])
-def verify_ad_claim():
-    """Verify an ad view and grant reward"""
-    try:
-        data = request.json
-        session_id = data.get('session_id')
-        
-        if not session_id:
-            return jsonify({
-                'success': False,
-                'error': 'Session ID is required'
-            }), 400
-        
-        # Use ad_claim_manager to verify the ad view
-        result = ad_claim_manager.verify_ad_view(session_id)
-        
-        if result.get('success'):
-            return jsonify({
-                'success': True,
-                'verified': True,
-                'reward_amount': result.get('reward_amount', 10),
-                'new_balance': result.get('new_balance', 0),
-                'transaction_id': result.get('transaction_id')
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Verification failed')
-            }), 400
-            
-    except Exception as e:
-        logger.error(f"Error verifying ad claim: {e}", exc_info=True)
-        return jsonify({
-            'success': False,
-            'error': 'An error occurred while verifying the ad view'
-        }), 500
 
 
 # ========== STATIC FILES ==========
