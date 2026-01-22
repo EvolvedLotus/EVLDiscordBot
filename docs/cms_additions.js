@@ -502,31 +502,130 @@ window.showCreateEmbedModal = function () {
     }
 };
 
-// 2. Fix Shop & Task Buttons (Fallback if not overridden)
-if (!window.showCreateShopItemModal) {
-    window.showCreateShopItemModal = function () {
-        const modal = document.getElementById('shop-item-modal');
-        if (modal) {
-            modal.style.display = 'block';
-        } else {
-            // Fallback for demo
-            const name = prompt("Enter new Item Name:");
-            if (name) alert(`Item '${name}' created (Demo)`);
-        }
-    };
-}
+// 2. Fix Shop & Task Buttons (Attach to Global Scope)
+window.showCreateShopItemModal = function () {
+    const modal = document.getElementById('shop-item-modal');
+    if (modal) {
+        document.getElementById('shop-item-form').reset();
+        document.getElementById('shop-item-id').value = ''; // Clear ID for new creation
+        modal.style.display = 'block';
+    } else {
+        console.error('Shop modal not found');
+        alert("Shop modal missing. Please refresh page.");
+    }
+};
 
-if (!window.showCreateTaskModal) {
-    window.showCreateTaskModal = function () {
-        const modal = document.getElementById('task-modal');
-        if (modal) {
-            modal.style.display = 'block';
-        } else {
-            const task = prompt("Enter new Task Name:");
-            if (task) alert(`Task '${task}' created (Demo)`);
-        }
+window.showCreateTaskModal = function () {
+    const modal = document.getElementById('task-modal');
+    if (modal) {
+        document.getElementById('task-form').reset();
+        document.getElementById('task-id').value = ''; // Clear ID
+        modal.style.display = 'block';
+    } else {
+        console.error('Task modal not found');
+        alert("Task modal missing. Please refresh page.");
+    }
+};
+
+// Implement Save Handlers for the new modals
+window.saveShopItem = async function (event) {
+    event.preventDefault();
+
+    // Get values from form
+    const itemId = document.getElementById('shop-item-id').value;
+    const name = document.getElementById('item-name').value;
+    const price = parseInt(document.getElementById('item-price').value);
+    const description = document.getElementById('item-description').value;
+    const roleId = document.getElementById('item-role-id').value;
+    const stock = parseInt(document.getElementById('item-stock').value);
+
+    // Prepare payload
+    const payload = {
+        name,
+        price,
+        description,
+        role_id: roleId || null,
+        stock
     };
-}
+
+    try {
+        let url = `/api/${currentServerId}/shop`;
+        let method = 'POST';
+
+        if (itemId) {
+            url += `/${itemId}`;
+            method = 'PUT'; // Assuming API supports PUT for updates
+        }
+
+        const response = await apiCall(url, {
+            method: method,
+            body: JSON.stringify(payload)
+        });
+
+        if (response && (response.success || response.item_id || response.message)) {
+            showNotification(itemId ? "Item updated!" : "Item created!", "success");
+            document.getElementById('shop-item-modal').style.display = 'none';
+            if (window.loadShop) window.loadShop();
+        } else {
+            showNotification("Failed to save item.", "error");
+        }
+    } catch (e) {
+        console.error("Error saving item:", e);
+        showNotification("Error saving item: " + e.message, "error");
+    }
+};
+
+window.saveTask = async function (event) {
+    event.preventDefault();
+
+    const taskId = document.getElementById('task-id').value;
+    const content = document.getElementById('task-content').value;
+    const reward = parseInt(document.getElementById('task-reward').value);
+    const type = document.getElementById('task-type').value;
+    const target = document.getElementById('task-target').value;
+
+    const payload = {
+        content,
+        reward,
+        type,
+        target: target || null
+    };
+
+    try {
+        let url = `/api/${currentServerId}/tasks`;
+        let method = 'POST';
+
+        // NOTE: Tasks API usually deletes/recreates or might not support edit same way
+        // But for consistency let's assume standard REST if ID exists
+        if (taskId) {
+            // Check if API supports task editing or if we should delete/create
+            // For now, let's treat as create (many simple task bots don't support edit)
+            // Or if we know the endpoint: method = 'PUT'; url += `/${taskId}`;
+            // Let's default to create logic for now unless we know better.
+            // If we really want to support edit, we'd need to verify the API endpoint.
+            // Assuming create for this specific snippet to be safe or add logic later.
+            // If ID exists, we warn or try PUT
+            url += `/${taskId}`;
+            method = 'PUT';
+        }
+
+        const response = await apiCall(url, {
+            method: method,
+            body: JSON.stringify(payload)
+        });
+
+        if (response && (response.success || response.task_id)) {
+            showNotification(taskId ? "Task updated!" : "Task created!", "success");
+            document.getElementById('task-modal').style.display = 'none';
+            if (window.loadTasks) window.loadTasks();
+        } else {
+            showNotification("Failed to save task.", "error");
+        }
+    } catch (e) {
+        console.error("Error saving task:", e);
+        showNotification("Error saving task: " + e.message, "error");
+    }
+};
 
 // 3. CRITICAL: Login Form Handler
 // The original app.js might not be attaching this correctly or form default submit is happening

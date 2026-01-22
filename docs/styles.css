@@ -794,12 +794,86 @@ tbody tr:hover {
     flex: 1;
 }
 
-.discord-message-username {
-    font-size: 16px;
-    font-weight: 500;
-    color: #fff;
-    margin-bottom: 4px;
+/* Fix squished cards */
+.shop-card,
+.task-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 250px;
 }
+
+.shop-card p,
+.task-card p {
+    flex-grow: 1;
+    margin: 10px 0;
+    line-height: 1.5;
+}
+
+.card-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 13px;
+    border-radius: 6px;
+}
+
+/* Fix Server Selector Text Color */
+#server-select {
+    color: var(--text-primary);
+    background-color: var(--bg-tertiary);
+}
+
+#server-select option {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    padding: 10px;
+}
+
+/* Fix Modal Widths and Positioning */
+.modal {
+    padding-top: 50px;
+    /* Ensure space from top */
+    align-items: flex-start;
+    /* Start from top, not center (allows scrolling) */
+}
+
+.modal-content {
+    margin: 20px auto;
+    /* Better margin */
+    width: 95%;
+    max-width: 800px;
+    /* Ensure wide enough */
+}
+
+#announcement-modal .modal-content,
+#embed-modal .modal-content {
+    max-width: 1000px;
+    /* Extra width for side-by-side */
+}
+
+#user-management-modal .modal-content {
+    max-width: 700px;
+}
+
+/* Ensure editor/preview columns stack on mobile but side-by-side on desktop */
+.modal-split-layout {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+}
+
+@media (max-width: 768px) {
+    .modal-split-layout {
+        flex-direction: column;
+    }
+}
+
+/* .discord-message-username is above, removed duplicate incomplete block */
 
 .discord-message-timestamp {
     font-size: 12px;
