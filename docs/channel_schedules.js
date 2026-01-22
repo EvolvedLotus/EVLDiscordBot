@@ -469,7 +469,8 @@ window.loadConfigTab = async function () {
 
         if (response.ok) {
             const config = await response.json();
-            const isPremium = config.subscription_tier === 'premium';
+            const isSuperAdmin = window.currentUser && (window.currentUser.role === 'superadmin' || window.currentUser.is_superadmin === true);
+            const isPremium = config.subscription_tier === 'premium' || isSuperAdmin;
             showChannelSchedulesSection(isPremium);
 
             if (isPremium) {
