@@ -119,7 +119,25 @@ async function updateServerTier(serverId, serverName, currentTier) {
 
         if (response && (response.success || response.config)) {
             showNotification(`Updated ${serverName} to ${newTier.toUpperCase()}`, 'success');
-            loadServerManagement(); // Reload list
+
+            // Optimistic UI Update: Find the specific badge and update it immediately
+            const serverCard = document.querySelector(`.server-item[data-server-id="${serverId}"]`);
+            if (serverCard) {
+                const tierBadge = serverCard.querySelector('.tier-badge');
+                if (tierBadge) {
+                    tierBadge.className = `tier-badge tier-${newTier}`;
+                    tierBadge.textContent = newTier === 'premium' ? '🏆 Premium' : '🆓 Free';
+                }
+
+                // Update the button function call arguments to reflect the new state for next click
+                const editButton = serverCard.querySelector('button[onclick^="updateServerTier"]');
+                if (editButton) {
+                    editButton.setAttribute('onclick', `updateServerTier('${serverId}', '${serverName.replace(/'/g, "\\'")}', '${newTier}')`);
+                }
+            } else {
+                loadServerManagement(); // Fallback to reload if card not found
+            }
+
         } else {
             showNotification('Failed to update tier', 'error');
         }

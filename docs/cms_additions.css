@@ -60,43 +60,53 @@
 
 .server-item {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px;
+    flex-direction: column;
+    padding: 24px;
     background: rgba(255, 255, 255, 0.03);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.05);
     transition: all var(--transition-fast);
+    gap: 20px;
+    height: 100%;
 }
 
 .server-item:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-4px);
     border-color: var(--discord-blurple);
-    transform: translateX(4px);
 }
 
 .server-info {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
     flex: 1;
 }
 
 .server-name {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 18px;
+    font-weight: 700;
     color: var(--text-primary);
+    line-height: 1.4;
 }
 
-.server-id {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-family: 'Courier New', monospace;
+.server-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: auto;
 }
 
-.server-members {
+.server-actions button {
+    flex: 1;
+    height: 36px;
+    border-radius: 6px;
     font-size: 13px;
-    color: var(--text-secondary);
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
 .server-actions {
@@ -136,8 +146,14 @@
     border-radius: 4px;
 }
 
-.server-list::-webkit-scrollbar-thumb:hover {
-    background-color: var(--discord-blurple);
+/* Embed Grid Fix */
+.embeds-grid,
+.shop-grid,
+.tasks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 24px;
+    width: 100%;
 }
 
 .empty-server-list {
@@ -704,34 +720,44 @@ select[multiple].form-control option:checked,
     padding: 16px 24px;
 }
 
+/* Bot Status Config - Cleaner Layout */
 .bot-status-control {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
+    /* Stack vertically for clarity */
     gap: 24px;
-    align-items: flex-end;
+    width: 100%;
+}
+
+.bot-status-control .form-row {
+    display: flex;
+    gap: 24px;
+    width: 100%;
+    align-items: flex-start;
 }
 
 .bot-status-control .form-group {
     flex: 1;
-    min-width: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bot-status-control textarea,
+.bot-status-control input[type="text"] {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
 }
 
 .bot-status-control button {
-    height: 42px;
-    margin-bottom: 2px;
-}
-
-.bot-status-control .form-group {
-    margin-bottom: 0;
-}
-
-.status-preview {
-    margin-top: 12px;
-    padding: 10px;
-    background: var(--bg-tertiary);
-    border-radius: 6px;
-    font-size: 13px;
-    color: var(--text-muted);
+    align-self: flex-start;
+    /* Don't stretch */
+    padding: 12px 32px;
+    height: 48px;
 }
 
 /* Channel Schedules section - ensure visibility */
