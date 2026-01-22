@@ -99,6 +99,11 @@ async function apiCall(endpoint, options = {}) {
             throw new Error('Invalid API call parameters');
         }
 
+        // Prevent caching for GET requests by appending timestamp or using cache header
+        if (options.method === 'GET' || !options.method) {
+            options.cache = 'no-store';
+        }
+
         const response = await fetch(apiUrl(endpoint), options);
 
         if (response.status === 401) {
@@ -7193,11 +7198,30 @@ window.sendEmbedToChannel = function (event) {
 };
 
 // ========== SERVER TIER GLOBAL FIX ==========
-window.updateServerTier = async function (serverId, serverName, currentTier) {
+// ========== SERVER TIER GLOBAL FIX ==========
+window.updateServerTier = function (serverId, serverName, currentTier) {
     logCmsAction('edit_tier_click', { server_id: serverId, server_name: serverName, current: currentTier });
-    const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
-    if (!newTier || (newTier !== 'free' && newTier !== 'premium')) return;
-    if (newTier === currentTier) return;
+
+    // Use the new modal instead of prompt
+    const modal = document.getElementById('server-tier-modal');
+    if (!modal) {
+        console.error('Server tier modal not found in DOM');
+        // Fallback to prompt if modal missing
+        const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
+        if (!newTier || (newTier !== 'free' && newTier !== 'premium')) return;
+        if (newTier === currentTier) return;
+        window.saveServerTierDirect(serverId, serverName, newTier);
+        return;
+    }
+
+    document.getElementById('tier-server-id').value = serverId;
+    document.getElementById('tier-server-name').value = serverName;
+    document.getElementById('tier-select').value = currentTier || 'free';
+
+    modal.style.display = 'block';
+};
+
+window.saveServerTierDirect = async function (serverId, serverName, newTier) {
     try {
         await apiCall(`/api/${serverId}/config`, {
             method: 'PUT',
@@ -7210,6 +7234,16 @@ window.updateServerTier = async function (serverId, serverName, currentTier) {
         showNotification('Tier update failed', 'error');
         logCmsAction('edit_tier_failed', { server_id: serverId, error: e.message }, false);
     }
+};
+
+window.saveServerTier = async function (event) {
+    if (event) event.preventDefault();
+    const serverId = document.getElementById('tier-server-id').value;
+    const serverName = document.getElementById('tier-server-name').value;
+    const newTier = document.getElementById('tier-select').value;
+
+    document.getElementById('server-tier-modal').style.display = 'none';
+    await window.saveServerTierDirect(serverId, serverName, newTier);
 };
 
 // ========== NAVIGATION & SYSTEM ==========

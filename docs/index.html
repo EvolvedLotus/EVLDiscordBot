@@ -238,9 +238,6 @@
                     </div>
                 </div>
 
-                <!-- Whop & Promo Integration Section REMOVED -->
-                <!-- EVL API Configuration Section REMOVED -->
-
                 <!-- Channel Lock Schedules Section (Premium Only) -->
                 <div id="channel-schedules-section" class="content-area premium-feature-section"
                     style="margin-top: 20px; display: none;">
@@ -664,7 +661,37 @@
         </div>
     </div>
 
-    <script src="./app.js?v=20"></script>
+    <!-- Server Tier Modal (NEW) -->
+    <div id="server-tier-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close"
+                onclick="document.getElementById('server-tier-modal').style.display='none'">&times;</span>
+            <h2>Update Server Tier</h2>
+            <div class="modal-body">
+                <form id="server-tier-form" onsubmit="window.saveServerTier(event)">
+                    <input type="hidden" id="tier-server-id">
+                    <input type="hidden" id="tier-server-name">
+
+                    <div class="form-group">
+                        <label for="tier-select">Select Tier</label>
+                        <select id="tier-select" class="form-control">
+                            <option value="free">Free</option>
+                            <option value="premium">Premium</option>
+                        </select>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn-primary">Update Tier</button>
+                        <button type="button"
+                            onclick="document.getElementById('server-tier-modal').style.display='none'"
+                            class="btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="./app.js?v=21"></script>
 </body>
 
 </html>
