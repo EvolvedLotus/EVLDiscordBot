@@ -62,6 +62,8 @@ async function updateBotStatus() {
         return;
     }
 
+    logCmsAction('update_bot_status_start', { type: statusType.value, message: statusMessage.value });
+
     try {
         await apiCall(`/api/${currentServerId}/bot_status`, {
             method: 'POST',
@@ -71,8 +73,10 @@ async function updateBotStatus() {
             })
         });
         showNotification('Bot status updated', 'success');
+        logCmsAction('update_bot_status_success', { type: statusType.value, message: statusMessage.value });
     } catch (error) {
         showNotification('Failed to update bot status', 'error');
+        logCmsAction('update_bot_status_failed', { error: error.message }, false);
     }
 }
 
@@ -112,6 +116,26 @@ async function apiCall(endpoint, options = {}) {
     } catch (error) {
         console.error('API Call Error:', error);
         throw error;
+    }
+}
+
+/**
+ * Log CMS activity to backend
+ */
+async function logCmsAction(action, details = {}, success = true, guildId = null) {
+    console.log(`[LOG] ${action}`, details);
+    try {
+        await apiCall('/api/admin/log_cms_action', {
+            method: 'POST',
+            body: JSON.stringify({
+                action,
+                details,
+                success,
+                guild_id: guildId || window.currentServerId || 0
+            })
+        });
+    } catch (e) {
+        console.warn('Logging to backend failed:', e);
     }
 }
 
@@ -554,15 +578,19 @@ async function addBalance() {
     const amount = document.getElementById('balance-amount').value;
     const reason = document.getElementById('balance-reason').value;
 
+    logCmsAction('add_balance_start', { user_id: currentManagingUserId, amount, reason });
+
     try {
         await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance`, {
             method: 'PUT',
             body: JSON.stringify({ amount: parseInt(amount) })
         });
         showNotification('Balance added successfully', 'success');
+        logCmsAction('add_balance_success', { user_id: currentManagingUserId, amount });
         loadUsers();
     } catch (error) {
         showNotification('Failed to add balance: ' + error.message, 'error');
+        logCmsAction('add_balance_failed', { user_id: currentManagingUserId, error: error.message }, false);
     }
 }
 
@@ -571,15 +599,19 @@ async function removeBalance() {
     const amount = document.getElementById('balance-amount').value;
     const reason = document.getElementById('balance-reason').value;
 
+    logCmsAction('remove_balance_start', { user_id: currentManagingUserId, amount, reason });
+
     try {
         await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance`, {
             method: 'PUT',
             body: JSON.stringify({ amount: -parseInt(amount) })
         });
         showNotification('Balance removed successfully', 'success');
+        logCmsAction('remove_balance_success', { user_id: currentManagingUserId, amount });
         loadUsers();
     } catch (error) {
         showNotification('Failed to remove balance: ' + error.message, 'error');
+        logCmsAction('remove_balance_failed', { user_id: currentManagingUserId, error: error.message }, false);
     }
 }
 
@@ -770,14 +802,18 @@ async function loadShop() {
 async function deleteShopItem(itemId) {
     if (!confirm('Are you sure you want to delete this item?')) return;
 
+    logCmsAction('delete_shop_item_start', { item_id: itemId });
+
     try {
         await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
             method: 'DELETE'
         });
         showNotification('Item deleted successfully', 'success');
+        logCmsAction('delete_shop_item_success', { item_id: itemId });
         loadShop();
     } catch (error) {
         showNotification(`Failed to delete item: ${error.message}`, 'error');
+        logCmsAction('delete_shop_item_failed', { item_id: itemId, error: error.message }, false);
     }
 }
 
@@ -957,14 +993,18 @@ async function loadTasks() {
 async function deleteTask(taskId) {
     if (!confirm('Are you sure you want to delete this task?')) return;
 
+    logCmsAction('delete_task_start', { task_id: taskId });
+
     try {
         await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
             method: 'DELETE'
         });
         showNotification('Task deleted successfully', 'success');
+        logCmsAction('delete_task_success', { task_id: taskId });
         loadTasks();
     } catch (error) {
         showNotification(`Failed to delete task: ${error.message}`, 'error');
+        logCmsAction('delete_task_failed', { task_id: taskId, error: error.message }, false);
     }
 }
 
@@ -5074,11 +5114,14 @@ async function openBotInvite() {
 }
 
 // Server Management for Super Admins
+// Server Management for Super Admins
 async function loadServerManagement() {
     const container = document.getElementById('server-management-container');
     if (!container) return;
 
     try {
+        logCmsAction('load_server_management_start');
+
         // Fetch all servers the bot is in
         const response = await apiCall('/api/servers');
 
@@ -5090,7 +5133,6 @@ async function loadServerManagement() {
         let html = '<div class="server-list">';
 
         // We need to fetch config for each server to get the tier
-        // This might be slow for many servers, but ok for admin panel
         const enhancedServers = await Promise.all(response.servers.map(async (server) => {
             try {
                 const config = await apiCall(`/api/${server.id}/config`);
@@ -5112,9 +5154,11 @@ async function loadServerManagement() {
                         <div class="server-members">👥 ${server.member_count || 'N/A'} members</div>
                     </div>
                     <div class="server-actions">
-                         <button class="btn-primary" 
-                                style="padding: 5px 10px; font-size: 12px; height: auto;"
-                                onclick="updateServerTier('${server.id}', '${serverName}', '${server.tier}')">
+                         <button class="btn-primary btn-edit-tier" 
+                                 style="padding: 5px 10px; font-size: 12px; height: auto;"
+                                 data-server-id="${server.id}"
+                                 data-server-name="${serverName}"
+                                 data-current-tier="${server.tier}">
                             💎 Edit Tier
                         </button>
                         <button class="btn-leave-server"
@@ -5131,7 +5175,17 @@ async function loadServerManagement() {
         html += '</div>';
         container.innerHTML = html;
 
-        // Add event listeners to all leave buttons
+        // Add event listeners for Edit Tier
+        container.querySelectorAll('.btn-edit-tier').forEach(button => {
+            button.addEventListener('click', function () {
+                const serverId = this.getAttribute('data-server-id');
+                const serverName = this.getAttribute('data-server-name');
+                const currentTier = this.getAttribute('data-current-tier');
+                updateServerTier(serverId, serverName, currentTier);
+            });
+        });
+
+        // Add event listeners for Leave Server
         container.querySelectorAll('.btn-leave-server').forEach(button => {
             button.addEventListener('click', function () {
                 const serverId = this.getAttribute('data-server-id');
@@ -5140,17 +5194,23 @@ async function loadServerManagement() {
             });
         });
 
+        logCmsAction('load_server_management_complete', { server_count: enhancedServers.length });
+
     } catch (error) {
         console.error('Failed to load servers:', error);
         container.innerHTML = '<div class="empty-server-list">Failed to load servers</div>';
+        logCmsAction('load_server_management_failed', { error: error.message }, false);
     }
 }
 
 async function updateServerTier(serverId, serverName, currentTier) {
+    logCmsAction('click_edit_tier', { server_id: serverId, server_name: serverName, current_tier: currentTier });
+
     const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
 
     if (!newTier || (newTier !== 'free' && newTier !== 'premium')) {
         if (newTier) alert("Invalid tier. Please enter 'free' or 'premium'.");
+        logCmsAction('update_tier_cancelled', { server_id: serverId, input: newTier });
         return;
     }
 
@@ -5164,36 +5224,27 @@ async function updateServerTier(serverId, serverName, currentTier) {
 
         if (response && (response.success || response.config)) {
             showNotification(`Updated ${serverName} to ${newTier.toUpperCase()}`, 'success');
+            logCmsAction('update_tier_success', { server_id: serverId, new_tier: newTier });
 
-            // Optimistic UI Update: Find the specific badge and update it immediately
-            const serverCard = document.querySelector(`.server-item[data-server-id="${serverId}"]`);
-            if (serverCard) {
-                const tierBadge = serverCard.querySelector('.tier-badge');
-                if (tierBadge) {
-                    tierBadge.className = `tier-badge tier-${newTier}`;
-                    tierBadge.textContent = newTier === 'premium' ? '🏆 Premium' : '🆓 Free';
-                }
-
-                // Update the button function call arguments to reflect the new state for next click
-                const editButton = serverCard.querySelector('button[onclick^="updateServerTier"]');
-                if (editButton) {
-                    editButton.setAttribute('onclick', `updateServerTier('${serverId}', '${serverName.replace(/'/g, "\\'")}', '${newTier}')`);
-                }
-            } else {
-                loadServerManagement(); // Fallback to reload if card not found
-            }
+            // Reload management to reflect changes
+            loadServerManagement();
 
         } else {
             showNotification('Failed to update tier', 'error');
+            logCmsAction('update_tier_failed', { server_id: serverId, error: response?.error || 'Unknown error' }, false);
         }
     } catch (e) {
         console.error("Tier update failed:", e);
         showNotification('Error updating tier', 'error');
+        logCmsAction('update_tier_error', { server_id: serverId, error: e.message }, false);
     }
 }
 
 async function leaveServer(serverId, serverName) {
+    logCmsAction('click_leave_server', { server_id: serverId, server_name: serverName });
+
     if (!confirm(`Are you sure you want to leave "${serverName}"?\n\nThis action cannot be undone.`)) {
+        logCmsAction('leave_server_cancelled', { server_id: serverId });
         return;
     }
 
@@ -5204,14 +5255,100 @@ async function leaveServer(serverId, serverName) {
 
         if (response && response.success) {
             showNotification(`Successfully left server: ${serverName}`, 'success');
+            logCmsAction('leave_server_success', { server_id: serverId });
             // Reload the server list
             loadServerManagement();
         } else {
             showNotification(`Failed to leave server: ${response.error || 'Unknown error'}`, 'error');
+            logCmsAction('leave_server_failed', { server_id: serverId, error: response?.error }, false);
         }
     } catch (error) {
         console.error('Error leaving server:', error);
         showNotification(`Error leaving server: ${error.message}`, 'error');
+        logCmsAction('leave_server_error', { server_id: serverId, error: error.message }, false);
+    }
+}
+
+async function loadChannelSchedulesAdmin() {
+    const container = document.getElementById('channel-lock-admin-container');
+    if (!container) return;
+
+    try {
+        logCmsAction('load_channel_schedules_admin_start');
+
+        // Fetch all schedules (SuperAdmin version - might need a special backend route 
+        // but we'll try fetching for current server if none specified, 
+        // or just show instructions for now if a global route doesn't exist)
+
+        // Actually, we'll fetch for the current active server in the dropdown
+        const serverId = window.currentServerId;
+        if (!serverId) {
+            container.innerHTML = '<div class="empty-server-list">Select a server to view its channel schedules</div>';
+            return;
+        }
+
+        const response = await apiCall(`/api/${serverId}/channel-schedules`);
+
+        if (!response || !response.schedules || response.schedules.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <p>No schedules found for this server.</p>
+                    <button class="btn-primary" onclick="showCreateChannelScheduleModal()">
+                        ➕ Create Schedule
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '<div class="schedule-list">';
+        response.schedules.forEach(schedule => {
+            html += `
+                <div class="schedule-item" data-schedule-id="${schedule.schedule_id}">
+                    <div class="schedule-info">
+                        <strong>#${escapeHtml(schedule.channel_name || schedule.channel_id)}</strong>
+                        <div class="schedule-times">
+                            🔓 ${schedule.unlock_time} | 🔒 ${schedule.lock_time}
+                        </div>
+                        <div class="schedule-status">
+                            Status: <span class="status-badge ${schedule.is_enabled ? 'status-online' : 'status-offline'}">
+                                ${schedule.is_enabled ? 'Active' : 'Disabled'}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="schedule-actions">
+                        <button class="btn-small" onclick="toggleSchedule('${schedule.schedule_id}', ${!schedule.is_enabled})">
+                            ${schedule.is_enabled ? 'Disable' : 'Enable'}
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        container.innerHTML = html;
+
+        logCmsAction('load_channel_schedules_admin_complete', { server_id: serverId, count: response.schedules.length });
+
+    } catch (error) {
+        console.error('Failed to load channel schedules:', error);
+        container.innerHTML = '<div class="error">Failed to load schedules. Is this a Premium server?</div>';
+        logCmsAction('load_channel_schedules_admin_failed', { error: error.message }, false);
+    }
+}
+
+async function toggleSchedule(scheduleId, enabled) {
+    logCmsAction('toggle_channel_schedule', { schedule_id: scheduleId, enabled });
+
+    try {
+        await apiCall(`/api/${window.currentServerId}/channel-schedules/${scheduleId}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ is_enabled: enabled })
+        });
+        showNotification(`Schedule ${enabled ? 'enabled' : 'disabled'} successfully`, 'success');
+        loadChannelSchedulesAdmin();
+    } catch (error) {
+        showNotification('Failed to update schedule', 'error');
+        logCmsAction('toggle_channel_schedule_failed', { schedule_id: scheduleId, error: error.message }, false);
     }
 }
 
@@ -5256,6 +5393,14 @@ function patchConfigTab() {
                                 <div class="loading">Loading servers...</div>
                             </div>
                         </div>
+                        
+                        <div class="channel-lock-admin-section section-card" style="margin-top: 20px;">
+                            <h3>🔒 Channel Lock Management (Super Admin)</h3>
+                            <p class="section-subtitle">Manage automated channel lock schedules across all servers.</p>
+                            <div id="channel-lock-admin-container">
+                                <div class="loading">Loading schedules...</div>
+                            </div>
+                        </div>
                     `;
 
                     // Check if server management section already exists
@@ -5263,9 +5408,12 @@ function patchConfigTab() {
                         botStatusSection.insertAdjacentHTML('afterend', serverMgmtHtml);
                     }
 
-                    // Load servers
+                    // Load servers and schedules
                     if (window.loadServerManagement) {
                         window.loadServerManagement();
+                    }
+                    if (window.loadChannelSchedulesAdmin) {
+                        window.loadChannelSchedulesAdmin();
                     }
                 } else {
                     console.warn('[CMS] bot-status-section not found');

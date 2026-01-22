@@ -527,6 +527,31 @@ def update_ad_client(client_id):
     except Exception as e:
         return safe_error_response(e)
 
+@app.route('/api/admin/log_cms_action', methods=['POST'])
+@require_auth
+def log_cms_action():
+    """Receive and store logs from the CMS UI"""
+    try:
+        data = request.get_json()
+        user = request.user
+        
+        # We use log_event to store these in the audit system
+        audit_manager.log_event(
+            event_type="cms.button_click",
+            guild_id=data.get('guild_id', 0),
+            user_id=None,
+            moderator_id=user.get('id'),
+            details={
+                'action': data.get('action', 'unknown'),
+                'success': data.get('success', True),
+                'ui_metadata': data.get('details', {})
+            }
+        )
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        logger.error(f"Failed to log CMS action: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # ========== AD CLAIM ENDPOINTS (For ad-viewer.html) ==========
 @app.route('/api/ad-claim/session/<session_id>', methods=['GET'])
 def get_ad_session(session_id):
