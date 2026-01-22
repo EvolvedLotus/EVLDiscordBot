@@ -214,6 +214,7 @@ try:
     from core.ad_claim_manager import AdClaimManager
     from core.tier_manager import TierManager
     from core.evolved_lotus_api import evolved_lotus_api
+    from core.channel_lock_manager import ChannelLockManager
 
     # Initialize managers
     data_manager = DataManager()
@@ -229,6 +230,7 @@ try:
     embed_manager = EmbedManager(data_manager)
     sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
     ad_claim_manager = AdClaimManager(data_manager, transaction_manager)
+    channel_lock_manager = ChannelLockManager(data_manager)
 
     logger.info("✅ All managers initialized")
 except ImportError as e:
@@ -2513,6 +2515,301 @@ def leave_server(server_id):
         
     except Exception as e:
         logger.error(f"Error leaving server {server_id}: {e}")
+        return safe_error_response(e)
+
+# ========== CHANNEL LOCK SCHEDULES (Premium Feature) ==========
+
+def require_premium(f):
+    """Decorator to require premium subscription for an endpoint"""
+    @wraps(f)
+    def decorated_function(server_id, *args, **kwargs):
+        try:
+            config = data_manager.load_guild_data(server_id, 'config')
+            tier = config.get('subscription_tier', 'free')
+            if tier != 'premium':
+                return jsonify({
+                    'error': 'This feature requires a Premium subscription',
+                    'upgrade_url': 'https://whop.com/evl-task-bot/'
+                }), 403
+            return f(server_id, *args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error checking premium status: {e}")
+            return safe_error_response(e)
+    return decorated_function
+
+@app.route('/api/<server_id>/channel-schedules', methods=['GET'])
+@require_guild_access
+@require_premium
+def get_channel_schedules(server_id):
+    """Get all channel lock schedules for a guild (Premium Only)"""
+    try:
+        schedules = channel_lock_manager.get_schedules(server_id)
+        return jsonify({'schedules': schedules}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules', methods=['POST'])
+@require_guild_access
+@require_premium
+def create_channel_schedule(server_id):
+    """Create a new channel lock schedule (Premium Only)"""
+    try:
+        data = request.get_json()
+        user = request.user
+        
+        # Validate required fields
+        if not data.get('channel_id'):
+            return jsonify({'error': 'channel_id is required'}), 400
+        if not data.get('unlock_time'):
+            return jsonify({'error': 'unlock_time is required'}), 400
+        if not data.get('lock_time'):
+            return jsonify({'error': 'lock_time is required'}), 400
+        
+        # Check bot permissions on the channel first
+        if _bot_instance and _bot_instance.loop:
+            future = asyncio.run_coroutine_threadsafe(
+                channel_lock_manager.check_channel_permissions(server_id, data['channel_id']),
+                _bot_instance.loop
+            )
+            perm_result = future.result(timeout=10)
+            
+            if not perm_result.get('has_permissions'):
+                return jsonify({
+                    'error': f"Bot lacks required permissions: {perm_result.get('error', 'Manage Channels and Manage Roles required')}"
+                }), 400
+            
+            # Add channel name to data
+            data['channel_name'] = perm_result.get('channel_name', '')
+        
+        result = channel_lock_manager.create_schedule(
+            server_id, 
+            data, 
+            created_by=user.get('id')
+        )
+        
+        if result.get('error'):
+            return jsonify({'error': result['error']}), 400
+        
+        # Immediately apply the correct state
+        if _bot_instance and _bot_instance.loop:
+            schedule = result.get('schedule', {})
+            should_unlock = channel_lock_manager.should_be_unlocked(schedule)
+            
+            if should_unlock:
+                asyncio.run_coroutine_threadsafe(
+                    channel_lock_manager.unlock_channel(
+                        server_id, 
+                        data['channel_id'], 
+                        schedule.get('schedule_id')
+                    ),
+                    _bot_instance.loop
+                )
+            else:
+                asyncio.run_coroutine_threadsafe(
+                    channel_lock_manager.lock_channel(
+                        server_id, 
+                        data['channel_id'], 
+                        schedule.get('schedule_id')
+                    ),
+                    _bot_instance.loop
+                )
+        
+        return jsonify(result), 201
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['GET'])
+@require_guild_access
+@require_premium
+def get_channel_schedule(server_id, schedule_id):
+    """Get a specific channel schedule (Premium Only)"""
+    try:
+        schedule = channel_lock_manager.get_schedule(server_id, schedule_id)
+        if not schedule:
+            return jsonify({'error': 'Schedule not found'}), 404
+        return jsonify({'schedule': schedule}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['PUT'])
+@require_guild_access
+@require_premium
+def update_channel_schedule(server_id, schedule_id):
+    """Update a channel lock schedule (Premium Only)"""
+    try:
+        data = request.get_json()
+        result = channel_lock_manager.update_schedule(server_id, schedule_id, data)
+        
+        if result.get('error'):
+            return jsonify({'error': result['error']}), 400
+        
+        # Re-evaluate schedule state after update
+        if _bot_instance and _bot_instance.loop:
+            schedule = result.get('schedule', {})
+            should_unlock = channel_lock_manager.should_be_unlocked(schedule)
+            channel_id = schedule.get('channel_id')
+            
+            if should_unlock and schedule.get('current_state') != 'unlocked':
+                asyncio.run_coroutine_threadsafe(
+                    channel_lock_manager.unlock_channel(server_id, channel_id, schedule_id),
+                    _bot_instance.loop
+                )
+            elif not should_unlock and schedule.get('current_state') != 'locked':
+                asyncio.run_coroutine_threadsafe(
+                    channel_lock_manager.lock_channel(server_id, channel_id, schedule_id),
+                    _bot_instance.loop
+                )
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['DELETE'])
+@require_guild_access
+@require_premium
+def delete_channel_schedule(server_id, schedule_id):
+    """Delete a channel lock schedule (Premium Only)"""
+    try:
+        # Get schedule to unlock channel before deleting
+        schedule = channel_lock_manager.get_schedule(server_id, schedule_id)
+        
+        if schedule and _bot_instance and _bot_instance.loop:
+            # Unlock the channel before deleting the schedule
+            future = asyncio.run_coroutine_threadsafe(
+                channel_lock_manager.unlock_channel(
+                    server_id, 
+                    schedule['channel_id'], 
+                    schedule_id
+                ),
+                _bot_instance.loop
+            )
+            future.result(timeout=10)
+        
+        result = channel_lock_manager.delete_schedule(server_id, schedule_id)
+        
+        if result.get('error'):
+            return jsonify({'error': result['error']}), 400
+        
+        return jsonify({'success': True, 'message': 'Schedule deleted and channel unlocked'}), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/<schedule_id>/toggle', methods=['POST'])
+@require_guild_access
+@require_premium
+def toggle_channel_schedule(server_id, schedule_id):
+    """Toggle a schedule's enabled state (Premium Only)"""
+    try:
+        schedule = channel_lock_manager.get_schedule(server_id, schedule_id)
+        if not schedule:
+            return jsonify({'error': 'Schedule not found'}), 404
+        
+        new_state = not schedule.get('is_enabled', True)
+        result = channel_lock_manager.update_schedule(server_id, schedule_id, {'is_enabled': new_state})
+        
+        if result.get('error'):
+            return jsonify({'error': result['error']}), 400
+        
+        # If disabling, unlock the channel
+        if not new_state and _bot_instance and _bot_instance.loop:
+            asyncio.run_coroutine_threadsafe(
+                channel_lock_manager.unlock_channel(server_id, schedule['channel_id'], schedule_id),
+                _bot_instance.loop
+            )
+        
+        return jsonify({
+            'success': True, 
+            'is_enabled': new_state,
+            'message': f"Schedule {'enabled' if new_state else 'disabled'}"
+        }), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/<schedule_id>/lock', methods=['POST'])
+@require_guild_access
+@require_premium
+def manual_lock_channel(server_id, schedule_id):
+    """Manually lock a channel now (Premium Only)"""
+    try:
+        schedule = channel_lock_manager.get_schedule(server_id, schedule_id)
+        if not schedule:
+            return jsonify({'error': 'Schedule not found'}), 404
+        
+        if not _bot_instance or not _bot_instance.loop:
+            return jsonify({'error': 'Bot is not ready'}), 503
+        
+        future = asyncio.run_coroutine_threadsafe(
+            channel_lock_manager.lock_channel(server_id, schedule['channel_id'], schedule_id),
+            _bot_instance.loop
+        )
+        result = future.result(timeout=10)
+        
+        if result.get('error'):
+            return jsonify({'error': result['error']}), 400
+        
+        return jsonify({'success': True, 'message': 'Channel locked'}), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/<schedule_id>/unlock', methods=['POST'])
+@require_guild_access
+@require_premium
+def manual_unlock_channel(server_id, schedule_id):
+    """Manually unlock a channel now (Premium Only)"""
+    try:
+        schedule = channel_lock_manager.get_schedule(server_id, schedule_id)
+        if not schedule:
+            return jsonify({'error': 'Schedule not found'}), 404
+        
+        if not _bot_instance or not _bot_instance.loop:
+            return jsonify({'error': 'Bot is not ready'}), 503
+        
+        future = asyncio.run_coroutine_threadsafe(
+            channel_lock_manager.unlock_channel(server_id, schedule['channel_id'], schedule_id),
+            _bot_instance.loop
+        )
+        result = future.result(timeout=10)
+        
+        if result.get('error'):
+            return jsonify({'error': result['error']}), 400
+        
+        return jsonify({'success': True, 'message': 'Channel unlocked'}), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/check-permissions/<channel_id>', methods=['GET'])
+@require_guild_access
+@require_premium
+def check_channel_lock_permissions(server_id, channel_id):
+    """Check if bot has permissions to lock/unlock a channel (Premium Only)"""
+    try:
+        if not _bot_instance or not _bot_instance.loop:
+            return jsonify({'error': 'Bot is not ready'}), 503
+        
+        future = asyncio.run_coroutine_threadsafe(
+            channel_lock_manager.check_channel_permissions(server_id, channel_id),
+            _bot_instance.loop
+        )
+        result = future.result(timeout=10)
+        
+        return jsonify(result), 200
+        
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/timezones', methods=['GET'])
+def get_timezones():
+    """Get list of common timezones for UI"""
+    try:
+        timezones = channel_lock_manager.get_timezones()
+        return jsonify({'timezones': timezones}), 200
+    except Exception as e:
         return safe_error_response(e)
 
 # ========== ERROR HANDLERS ==========

@@ -7,14 +7,16 @@ class TierManager:
             "max_tasks": 5,
             "max_shop_items": 10,
             "show_ads": True,
-            "can_use_global": False
+            "can_use_global": False,
+            "channel_schedules": False  # Premium feature
         },
         "premium": {
             "name": "Premium Tier",
             "max_tasks": float('inf'),
             "max_shop_items": float('inf'),
             "show_ads": False,
-            "can_use_global": True
+            "can_use_global": True,
+            "channel_schedules": True  # Premium feature - scheduled channel locks
         }
     }
 

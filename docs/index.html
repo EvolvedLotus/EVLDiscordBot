@@ -281,6 +281,33 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Channel Lock Schedules Section (Premium Only) -->
+                <div id="channel-schedules-section" class="content-area premium-feature-section"
+                    style="margin-top: 20px; display: none;">
+                    <div class="premium-section-header">
+                        <h3>🔒 Scheduled Channel Lock/Unlock</h3>
+                        <span class="premium-badge">✨ Premium</span>
+                    </div>
+                    <div class="card"
+                        style="background: var(--bg-secondary); border: 1px solid var(--border-secondary); padding: 15px; border-radius: 8px;">
+                        <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 15px;">
+                            Automatically lock and unlock text channels on a schedule. Perfect for controlling when
+                            members can chat.
+                        </p>
+
+                        <div class="header-actions" style="margin-bottom: 15px;">
+                            <button onclick="showCreateChannelScheduleModal()" class="btn-success">➕ Add
+                                Schedule</button>
+                            <button onclick="loadChannelSchedules()" class="btn-secondary">🔄 Refresh</button>
+                        </div>
+
+                        <div id="channel-schedules-list">
+                            <!-- Populated via JS -->
+                            <div class="loading">Loading channel schedules...</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Logs Tab -->
@@ -508,6 +535,95 @@
         </div>
     </div>
 
+    <!-- Channel Schedule Modal (Premium Feature) -->
+    <div id="channel-schedule-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close" onclick="closeChannelScheduleModal()">&times;</span>
+            <h2 id="channel-schedule-modal-title">🔒 Create Channel Schedule</h2>
+            <div class="modal-body">
+                <form id="channel-schedule-form" onsubmit="saveChannelSchedule(event)">
+                    <input type="hidden" id="schedule-id">
+
+                    <div class="form-group">
+                        <label for="schedule-channel">Channel to Lock/Unlock *</label>
+                        <select id="schedule-channel" class="form-control" required>
+                            <option value="">Select a text channel...</option>
+                        </select>
+                        <small>Only text channels can be scheduled</small>
+                    </div>
+
+                    <div class="form-row" style="display: flex; gap: 15px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label for="schedule-unlock-time">Unlock Time (Open) *</label>
+                            <input type="time" id="schedule-unlock-time" class="form-control" required value="09:00">
+                            <small>When the channel opens</small>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="schedule-lock-time">Lock Time (Close) *</label>
+                            <input type="time" id="schedule-lock-time" class="form-control" required value="21:00">
+                            <small>When the channel locks</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="schedule-timezone">Timezone *</label>
+                        <select id="schedule-timezone" class="form-control" required>
+                            <option value="America/New_York">America/New York (EST/EDT)</option>
+                            <option value="America/Chicago">America/Chicago (CST/CDT)</option>
+                            <option value="America/Denver">America/Denver (MST/MDT)</option>
+                            <option value="America/Los_Angeles">America/Los Angeles (PST/PDT)</option>
+                            <option value="Europe/London">Europe/London (GMT/BST)</option>
+                            <option value="Europe/Paris">Europe/Paris (CET/CEST)</option>
+                            <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                            <option value="Australia/Sydney">Australia/Sydney (AEST/AEDT)</option>
+                            <option value="UTC">UTC</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Active Days</label>
+                        <div class="days-checkbox-group"
+                            style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px;">
+                            <label class="checkbox-label"><input type="checkbox" id="day-0" value="0" checked>
+                                Sun</label>
+                            <label class="checkbox-label"><input type="checkbox" id="day-1" value="1" checked>
+                                Mon</label>
+                            <label class="checkbox-label"><input type="checkbox" id="day-2" value="2" checked>
+                                Tue</label>
+                            <label class="checkbox-label"><input type="checkbox" id="day-3" value="3" checked>
+                                Wed</label>
+                            <label class="checkbox-label"><input type="checkbox" id="day-4" value="4" checked>
+                                Thu</label>
+                            <label class="checkbox-label"><input type="checkbox" id="day-5" value="5" checked>
+                                Fri</label>
+                            <label class="checkbox-label"><input type="checkbox" id="day-6" value="6" checked>
+                                Sat</label>
+                        </div>
+                        <small>Select which days the schedule should be active</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="schedule-enabled" checked>
+                            Enable this schedule
+                        </label>
+                    </div>
+
+                    <div id="schedule-permission-warning" class="alert alert-warning" style="display: none;">
+                        ⚠️ Bot needs <strong>Manage Channels</strong> and <strong>Manage Roles</strong> permissions on
+                        this channel.
+                    </div>
+
+                    <div class="button-group">
+                        <button type="submit" class="btn-success">Save Schedule</button>
+                        <button type="button" onclick="closeChannelScheduleModal()"
+                            class="btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="./app.js?v=13"></script>
     <script src="./app_fixes.js?v=4"></script>
     <script src="./app_additions.js?v=1"></script>
@@ -515,6 +631,7 @@
     <script src="./cms_additions.js"></script>
     <script src="./mobile.js"></script>
     <script src="./modal_fixes.js?v=1"></script>
+    <script src="./channel_schedules.js?v=1"></script>
 
 </body>
 

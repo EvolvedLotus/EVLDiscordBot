@@ -230,3 +230,305 @@
 .usage-fill.danger {
     background: #ed4245;
 }
+
+/* ========== CHANNEL LOCK SCHEDULES (Premium Feature) ========== */
+
+/* Premium Section Header */
+.premium-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.premium-section-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.premium-badge {
+    background: linear-gradient(135deg, #FFD700, #FFA500);
+    color: #000;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+/* Schedule Cards */
+.schedule-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all var(--transition-fast);
+}
+
+.schedule-card:hover {
+    border-color: var(--discord-blurple);
+    box-shadow: 0 4px 12px rgba(88, 101, 242, 0.15);
+}
+
+.schedule-card.schedule-disabled {
+    opacity: 0.6;
+    background: var(--bg-secondary);
+}
+
+/* Schedule Header */
+.schedule-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.schedule-channel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.channel-icon {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.channel-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Schedule State Badges */
+.schedule-state {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.state-locked {
+    background: rgba(237, 66, 69, 0.2);
+    color: #ed4245;
+}
+
+.state-unlocked {
+    background: rgba(87, 242, 135, 0.2);
+    color: #57f287;
+}
+
+.state-error {
+    background: rgba(250, 166, 26, 0.2);
+    color: #faa61a;
+}
+
+/* Schedule Times */
+.schedule-times {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 12px;
+}
+
+.time-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.time-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.time-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.time-arrow {
+    color: var(--text-muted);
+    font-size: 20px;
+}
+
+/* Schedule Meta */
+.schedule-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.schedule-meta span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Schedule Error */
+.schedule-error {
+    background: rgba(237, 66, 69, 0.15);
+    border: 1px solid rgba(237, 66, 69, 0.3);
+    color: #ed4245;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    margin-bottom: 12px;
+}
+
+/* Schedule Actions */
+.schedule-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border-primary);
+    padding-top: 12px;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+}
+
+.btn-sm.btn-warning {
+    background: #faa61a;
+    color: #000;
+}
+
+.btn-sm.btn-warning:hover {
+    background: #d99418;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-secondary);
+    transition: .3s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--text-muted);
+    transition: .3s;
+}
+
+input:checked+.slider {
+    background-color: var(--discord-green);
+    border-color: var(--discord-green);
+}
+
+input:checked+.slider:before {
+    background-color: white;
+    transform: translateX(20px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Day Checkboxes */
+.days-checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all var(--transition-fast);
+}
+
+.checkbox-label:hover {
+    border-color: var(--discord-blurple);
+}
+
+.checkbox-label input[type="checkbox"]:checked+* {
+    color: var(--discord-blurple);
+}
+
+/* Alert Warning */
+.alert-warning {
+    background: rgba(250, 166, 26, 0.15);
+    border: 1px solid rgba(250, 166, 26, 0.3);
+    color: #faa61a;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-top: 15px;
+}
+
+/* Premium Upgrade Prompt */
+.premium-upgrade-prompt {
+    background: linear-gradient(135deg, rgba(88, 101, 242, 0.1), rgba(255, 215, 0, 0.1));
+    border: 1px dashed var(--discord-blurple);
+    border-radius: 12px;
+    padding: 40px 30px;
+}
+
+.premium-upgrade-prompt h4 {
+    font-size: 20px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+/* Empty State */
+.empty-state {
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    border: 1px dashed var(--border-secondary);
+}

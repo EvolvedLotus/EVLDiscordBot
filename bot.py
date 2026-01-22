@@ -118,6 +118,16 @@ async def run_bot():
             logger.error(f"✗ Failed to initialize ad claim manager: {e}")
             bot.ad_claim_manager = None
         
+        # Initialize channel lock manager (Premium Feature)
+        try:
+            from core.channel_lock_manager import ChannelLockManager
+            bot.channel_lock_manager = ChannelLockManager(data_manager)
+            bot.channel_lock_manager.set_bot_instance(bot)
+            logger.info("✓ Channel lock manager initialized")
+        except Exception as e:
+            logger.error(f"✗ Failed to initialize channel lock manager: {e}")
+            bot.channel_lock_manager = None
+        
         # Initialize task channel monitor
         try:
             from core.task_channel_monitor import TaskChannelMonitor
@@ -366,6 +376,19 @@ async def run_bot():
                     logger.info("✅ Task channel monitor started")
                 except Exception as e:
                     logger.error(f"❌ Failed to start task channel monitor: {e}")
+
+            # Sync channel lock schedules on startup (Premium Feature)
+            if bot.channel_lock_manager:
+                try:
+                    sync_result = await bot.channel_lock_manager.sync_schedules_on_startup()
+                    logger.info(f"✅ Channel lock schedules synced: {sync_result.get('locked', 0)} locked, "
+                              f"{sync_result.get('unlocked', 0)} unlocked")
+                    
+                    # Start the background task for schedule processing
+                    process_channel_lock_schedules.start()
+                    logger.info("✅ Channel lock schedule processor started")
+                except Exception as e:
+                    logger.error(f"❌ Failed to sync channel lock schedules: {e}")
 
             logger.info("=" * 60)
             logger.info("🎉 BOT IS FULLY READY AND OPERATIONAL")
@@ -682,6 +705,38 @@ async def run_bot():
                 })
 
                 logger.info(f"Channel '{before.name}' renamed to '{after.name}' in guild {after.guild.id}")
+
+        # ============= CHANNEL LOCK SCHEDULE BACKGROUND TASK (Premium Feature) =============
+        @tasks.loop(minutes=1)
+        async def process_channel_lock_schedules():
+            """
+            Process channel lock/unlock schedules every minute.
+            Checks each enabled schedule and locks/unlocks channels based on time windows.
+            Premium feature only.
+            """
+            if not bot.channel_lock_manager:
+                return
+            
+            try:
+                result = await bot.channel_lock_manager.process_all_schedules()
+                
+                # Only log if there were any changes
+                if result.get('locked', 0) > 0 or result.get('unlocked', 0) > 0:
+                    logger.info(f"📅 Channel schedules: {result.get('locked', 0)} locked, "
+                              f"{result.get('unlocked', 0)} unlocked, "
+                              f"{result.get('errors', 0)} errors")
+                              
+            except Exception as e:
+                logger.error(f"Error processing channel lock schedules: {e}")
+
+        @process_channel_lock_schedules.before_loop
+        async def before_process_channel_lock_schedules():
+            await bot.wait_until_ready()
+            logger.info("Channel lock schedule processor initialized")
+
+        @process_channel_lock_schedules.error
+        async def process_channel_lock_schedules_error(error):
+            logger.exception(f"Channel lock schedule processor failed: {error}")
 
         @tasks.loop(minutes=10)
         async def sync_pending_discord_messages():
