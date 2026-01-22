@@ -257,17 +257,23 @@ class DiscordOAuthManager:
                 'guilds_synced': valid_guild_ids
             }).execute()
             
+            # Fetch user record to check superadmin status
+            db_user_result = self.data_manager.admin_client.table('admin_users').select('is_superadmin').eq('id', user_id.data).single().execute()
+            is_superadmin = False
+            if db_user_result.data:
+                is_superadmin = db_user_result.data.get('is_superadmin', False)
+
             # 6. Create CMS session
             user_data = {
                 'id': user_id.data,
                 'username': discord_username,
                 'discord_id': discord_id,
                 'discord_avatar': discord_avatar,
-                'is_superadmin': False,
+                'is_superadmin': is_superadmin,
                 'allowed_guild_ids': valid_guild_ids,
                 'login_type': 'discord',
-                'role': 'server_owner',
-                'permissions': ['read', 'write']  # No delete/admin for server owners
+                'role': 'superadmin' if is_superadmin else 'server_owner',
+                'permissions': ['read', 'write', 'delete', 'admin'] if is_superadmin else ['read', 'write']
             }
             
             session_token = self.auth_manager.create_session(user_data)

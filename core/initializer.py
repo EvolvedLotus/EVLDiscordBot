@@ -143,41 +143,64 @@ class GuildInitializer:
             logger.error(f"  ❌ Failed to initialize embeds for {guild.name}: {e}")
 
     async def _initialize_users(self, guild: discord.Guild):
-        """Create user records for all guild members"""
+        """Create user records for all guild members (Optimized Bulk Operation)"""
         try:
             logger.info(f"  🔄 Creating users for {guild.name}...")
 
             # Get all members (excluding bots)
             members = [m for m in guild.members if not m.bot]
-
+            member_ids = {str(m.id) for m in members}
+            
             logger.info(f"  📊 Found {len(members)} human members")
 
-            # Create users in batches to avoid rate limits
-            batch_size = 50
+            # 1. Fetch ALL existing users for this guild in one query
+            # Note: Supabase default limit is usually 1000. If guild is huge, pagination needed.
+            # For typical usage <1000 members, this is fine.
+            existing_users_result = self.data_manager.admin_client.table('users').select('user_id').eq('guild_id', str(guild.id)).execute()
+            existing_user_ids = {u['user_id'] for u in existing_users_result.data}
+
+            # 2. Identify missing users
+            missing_member_ids = member_ids - existing_user_ids
+            
+            if not missing_member_ids:
+                logger.info(f"  ✓ All {len(members)} members already exist in database")
+                return
+
+            logger.info(f"  📝 Need to create {len(missing_member_ids)} new user records")
+
+            # 3. Prepare bulk data
+            new_users_data = []
+            for member_id in missing_member_ids:
+                new_users_data.append({
+                    "user_id": member_id,
+                    "guild_id": str(guild.id),
+                    "balance": 0,
+                    "total_earned": 0,
+                    "total_spent": 0,
+                    "is_active": True,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                })
+
+            # 4. Bulk Insert in batches
+            batch_size = 100
             created_count = 0
+            
+            for i in range(0, len(new_users_data), batch_size):
+                batch = new_users_data[i:i + batch_size]
+                try:
+                    self.data_manager.admin_client.table('users').insert(batch).execute()
+                    created_count += len(batch)
+                    logger.info(f"  ✓ Batch insert: {created_count}/{len(new_users_data)} users")
+                except Exception as e:
+                    logger.error(f"  ❌ Batch insert failed: {e}")
+                    # Fallback to individual insert if batch fails (unlikely)
+                    for user_data in batch:
+                        try:
+                            self.data_manager.admin_client.table('users').insert(user_data).execute()
+                        except:
+                            pass
 
-            for i in range(0, len(members), batch_size):
-                batch = members[i:i + batch_size]
-
-                for member in batch:
-                    try:
-                        # Check if user exists
-                        user_data = self.data_manager.load_user_data(guild.id, member.id)
-
-                        if not user_data or user_data.get('balance') is None:
-                            # Create new user with default balance
-                            await self.data_manager.ensure_user_exists(guild.id, member.id)
-                            created_count += 1
-
-                    except Exception as e:
-                        logger.warning(f"  ⚠️  Failed to create user {member.id}: {e}")
-                        continue
-
-                # Small delay between batches
-                if i + batch_size < len(members):
-                    await asyncio.sleep(0.5)
-
-            logger.info(f"  ✓ Created {created_count} new users for {guild.name}")
+            logger.info(f"  ✅ Created {created_count} new users for {guild.name}")
 
         except Exception as e:
             logger.error(f"  ❌ Failed to initialize users for {guild.name}: {e}")

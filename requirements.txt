@@ -6,6 +6,8 @@ werkzeug>=3.0.0
 
 # Discord Integration
 discord.py>=2.3.2  # FileUpload modal support pending - will gracefully degrade
+aioboto3>=12.0.0 # Optional for S3
+PyNaCl>=1.5.0 # For voice support
 aiohttp>=3.9.0
 requests>=2.31.0
 
@@ -32,8 +34,6 @@ psutil>=5.9.0
 gunicorn>=21.2.0
 gevent>=23.9.0
 
-# AI Integration
-google-generativeai>=0.8.0
 
 # Async Utilities
 asyncio-mqtt>=0.13.0

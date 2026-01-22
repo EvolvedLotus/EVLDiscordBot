@@ -994,8 +994,8 @@ def discord_oauth_callback():
                 'id': result['user']['id'],
                 'username': result['user']['username'],
                 'discord_avatar': result['user'].get('discord_avatar'),
-                'is_superadmin': False,
-                'role': 'server_owner',
+                'is_superadmin': result['user'].get('is_superadmin', False),
+                'role': result['user'].get('role', 'server_owner'),
                 'guilds': result.get('guilds', [])
             }
         })
@@ -1140,6 +1140,9 @@ def update_server_config(server_id):
                 if field in data:
                     logger.warning(f"Unauthorized attempt to modify protected field '{field}' by user: {user.get('username')}")
                     return jsonify({'error': f'Unauthorized. Master login required to modify {field}.'}), 403
+        
+        logger.info(f"Updating config for guild {server_id} by user {user.get('username')} (superuser: {is_superadmin})")
+        logger.info(f"Update data keys: {list(data.keys())}")
 
         # Load current config to merge with updates
         current_config = data_manager.load_guild_data(server_id, 'config')
