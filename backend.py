@@ -2771,35 +2771,7 @@ def get_timezones():
         return safe_error_response(e)
 
 
-@app.route('/api/admin/log_cms_action', methods=['POST'])
-@limiter.limit("100 per minute")
-@require_auth
-def log_cms_action_route():
-    """
-    Endpoint for frontend to log CMS actions for audit trail.
-    """
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        action = data.get('action')
-        details = data.get('details', {})
-        success = data.get('success', True)
-        guild_id = data.get('guild_id')
-        
-        user_id = request.user.get('id') if hasattr(request, 'user') else None
-        user_name = request.user.get('username') if hasattr(request, 'user') else 'Unknown'
 
-        # Log to server console
-        status_icon = "✅" if success else "❌"
-        logger.info(f"[CMS AUDIT] {status_icon} User {user_name} ({user_id}) performed {action}: {details}")
-
-        return jsonify({'success': True, 'message': 'Action logged'})
-
-    except Exception as e:
-        logger.error(f"Error in log_cms_action: {e}")
-        return jsonify({'error': str(e)}), 500
 
 # ========== ERROR HANDLERS ==========
 @app.errorhandler(404)

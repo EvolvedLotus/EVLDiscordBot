@@ -12,6 +12,7 @@ let discordDataCache = {
     channels: {},
     roles: {}
 };
+window.discordDataCache = discordDataCache;
 
 async function fetchDiscordData(serverId) {
     if (!serverId) return;
@@ -6924,7 +6925,7 @@ async function deleteChannelSchedule(scheduleId) {
     }
 
     try {
-        const response = await fetch(`${API_BASE}/api/${currentServerId}/channel-schedules/${scheduleId}`, {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/channel-schedules/${scheduleId}`, {
             method: 'DELETE',
             credentials: 'include'
         });
@@ -6964,7 +6965,7 @@ window.loadConfigTab = async function () {
 
     // Check if premium and show section
     try {
-        const response = await fetch(`${API_BASE}/api/${currentServerId}/config`, {
+        const response = await fetch(`${API_BASE_URL}/api/${currentServerId}/config`, {
             credentials: 'include'
         });
 
