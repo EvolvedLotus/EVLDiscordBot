@@ -53,7 +53,7 @@
 .server-list {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     max-height: 400px;
     overflow-y: auto;
 }
@@ -101,7 +101,7 @@
 
 .server-actions {
     display: flex;
-    gap: 8px;
+    gap: 12px;
 }
 
 .btn-leave-server {
@@ -398,10 +398,10 @@
 /* Schedule Actions */
 .schedule-actions {
     display: flex;
-    gap: 8px;
+    gap: 12px;
     justify-content: flex-end;
     border-top: 1px solid var(--border-primary);
-    padding-top: 12px;
+    padding-top: 16px;
 }
 
 .btn-sm {
@@ -575,8 +575,8 @@ select[multiple].form-control option:checked,
 .settings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 24px;
-    margin-bottom: 24px;
+    gap: 32px;
+    margin-bottom: 32px;
 }
 
 /* Section cards - consistent styling */
@@ -585,7 +585,8 @@ select[multiple].form-control option:checked,
     backdrop-filter: var(--backdrop-blur);
     -webkit-backdrop-filter: var(--backdrop-blur);
     border-radius: 16px;
-    padding: 32px;
+    border-radius: 16px;
+    padding: 40px;
     border: var(--glass-border);
     margin-bottom: 0;
 }
