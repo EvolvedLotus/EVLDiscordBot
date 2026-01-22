@@ -179,72 +179,71 @@ function escapeHtml(text) {
 
 // Initialize server management when config tab loads (for super admins only)
 // We need to wait for app.js to load first
-if (typeof loadConfigTab === 'function') {
-    const originalLoadConfigTab = loadConfigTab;
-    loadConfigTab = async function () {
-        await originalLoadConfigTab();
+// FORCE PATCHING: We don't rely on 'typeof' check alone, we wait for window load + a small delay
+function patchConfigTab() {
+    console.log('[CMS] Attempting to patch loadConfigTab...');
+    if (typeof window.loadConfigTab === 'function' && !window.loadConfigTab.isPatched) {
+        const originalLoadConfigTab = window.loadConfigTab;
 
-        // Check if user is super admin
-        if (currentUser && currentUser.is_superadmin) {
-            // Show server management section
-            const botStatusSection = document.getElementById('bot-status-section');
-            if (botStatusSection) {
-                // Add server management section after bot status
-                const serverMgmtHtml = `
-                    <div class="server-management-section">
-                        <h3>🖥️ Server Management</h3>
-                        <div id="server-management-container">
-                            <div class="loading">Loading servers...</div>
-                        </div>
-                    </div>
-                `;
-
-                // Check if server management section already exists
-                if (!document.querySelector('.server-management-section')) {
-                    botStatusSection.insertAdjacentHTML('afterend', serverMgmtHtml);
-                }
-
-                // Load servers
-                loadServerManagement();
-            }
-        }
-    };
-} else {
-    // If app.js hasn't loaded yet, we can try to hook into window load
-    window.addEventListener('load', function () {
-        if (typeof loadConfigTab === 'function') {
-            const originalLoadConfigTab = loadConfigTab;
-            loadConfigTab = async function () {
+        window.loadConfigTab = async function () {
+            console.log('[CMS] Running patched loadConfigTab');
+            // Call original first
+            try {
                 await originalLoadConfigTab();
+            } catch (e) {
+                console.error('[CMS] Original loadConfigTab failed:', e);
+            }
 
-                // Check if user is super admin
-                if (currentUser && currentUser.is_superadmin) {
-                    // Show server management section
-                    const botStatusSection = document.getElementById('bot-status-section');
-                    if (botStatusSection) {
-                        // Add server management section after bot status
-                        const serverMgmtHtml = `
-                            <div class="server-management-section">
-                                <h3>🖥️ Server Management</h3>
-                                <div id="server-management-container">
-                                    <div class="loading">Loading servers...</div>
-                                </div>
+            // Check if user is super admin
+            const user = window.currentUser;
+            if (user && (user.role === 'superadmin' || user.is_superadmin === true)) {
+                console.log('[CMS] SuperAdmin detected, showing Server Management');
+                // Show server management section
+                const botStatusSection = document.getElementById('bot-status-section');
+                if (botStatusSection) {
+                    botStatusSection.style.display = 'block'; // Ensure bot status is shown
+
+                    // Add server management section after bot status
+                    const serverMgmtHtml = `
+                        <div class="server-management-section section-card" style="margin-top: 20px;">
+                            <h3>🖥️ Server Management (Super Admin)</h3>
+                            <div id="server-management-container">
+                                <div class="loading">Loading servers...</div>
                             </div>
-                        `;
+                        </div>
+                    `;
 
-                        // Check if server management section already exists
-                        if (!document.querySelector('.server-management-section')) {
-                            botStatusSection.insertAdjacentHTML('afterend', serverMgmtHtml);
-                        }
-
-                        // Load servers
-                        loadServerManagement();
+                    // Check if server management section already exists
+                    if (!document.querySelector('.server-management-section')) {
+                        botStatusSection.insertAdjacentHTML('afterend', serverMgmtHtml);
                     }
+
+                    // Load servers
+                    if (window.loadServerManagement) {
+                        window.loadServerManagement();
+                    }
+                } else {
+                    console.warn('[CMS] bot-status-section not found');
                 }
-            };
+            } else {
+                console.log('[CMS] Not a SuperAdmin (or user null)');
+            }
+        };
+        window.loadConfigTab.isPatched = true;
+        console.log('[CMS] loadConfigTab successfully patched');
+    } else {
+        if (window.loadConfigTab && window.loadConfigTab.isPatched) {
+            console.log('[CMS] loadConfigTab already patched.');
+        } else {
+            console.log('[CMS] loadConfigTab not found yet. Retrying...');
+            setTimeout(patchConfigTab, 500);
         }
-    });
+    }
 }
+
+// Start patching attempts
+patchConfigTab();
+window.addEventListener('load', patchConfigTab);
 
 // Upgrade to Premium functionality
 function upgradeToPremium() {

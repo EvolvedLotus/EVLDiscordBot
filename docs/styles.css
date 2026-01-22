@@ -650,20 +650,23 @@ tbody tr:hover {
 
 /* Wider modals for complex content */
 .modal-content {
-    background-color: var(--bg-secondary);
-    margin: 5% auto;
+    background: #18191c;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 5vh auto;
+    /* 5vh from top */
     padding: 0;
-    /* Remove padding from container, move to body */
-    border: 1px solid var(--border-secondary);
+    width: 90vw;
+    /* Use Viewport Width */
+    max-width: 1400px;
+    /* Highly increased max-width */
+    position: relative;
     border-radius: 12px;
-    width: 90%;
-    max-width: 800px;
-    /* Increased from default */
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: modalSlideIn 0.3s ease-out;
     display: flex;
     flex-direction: column;
     max-height: 90vh;
-    animation: modalSlideIn 0.3s ease-out;
+    /* Prevent going off screen */
 }
 
 @keyframes modalSlideIn {
@@ -842,22 +845,13 @@ tbody tr:hover {
     /* Start from top, not center (allows scrolling) */
 }
 
-.modal-content {
-    margin: 20px auto;
-    /* Better margin */
-    width: 95%;
-    max-width: 800px;
-    /* Ensure wide enough */
-}
-
+/* OVERRIDE: Ensure Modals are Huge */
+.modal-content,
 #announcement-modal .modal-content,
-#embed-modal .modal-content {
-    max-width: 1000px;
-    /* Extra width for side-by-side */
-}
-
+#embed-modal .modal-content,
 #user-management-modal .modal-content {
-    max-width: 700px;
+    max-width: 1400px !important;
+    width: 90vw !important;
 }
 
 /* Ensure editor/preview columns stack on mobile but side-by-side on desktop */
@@ -865,6 +859,13 @@ tbody tr:hover {
     display: flex;
     flex-direction: row;
     gap: 20px;
+    width: 100%;
+}
+
+.editor-column,
+.preview-column {
+    flex: 1 1 50%;
+    min-width: 400px;
 }
 
 @media (max-width: 768px) {
