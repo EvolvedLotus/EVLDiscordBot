@@ -1,6 +1,6 @@
 // API Configuration
 console.log('EVL CMS v3.1 Loaded');
-const API_BASE_URL = window.location.hostname === 'localhost'
+const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.protocol === 'file:')
     ? 'http://localhost:5000'
     : (window.API_BASE_URL || 'https://evldiscordbot-production.up.railway.app');
 
