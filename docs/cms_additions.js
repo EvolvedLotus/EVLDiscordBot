@@ -613,3 +613,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 });
+
+// Ensure global access for inline onclick handlers
+window.updateServerTier = updateServerTier;
+window.loadServerManagement = loadServerManagement;
+window.leaveServer = leaveServer;
