@@ -454,11 +454,12 @@ function showChannelSchedulesSection(isPremium) {
 
 // ============== INITIALIZE ON CONFIG TAB LOAD ==============
 // Hook into existing loadConfigTab function if it exists
-const originalLoadConfigTab = typeof loadConfigTab === 'function' ? loadConfigTab : null;
+// Hook into existing loadConfigTab function if it exists
+var existingLoadConfigFn = typeof loadConfigTab === 'function' ? loadConfigTab : null;
 
 window.loadConfigTab = async function () {
-    if (originalLoadConfigTab) {
-        await originalLoadConfigTab();
+    if (existingLoadConfigFn) {
+        await existingLoadConfigFn();
     }
 
     // Check if premium and show section
