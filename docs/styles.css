@@ -187,7 +187,7 @@ h6 {
 .tab-button {
     width: 100%;
     height: 48px;
-    margin-bottom: 8px;
+    margin-bottom: 12px;
     padding: 0 20px;
     background: transparent;
     color: var(--text-secondary);
@@ -310,6 +310,7 @@ h6 {
     border: none;
     box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3);
     transition: all var(--transition-fast);
+    padding: 10px 20px;
 }
 
 .btn-primary:hover {
