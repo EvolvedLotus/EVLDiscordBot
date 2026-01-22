@@ -537,10 +537,22 @@ class DataManager:
                                 existing_data = existing_result.data[0]
                                 server_name = server_name or existing_data.get('server_name')
                                 owner_id = owner_id or existing_data.get('owner_id')
-                                existing_tier = existing_data.get('subscription_tier', 'free')
+                                # Always capture existing tier if we had to fetch
+                                if existing_tier == 'free':
+                                    existing_tier = existing_data.get('subscription_tier', 'free')
                         except Exception:
                             pass  # Continue with defaults if error
 
+                    # Verify tier one more time if we didn't fetch it above
+                    if save_data.get('subscription_tier') is None and existing_tier == 'free':
+                         try:
+                             # Separate fetch just for tier if we have name/owner but lack tier
+                             tier_result = self.admin_client.table('guilds').select('subscription_tier').eq('guild_id', guild_id_str).execute()
+                             if tier_result.data and len(tier_result.data) > 0:
+                                 existing_tier = tier_result.data[0].get('subscription_tier', 'free')
+                         except Exception:
+                             pass
+                    
                     # Set defaults if still not found
                     server_name = server_name or save_data.get('server_name') or f'Guild_{guild_id_str}'
                     owner_id = owner_id or save_data.get('owner_id') or 'unknown'

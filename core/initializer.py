@@ -43,6 +43,7 @@ class GuildInitializer:
                 'feature_moderation': existing_config.get('feature_moderation', True) if existing_config else True,
                 'global_shop': existing_config.get('global_shop', False) if existing_config else False,
                 'global_tasks': existing_config.get('global_tasks', False) if existing_config else False,
+                'subscription_tier': existing_config.get('subscription_tier', 'free') if existing_config else 'free',
             }
 
             # Save the complete config
