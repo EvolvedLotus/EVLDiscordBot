@@ -206,7 +206,7 @@ try:
     from core.embed_manager import EmbedManager
     from core.cache_manager import CacheManager
     from core.auth_manager import AuthManager
-    from core.audit_manager import AuditManager
+    from core.audit_manager import AuditManager, AuditEventType
     from core.sync_manager import SyncManager
     from core.sse_manager import sse_manager
     from core.discord_oauth import DiscordOAuthManager
@@ -537,7 +537,7 @@ def log_cms_action():
         
         # We use log_event to store these in the audit system
         audit_manager.log_event(
-            event_type="cms.button_click",
+            event_type=AuditEventType.CMS_ACTION,
             guild_id=data.get('guild_id', 0),
             user_id=None,
             moderator_id=user.get('id'),

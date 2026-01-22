@@ -64,7 +64,11 @@ class AuditEventType(Enum):
     DISCORD_ROLE_UPDATE = "discord.role.update"
     DISCORD_CHANNEL_UPDATE = "discord.channel.update"
     DISCORD_MEMBER_JOIN = "discord.member.join"
+
     DISCORD_MEMBER_LEAVE = "discord.member.leave"
+
+    # CMS events
+    CMS_ACTION = "cms.action"
 
 class AuditManager:
     """Comprehensive audit logging system"""
@@ -85,7 +89,7 @@ class AuditManager:
             audit_entry = {
                 'audit_id': audit_id,
                 'guild_id': str(guild_id),
-                'event_type': event_type.value,
+                'event_type': event_type.value if hasattr(event_type, 'value') else str(event_type),
                 'user_id': str(user_id) if user_id else None,
                 'moderator_id': str(moderator_id) if moderator_id else None,
                 'message_id': message_id,
@@ -103,7 +107,8 @@ class AuditManager:
             if len(self.audit_buffer) >= self.buffer_size:
                 self._flush_audit_buffer()
 
-            logger.info(f"Audit event logged: {event_type.value} for guild {guild_id}")
+            event_type_str = event_type.value if hasattr(event_type, 'value') else str(event_type)
+            logger.info(f"Audit event logged: {event_type_str} for guild {guild_id}")
             return audit_id
 
         except Exception as e:
