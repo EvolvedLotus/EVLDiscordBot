@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 import logging
 import discord
-from discord import Embed  # ADD THIS LINE
 import asyncio
 
 logger = logging.getLogger(__name__)
@@ -225,50 +224,3 @@ class GuildInitializer:
                 except discord.Forbidden:
                     pass  # No permission to read history
 
-    def _create_task_embed(self, task_data: dict) -> Embed:
-        """Create embed for task display"""
-        embed = Embed(
-            title=f"📋 {task_data['name']}",
-            description=task_data.get('description', 'No description'),
-            color=discord.Color.blue()
-        )
-
-        embed.add_field(name="Reward", value=f"💰 {task_data['reward']} coins", inline=True)
-
-        duration = task_data.get('duration_hours', 24)
-        embed.add_field(name="Time Limit", value=f"⏰ {duration} hours", inline=True)
-
-        status = task_data.get('status', 'pending')
-        status_emoji = {"pending": "🟡", "active": "🟢", "completed": "✅"}.get(status, "⚪")
-        embed.add_field(name="Status", value=f"{status_emoji} {status.title()}", inline=True)
-
-        embed.set_footer(text=f"Task ID: {task_data['id']} | Use /claim {task_data['id']} to start")
-
-        return embed
-
-    def _create_shop_item_embed(self, item_data: dict, config: dict) -> Embed:
-        """Create embed for shop item display"""
-        currency_symbol = config.get("currency_symbol", "🪙")
-
-        embed = Embed(
-            title=item_data['name'],
-            description=item_data.get('description', 'No description'),
-            color=discord.Color.green() if item_data.get('is_active', True) else discord.Color.grey()
-        )
-
-        embed.add_field(
-            name="Price",
-            value=f"{currency_symbol}{item_data['price']}",
-            inline=True
-        )
-
-        stock = item_data.get('stock', -1)
-        stock_text = "♾️ Unlimited" if stock == -1 else f"📦 {stock} available"
-        embed.add_field(name="Stock", value=stock_text, inline=True)
-
-        category = item_data.get('category', 'misc')
-        embed.add_field(name="Category", value=f"🏷️ {category.title()}", inline=True)
-
-        embed.set_footer(text="Use /buy <item_id> to purchase")
-
-        return embed

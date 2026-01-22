@@ -206,12 +206,6 @@ async def run_bot():
             logger.error(f"✗ Failed to load moderation cog: {e}")
 
         try:
-            await bot.load_extension('cogs.moderation_commands')
-            logger.info("✓ Moderation Commands cog loaded")
-        except Exception as e:
-            logger.error(f"✗ Failed to load moderation commands cog: {e}")
-
-        try:
             await bot.load_extension('cogs.ad_claim')
             logger.info("✓ Ad Claim cog loaded")
         except Exception as e:
@@ -242,9 +236,7 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to register persistent views: {e}")
 
-        # Set managers on cogs that need them
-        logger.info("Setting managers on cogs...")
-        for cog_name in ['Moderation', 'ModerationCommands']:
+        for cog_name in ['Moderation']:
             cog = bot.get_cog(cog_name)
             if cog and hasattr(cog, 'set_managers'):
                 try:

@@ -1213,4 +1213,1472 @@ button,
 .header-actions button {
     position: relative;
     z-index: 10;
+}/* Bot Invite Button on Login Screen */
+.bot-invite-button {
+    position: fixed;
+    right: 40px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--discord-blurple), var(--discord-green));
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 8px 24px rgba(88, 101, 242, 0.4);
+    transition: all var(--transition-normal);
+    z-index: 10001;
+}
+
+.bot-invite-button:hover {
+    transform: translateY(-50%) scale(1.1);
+    box-shadow: 0 12px 32px rgba(88, 101, 242, 0.6);
+}
+
+.bot-invite-button svg {
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Server Management Section */
+.server-management-section {
+    margin-top: 32px;
+    padding: 24px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--backdrop-blur);
+    -webkit-backdrop-filter: var(--backdrop-blur);
+    border-radius: 16px;
+    border: var(--glass-border);
+    box-shadow: var(--glass-shadow);
+}
+
+.server-management-section h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.server-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.server-item {
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all var(--transition-fast);
+    gap: 20px;
+    height: 100%;
+}
+
+.server-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-4px);
+    border-color: var(--discord-blurple);
+}
+
+.server-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+.server-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.server-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: auto;
+}
+
+.server-actions button {
+    flex: 1;
+    height: 36px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.server-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.btn-leave-server {
+    height: 36px;
+    padding: 0 16px;
+    background-color: transparent;
+    border: 1px solid var(--discord-red);
+    color: var(--discord-red);
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.btn-leave-server:hover {
+    background-color: var(--discord-red);
+    color: var(--text-primary);
+}
+
+.server-list::-webkit-scrollbar {
+    width: 8px;
+}
+
+.server-list::-webkit-scrollbar-track {
+    background-color: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+.server-list::-webkit-scrollbar-thumb {
+    background-color: var(--border-secondary);
+    border-radius: 4px;
+}
+
+/* Embed Grid Fix */
+.embeds-grid,
+.shop-grid,
+.tasks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 24px;
+    width: 100%;
+}
+
+.empty-server-list {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+/* Ad Banner Styles */
+.ad-banner {
+    background: rgba(47, 49, 54, 0.6);
+    backdrop-filter: blur(8px);
+    color: #dcddde;
+    padding: 30px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 20px 0;
+    border-radius: 8px;
+    font-size: 14px;
+    display: none;
+    /* Hidden by default */
+}
+
+.ad-banner-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.ad-banner .ad-text {
+    font-weight: 500;
+}
+
+.ad-upgrade-btn {
+    background: linear-gradient(90deg, #FFD700, #FFA500);
+    color: black;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    text-transform: uppercase;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+.ad-upgrade-btn:hover {
+    filter: brightness(1.1);
+}
+
+/* Tier Badges */
+.tier-badge {
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+
+.tier-free {
+    background-color: #7289da;
+    color: white;
+}
+
+.tier-premium {
+    background: linear-gradient(45deg, #FFD700, #FFA500);
+    color: black;
+    box-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+}
+
+/* Usage Progress Bars */
+.usage-meter {
+    margin-top: 10px;
+    background: #40444b;
+    border-radius: 4px;
+    height: 6px;
+    width: 100%;
+    overflow: hidden;
+}
+
+.usage-fill {
+    height: 100%;
+    background: #5865F2;
+    transition: width 0.3s ease;
+}
+
+.usage-fill.warning {
+    background: #faa61a;
+}
+
+.usage-fill.danger {
+    background: #ed4245;
+}
+
+/* ========== CHANNEL LOCK SCHEDULES (Premium Feature) ========== */
+
+/* Premium Section Header */
+.premium-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.premium-section-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.premium-badge {
+    background: linear-gradient(135deg, #FFD700, #FFA500);
+    color: #000;
+    padding: 6px 14px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.3);
+}
+
+/* Schedule Cards */
+.schedule-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: all var(--transition-fast);
+}
+
+.schedule-card:hover {
+    border-color: var(--discord-blurple);
+    box-shadow: 0 4px 12px rgba(88, 101, 242, 0.15);
+}
+
+.schedule-card.schedule-disabled {
+    opacity: 0.6;
+    background: var(--bg-secondary);
+}
+
+/* Schedule Header */
+.schedule-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.schedule-channel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.channel-icon {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.channel-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Schedule State Badges */
+.schedule-state {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.state-locked {
+    background: rgba(237, 66, 69, 0.2);
+    color: #ed4245;
+}
+
+.state-unlocked {
+    background: rgba(87, 242, 135, 0.2);
+    color: #57f287;
+}
+
+.state-error {
+    background: rgba(250, 166, 26, 0.2);
+    color: #faa61a;
+}
+
+/* Schedule Times */
+.schedule-times {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 12px;
+    background: rgba(24, 25, 28, 0.5);
+    border-radius: 12px;
+    margin-bottom: 12px;
+}
+
+.time-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.time-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.time-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-family: 'Monaco', 'Consolas', monospace;
+}
+
+.time-arrow {
+    color: var(--text-muted);
+    font-size: 20px;
+}
+
+/* Schedule Meta */
+.schedule-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+
+.schedule-meta span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Schedule Error */
+.schedule-error {
+    background: rgba(237, 66, 69, 0.15);
+    border: 1px solid rgba(237, 66, 69, 0.3);
+    color: #ed4245;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    margin-bottom: 12px;
+}
+
+/* Schedule Actions */
+.schedule-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border-primary);
+    padding-top: 16px;
+}
+
+.btn-sm {
+    padding: 8px 16px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+}
+
+.btn-sm.btn-warning {
+    background: #faa61a;
+    color: #000;
+}
+
+.btn-sm.btn-warning:hover {
+    background: #d99418;
+}
+
+/* Toggle Switch */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-secondary);
+    transition: .3s;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--text-muted);
+    transition: .3s;
+}
+
+input:checked+.slider {
+    background-color: var(--discord-green);
+    border-color: var(--discord-green);
+}
+
+input:checked+.slider:before {
+    background-color: white;
+    transform: translateX(20px);
+}
+
+.slider.round {
+    border-radius: 24px;
+}
+
+.slider.round:before {
+    border-radius: 50%;
+}
+
+/* Day Checkboxes */
+.days-checkbox-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all var(--transition-fast);
+}
+
+.checkbox-label:hover {
+    border-color: var(--discord-blurple);
+}
+
+.checkbox-label input[type="checkbox"]:checked+* {
+    color: var(--discord-blurple);
+}
+
+/* Alert Warning */
+.alert-warning {
+    background: rgba(250, 166, 26, 0.15);
+    border: 1px solid rgba(250, 166, 26, 0.3);
+    color: #faa61a;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-top: 15px;
+}
+
+/* Premium Upgrade Prompt */
+.premium-upgrade-prompt {
+    background: linear-gradient(135deg, rgba(88, 101, 242, 0.1), rgba(255, 215, 0, 0.1));
+    border: 1px dashed var(--discord-blurple);
+    border-radius: 12px;
+    padding: 40px 30px;
+}
+
+.premium-upgrade-prompt h4 {
+    font-size: 20px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+}
+
+/* Empty State */
+.empty-state {
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    border: 1px dashed var(--border-secondary);
+}
+
+/* ========== SETTINGS PAGE FIXES ========== */
+
+/* Multi-select role dropdowns - constrain height and make scrollable */
+select[multiple].form-control,
+#admin-roles,
+#moderator-roles,
+select[size] {
+    max-height: 150px !important;
+    min-height: 120px !important;
+    height: auto !important;
+    overflow-y: auto !important;
+    padding: 8px !important;
+    font-size: 13px !important;
+}
+
+select[multiple].form-control option,
+#admin-roles option,
+#moderator-roles option {
+    padding: 6px 10px;
+    margin: 2px 0;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+select[multiple].form-control option:checked,
+#admin-roles option:checked,
+#moderator-roles option:checked {
+    background: linear-gradient(0deg, var(--discord-blurple) 0%, var(--discord-blurple) 100%);
+    color: white;
+}
+
+/* Settings grid - better responsiveness */
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 32px;
+    margin-bottom: 32px;
+}
+
+/* Section cards - consistent styling */
+.section-card {
+    background: var(--glass-bg);
+    backdrop-filter: var(--backdrop-blur);
+    -webkit-backdrop-filter: var(--backdrop-blur);
+    border-radius: 16px;
+    border-radius: 16px;
+    padding: 40px;
+    border: var(--glass-border);
+    margin-bottom: 0;
+}
+
+.section-card h3 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-primary);
+}
+
+/* Form groups - tighter spacing */
+.section-card .form-group {
+    margin-bottom: 20px;
+}
+
+.section-card .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.section-card .form-group label {
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.section-card .form-control {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 14px;
+}
+
+.section-card .btn-primary.btn-small,
+.section-card .btn-small {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+/* Inline save buttons next to selects */
+.section-card .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Server Management Grid */
+.server-list {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+    gap: 12px !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-direction: unset !important;
+}
+
+.server-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+}
+
+.server-info {
+    width: 100%;
+}
+
+.server-name {
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.server-actions {
+    width: 100%;
+    justify-content: flex-end;
+}
+
+/* Moderation Exemptions - compact multi-selects */
+#file-image-exempt-roles,
+#link-exempt-roles,
+#global-exempt-roles,
+[id*="exempt-roles"] {
+    max-height: 120px !important;
+    font-size: 12px !important;
+}
+
+/* Config content area spacing */
+#config-content {
+    padding: 20px 24px;
+}
+
+#config-content>.section-card,
+#config-content>div[style*="margin-top"] {
+    margin-bottom: 20px;
+}
+
+/* Whop Integration section */
+#whop-info-section .card,
+#api-clients-section .card {
+    padding: 16px;
+}
+
+#whop-info-section .form-group,
+#api-clients-section .form-group {
+    margin-bottom: 12px;
+}
+
+/* Bot Status Configuration compact */
+#bot-status-section {
+    padding: 16px 24px;
+}
+
+/* Bot Status Config - Cleaner Layout */
+.bot-status-control {
+    display: flex;
+    flex-direction: column;
+    /* Stack vertically for clarity */
+    gap: 24px;
+    width: 100%;
+}
+
+.bot-status-control .form-row {
+    display: flex;
+    gap: 24px;
+    width: 100%;
+    align-items: flex-start;
+}
+
+.bot-status-control .form-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.bot-status-control textarea,
+.bot-status-control input[type="text"] {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.bot-status-control button {
+    align-self: flex-start;
+    /* Don't stretch */
+    padding: 12px 32px;
+    height: 48px;
+}
+
+/* Channel Schedules section - ensure visibility */
+#channel-schedules-section {
+    margin-top: 20px !important;
+}
+
+.premium-feature-section {
+    border: 1px solid rgba(255, 215, 0, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    background: linear-gradient(180deg, rgba(255, 215, 0, 0.05) 0%, transparent 100%);
+}
+
+/* Checkbox labels in settings */
+.section-card label input[type="checkbox"] {
+    margin-right: 8px;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--discord-blurple);
+}
+
+/* Feature toggles - horizontal layout */
+.section-card .form-group label:has(input[type="checkbox"]) {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 8px 0;
+}
+
+/* Small text helper */
+.section-card small {
+    font-size: 11px;
+    color: var(--text-dark);
+    margin-top: 4px;
+}
+
+/* Server tier badges inline */
+.tier-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+    vertical-align: middle;
+}
+
+/* Scrollable content areas */
+.content-area {
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    padding: 30px 40px 60px;
+}
+
+/* Fix for cut-off elements */
+.main-content {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .server-list {
+        grid-template-columns: 1fr !important;
+    }
+
+    .bot-status-control {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Loading states in settings */
+#config-content .loading {
+    padding: 40px;
+    text-align: center;
+}
+
+/* ========== MODERATION SETTINGS FIXES ========== */
+
+/* Role selector containers - constrained height */
+.role-selector {
+    max-height: 150px !important;
+    min-height: 100px;
+    overflow-y: auto !important;
+    padding: 8px !important;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-secondary);
+    border-radius: 6px;
+    margin-bottom: 8px;
+}
+
+.role-checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 5px 8px;
+    margin: 2px 0;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+}
+
+.role-checkbox-item:hover {
+    background: var(--bg-hover);
+}
+
+.role-checkbox-item input[type="checkbox"] {
+    margin-right: 10px;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--discord-blurple);
+    cursor: pointer;
+}
+
+.role-checkbox-item label {
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+/* Moderation settings card */
+#moderation-settings-card {
+    margin-top: 20px;
+    padding: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 10px;
+}
+
+#moderation-settings-card h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-primary);
+}
+
+#moderation-settings-card>p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+
+#moderation-settings-card .form-group {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    border: 1px solid var(--border-primary);
+}
+
+#moderation-settings-card .form-group>label:first-of-type {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    display: block;
+}
+
+#moderation-settings-card .checkbox-group {
+    margin: 8px 0;
+}
+
+#moderation-settings-card small,
+#moderation-settings-card .text-muted {
+    font-size: 11px;
+    color: var(--text-dark);
+    display: block;
+    margin-top: 6px;
+}
+
+/* Bot Status Section compact */
+#bot-status-section .form-group {
+    margin-bottom: 12px;
+}
+
+/* Server Management compact cards */
+.server-management-section {
+    padding: 16px;
+}
+
+.server-management-section h3 {
+    font-size: 16px;
+    margin-bottom: 16px;
+}
+
+/* Whop section compact */
+#whop-info-section,
+#api-clients-section {
+    padding: 16px 20px;
+}
+
+#whop-info-section h3,
+#api-clients-section h3 {
+    font-size: 16px;
+    margin-bottom: 12px;
+}
+
+/* Channel Schedules Premium Section */
+#channel-schedules-section h3 {
+    font-size: 16px;
+}
+
+/* Fix for extremely long text in sections */
+.section-card,
+.card,
+#moderation-settings-card {
+    overflow: hidden;
+}
+
+/* Scrollable settings sections */
+.settings-grid {
+    padding-right: 4px;
+}
+
+/* Compact helper text */
+small.text-muted,
+.form-group small {
+    line-height: 1.4;
+}
+
+/* Increase gap for action buttons */
+.header-actions {
+    gap: 16px !important;
+}
+
+/* Ensure card headers have breathing room */
+.card h2,
+.card h3,
+.section-card h2,
+.section-card h3 {
+    margin-bottom: 24px;
+}
+/* Mobile Responsive Styles for EVL Discord Bot CMS */
+/* CRITICAL: Ensures mobile compatibility without breaking desktop */
+
+/* ===================================
+   MOBILE VIEWPORT FIX
+   =================================== */
+/* Prevent zoom on input focus (iOS Safari fix) */
+@viewport {
+    width: device-width;
+    zoom: 1.0;
+}
+
+/* ===================================
+   LOGIN SCREEN - MOBILE OPTIMIZED
+   =================================== */
+@media (max-width: 1024px) {
+
+    /* Fix login screen for mobile/tablet */
+    .login-screen {
+        padding: 20px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .login-container {
+        width: 100%;
+        max-width: 100%;
+        padding: 30px 20px;
+        margin: 0 auto;
+        box-shadow: none;
+    }
+
+    .login-header h1 {
+        font-size: 1.5rem;
+        line-height: 1.3;
+        word-break: break-word;
+    }
+
+    .login-header p {
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+
+    .login-form {
+        gap: 16px;
+    }
+
+    /* Form inputs - CRITICAL for mobile */
+    .login-form input[type="text"],
+    .login-form input[type="password"] {
+        width: 100%;
+        min-height: 48px;
+        font-size: 16px !important;
+        padding: 14px 16px;
+        border-radius: 8px;
+        -webkit-appearance: none;
+        appearance: none;
+    }
+
+    /* Login button */
+    .login-form button[type="submit"],
+    .btn-large {
+        width: 100%;
+        min-height: 50px;
+        font-size: 16px;
+        padding: 14px 24px;
+        border-radius: 8px;
+        touch-action: manipulation;
+    }
+
+    /* Login error message */
+    .login-error {
+        font-size: 13px;
+        padding: 12px;
+        margin-top: 12px;
+        word-break: break-word;
+    }
+
+    /* Bot invite button on login */
+    .bot-invite-button {
+        width: 50px;
+        height: 50px;
+        bottom: 20px;
+        right: 20px;
+    }
+}
+
+/* ===================================
+   DASHBOARD - MOBILE LAYOUT
+   =================================== */
+@media (max-width: 1024px) {
+
+    /* Sidebar becomes full-width overlay on mobile */
+    .sidebar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: 85% !important;
+        max-width: 320px !important;
+        height: 100vh !important;
+
+        /* Use transform for sliding - more reliable */
+        transform: translateX(-100%);
+        transition: transform 0.3s ease-in-out !important;
+
+        z-index: 10000 !important;
+        /* Higher than everything */
+        box-shadow: 4px 0 20px rgba(0, 0, 0, 0.5) !important;
+
+        overflow-y: auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+
+        /* Glassmorphism for mobile sidebar */
+        background: rgba(20, 20, 25, 0.95) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    .sidebar.mobile-open {
+        transform: translateX(0) !important;
+    }
+
+    /* Main content takes full width on mobile */
+    .main-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+        left: 0 !important;
+        padding-bottom: 80px;
+    }
+
+    /* Mobile menu toggle button - HIGH VISIBILITY */
+    .mobile-menu-toggle {
+        display: flex !important;
+        position: fixed;
+        top: 15px;
+        left: 15px;
+        z-index: 10001;
+        /* Higher than sidebar */
+        width: 48px;
+        height: 48px;
+        background-color: var(--discord-blurple);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        color: white;
+        font-size: 24px;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        align-items: center;
+        justify-content: center;
+        touch-action: manipulation;
+    }
+
+    /* Overlay when mobile menu is open */
+    .mobile-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 9999;
+        backdrop-filter: blur(2px);
+    }
+
+    .mobile-overlay.active {
+        display: block;
+    }
+
+    /* Adjust section headers for mobile */
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+        height: auto;
+        min-height: 80px;
+        padding: 20px;
+        padding-left: 75px;
+        /* Space for toggle button */
+    }
+
+    .section-header h2 {
+        font-size: 1.3rem;
+        margin-top: 4px;
+    }
+
+    .header-actions {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .header-actions button {
+        flex: 1 1 auto;
+        min-width: 120px;
+    }
+
+    /* ===================================
+       SERVER SELECTOR - MOBILE OPTIMIZED
+       =================================== */
+    .server-selector {
+        padding: 20px;
+        background-color: var(--bg-tertiary);
+        margin-bottom: 10px;
+        border-bottom: 1px solid var(--border-primary);
+    }
+
+    .server-selector label {
+        font-size: 14px;
+        margin-bottom: 10px;
+        color: var(--text-secondary);
+    }
+
+    .server-selector select {
+        width: 100%;
+        height: 50px;
+        /* Large touch target */
+        font-size: 16px !important;
+        padding: 10px 15px;
+        background-color: var(--bg-primary);
+        color: white;
+        border: 1px solid var(--discord-blurple);
+        border-radius: 8px;
+    }
+
+    /* Sidebar Header */
+    .sidebar-header {
+        height: 70px;
+        padding: 0 20px;
+    }
+
+    .sidebar-header h1 {
+        font-size: 1.5rem;
+    }
+
+    /* Nav Buttons */
+    .tab-button {
+        height: 54px;
+        /* Larger touch target */
+        font-size: 16px;
+        padding: 0 20px;
+        margin-bottom: 4px;
+    }
+
+    /* ===================================
+       FORMS & INPUTS - MOBILE FRIENDLY
+       =================================== */
+
+    /* ALL inputs must be 16px to prevent iOS zoom */
+    input,
+    select,
+    textarea,
+    .form-control {
+        min-height: 48px !important;
+        font-size: 16px !important;
+        padding: 12px 16px;
+        -webkit-appearance: none;
+        appearance: none;
+        border-radius: 8px;
+    }
+
+    /* Stack form groups vertically */
+    .form-row {
+        flex-direction: column;
+    }
+
+    .form-group {
+        width: 100% !important;
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        font-size: 14px;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    /* ===================================
+       BUTTONS - LARGER TOUCH TARGETS
+       =================================== */
+
+    button,
+    .btn,
+    .btn-primary,
+    .btn-secondary,
+    .btn-success,
+    .btn-danger,
+    .btn-warning {
+        min-height: 48px !important;
+        padding: 12px 20px;
+        font-size: 15px;
+        border-radius: 8px;
+        touch-action: manipulation;
+    }
+
+    .btn-small {
+        min-height: 40px !important;
+        font-size: 14px;
+    }
+
+    /* ===================================
+       MODALS - MOBILE OPTIMIZED
+       =================================== */
+
+    .modal-content {
+        width: 95%;
+        max-width: none;
+        margin: 10px auto;
+        max-height: 92vh;
+        overflow-y: auto;
+        border-radius: 12px;
+        padding-bottom: 20px;
+    }
+
+    .modal-content h2 {
+        font-size: 1.2rem;
+        padding: 20px;
+        position: sticky;
+        top: 0;
+        background-color: var(--bg-tertiary);
+        z-index: 10;
+        border-bottom: 1px solid var(--border-primary);
+    }
+
+    .modal-body {
+        padding: 20px;
+    }
+
+    .close {
+        top: 15px;
+        right: 15px;
+        font-size: 32px;
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 20;
+        background-color: rgba(0, 0, 0, 0.2);
+        border-radius: 50%;
+    }
+
+    /* ===================================
+       TABLES - HORIZONTAL SCROLL
+       =================================== */
+
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        border: 1px solid var(--border-primary);
+    }
+
+    table {
+        min-width: 700px;
+        /* Ensure table doesn't squash */
+    }
+
+    th,
+    td {
+        padding: 16px;
+        /* Larger touch targets in table */
+    }
+
+    /* ===================================
+       GRIDS - SINGLE COLUMN ON MOBILE
+       =================================== */
+
+    .stats-grid,
+    .dashboard-grid,
+    .shop-grid,
+    .grid-container,
+    .embeds-grid,
+    .roles-grid,
+    .moderation-grid {
+        grid-template-columns: 1fr !important;
+        gap: 16px;
+    }
+
+    /* ===================================
+       CONTENT AREAS
+       =================================== */
+
+    .content-area {
+        padding: 20px 16px;
+    }
+
+    /* ===================================
+       CARDS - MOBILE FRIENDLY
+       =================================== */
+
+    .stat-card,
+    .shop-card,
+    .task-card {
+        border-radius: 10px;
+        margin-bottom: 10px;
+    }
+
+    .stat-card h3 {
+        font-size: 13px;
+    }
+
+    .stat-value {
+        font-size: 32px;
+    }
+}
+
+/* ===================================
+   HIDE MOBILE ELEMENTS ON DESKTOP
+   =================================== */
+@media (min-width: 1025px) {
+    .mobile-menu-toggle {
+        display: none !important;
+    }
+
+    .mobile-overlay {
+        display: none !important;
+    }
+}
+
+/* ===================================
+   VERY SMALL SCREENS (< 480px)
+   =================================== */
+@media (max-width: 480px) {
+    body {
+        font-size: 14px;
+    }
+
+    h2 {
+        font-size: 1.2rem;
+    }
+
+    h3 {
+        font-size: 1rem;
+    }
+
+    .login-container {
+        padding: 24px 16px;
+    }
+
+    .login-header h1 {
+        font-size: 1.3rem;
+    }
+
+    .modal-content {
+        width: 100%;
+        margin: 0;
+        border-radius: 0;
+        max-height: 100vh;
+        height: 100vh;
+    }
+
+    .section-header {
+        padding: 16px;
+        padding-left: 70px;
+    }
+
+    .content-area {
+        padding: 16px 12px;
+    }
+
+    .mobile-menu-toggle {
+        width: 44px;
+        height: 44px;
+        top: 12px;
+        left: 12px;
+    }
 }

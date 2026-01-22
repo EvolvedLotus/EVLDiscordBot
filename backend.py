@@ -210,7 +210,6 @@ try:
     from core.sync_manager import SyncManager
     from core.sse_manager import sse_manager
     from core.discord_oauth import DiscordOAuthManager
-    from core.discord_oauth import DiscordOAuthManager
     from core.ad_claim_manager import AdClaimManager
     from core.tier_manager import TierManager
     from core.evolved_lotus_api import evolved_lotus_api
@@ -236,25 +235,36 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️  Some managers not available: {e}")
 
-# Global bot instance reference
+# Global references for bot integration (avoid circular imports)
 _bot_instance = None
+_data_manager_instance = None
 
 def set_bot_instance(bot):
-    """Set the global bot instance"""
+    """Set the global bot instance reference and configure managers"""
     global _bot_instance
     _bot_instance = bot
-    # Update managers that need bot reference
-    if announcement_manager:
-        announcement_manager.set_bot(bot)
     logger.info("✅ Bot instance attached to backend")
 
+    # Link bot instance to data_manager for Discord sync
+    if 'data_manager' in globals() and data_manager:
+        data_manager.set_bot_instance(bot)
+        logger.info("✓ Bot instance linked to data manager")
+
+    # Also set bot instance on managers that need it
+    if 'announcement_manager' in globals() and announcement_manager:
+        announcement_manager.set_bot(bot)
+        logger.info("✓ Bot instance linked to announcement manager")
+
 def set_data_manager(dm):
-    """Set the global data manager (called from bot.py)"""
-    global data_manager
+    """Set the global data manager reference"""
+    global data_manager, _data_manager_instance
     data_manager = dm
+    _data_manager_instance = dm
+    
     # Update dependent managers
-    if auth_manager:
+    if 'auth_manager' in globals() and auth_manager:
         auth_manager.data_manager = dm
+        
     logger.info("✅ Data manager updated from bot")
 
 # Bot communication functions for Railway internal networking
@@ -319,31 +329,6 @@ async def send_sse_signal_to_bot(event_type, event_data):
         logger.error(f"Failed to send SSE signal to bot: {e}")
         return False
 
-# Global references for bot integration (avoid circular imports)
-_bot_instance = None
-_data_manager_instance = None
-
-def set_bot_instance(bot):
-    """Set global bot instance reference"""
-    global _bot_instance
-    _bot_instance = bot
-    logger.info("Bot instance linked to backend")
-
-    # Link bot instance to data_manager for Discord sync
-    if data_manager:
-        data_manager.set_bot_instance(bot)
-        logger.info("Bot instance linked to data manager")
-
-    # Also set bot instance on managers that need it
-    if 'announcement_manager' in globals():
-        announcement_manager.set_bot(bot)
-        logger.info("Bot instance linked to announcement manager")
-
-def set_data_manager(dm):
-    """Set global data manager reference"""
-    global _data_manager_instance
-    _data_manager_instance = dm
-    logger.info("Data manager linked to backend")
 
 def run_backend():
     """Function for bot.py to start Flask backend in separate thread"""

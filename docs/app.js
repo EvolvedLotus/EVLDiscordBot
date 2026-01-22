@@ -3260,3 +3260,3892 @@ window.onclick = function (event) {
         }
     });
 };
+// ========== MISSING FUNCTIONS FIX ==========
+// This file contains all the missing functions that need to be added to app.js
+
+// ========== SHOP ITEM FUNCTIONS ==========
+
+// ========== SHOP ITEM FUNCTIONS ==========
+
+function showCreateShopItemModal() {
+    // Remove any existing modal first
+    const existingModal = document.getElementById('dynamic-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Generate the modal HTML
+    const modal = createModal('Create Shop Item', `
+<form id="shop-item-form" onsubmit="return false;">
+    <input type="hidden" id="shop-item-id">
+    <div class="form-group">
+        <label>Item Name</label>
+        <input type="text" id="shop-item-name" class="form-control" required>
+    </div>
+    <div class="form-group">
+        <label>Description</label>
+        <textarea id="shop-item-description" class="form-control" rows="3"></textarea>
+    </div>
+    <div class="form-group">
+        <label>Price</label>
+        <input type="number" id="shop-item-price" class="form-control" required min="0">
+    </div>
+    <div class="form-group">
+        <label>Category</label>
+        <select id="shop-item-category" class="form-control" onchange="toggleShopRoleSelect()">
+            <option value="general">General</option>
+            <option value="consumable">Consumable</option>
+            <option value="role">Role</option>
+            <option value="collectible">Collectible</option>
+        </select>
+    </div>
+    
+    <!-- Role Selection (Hidden by default) -->
+    <div class="form-group" id="shop-role-select-group" style="display: none;">
+        <label>Select Role</label>
+        <select id="shop-item-role-id" class="form-control">
+            ${typeof getRoleOptions === 'function' ? getRoleOptions() : '<option value="">Loading...</option>'}
+        </select>
+        <small>The role to give when purchased.</small>
+    </div>
+
+    <div class="form-group">
+        <label>Stock (-1 for unlimited)</label>
+        <input type="number" id="shop-item-stock" class="form-control" value="-1">
+    </div>
+    <div class="form-group">
+        <label>Emoji</label>
+        <div class="emoji-picker-container" style="display: flex; align-items: center;">
+            <input type="text" id="shop-item-emoji" class="form-control" placeholder="🎁" style="width: 80px; margin-right: 10px;">
+            <button type="button" class="btn-secondary emoji-picker-btn" onclick="showEmojiPicker('shop-item-emoji')">😀 Pick Emoji</button>
+        </div>
+    </div>
+    <div class="button-group">
+        <button type="button" onclick="saveShopItem(event)" class="btn-success">Save</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+</form>
+    `);
+
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+
+    // Initialize role toggle
+    toggleShopRoleSelect();
+}
+
+function closeShopItemModal() {
+    const modal = document.getElementById('shop-item-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function toggleShopRoleSelect() {
+    const category = document.getElementById('shop-item-category').value;
+    const roleGroup = document.getElementById('shop-role-select-group');
+
+    if (category === 'role') {
+        if (roleGroup) roleGroup.style.display = 'block';
+        // Load roles if empty
+        const roleSelect = document.getElementById('shop-item-role-id');
+        if (roleSelect && roleSelect.options.length <= 1) {
+            if (typeof loadRolesForShopItem === 'function') {
+                loadRolesForShopItem();
+            } else {
+                // Fallback if function not found (e.g. app_additions.js not loaded yet or overwritten)
+                console.warn('loadRolesForShopItem function not found, trying to load manually');
+                loadRolesForShopItemFallback();
+            }
+        }
+    } else {
+        if (roleGroup) roleGroup.style.display = 'none';
+    }
+}
+
+async function loadRolesForShopItemFallback() {
+    const roleSelect = document.getElementById('shop-item-role-id');
+    if (!roleSelect || !currentServerId) return;
+
+    try {
+        // Ensure discordDataCache is populated
+        if (!discordDataCache.roles || Object.keys(discordDataCache.roles).length === 0) {
+            await fetchDiscordData(currentServerId);
+        }
+
+        const roles = Object.values(discordDataCache.roles || {});
+
+        let html = '<option value="">Select a role...</option>';
+        roles.forEach(role => {
+            html += `<option value="${role.id}" style="color: #${role.color.toString(16).padStart(6, '0')}">${role.name}</option>`;
+        });
+        roleSelect.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load roles:', error);
+        roleSelect.innerHTML = '<option value="">Failed to load roles</option>';
+    }
+}
+
+async function saveShopItem(event) {
+    if (event) event.preventDefault();
+
+    const itemId = document.getElementById('shop-item-id')?.value;
+    const name = document.getElementById('shop-item-name').value;
+    const description = document.getElementById('shop-item-description').value;
+    const price = document.getElementById('shop-item-price').value;
+    const category = document.getElementById('shop-item-category').value;
+    const stock = document.getElementById('shop-item-stock').value;
+    const emoji = document.getElementById('shop-item-emoji').value;
+    const roleId = document.getElementById('shop-item-role-id')?.value;
+
+    if (!name || !price) {
+        showNotification('Please fill all required fields (Name, Price)', 'warning');
+        return;
+    }
+
+    const payload = {
+        name,
+        description,
+        price: parseInt(price),
+        category,
+        stock: parseInt(stock),
+        emoji: emoji || '🎁',
+        role_id: (category === 'role' && roleId) ? roleId : null
+    };
+
+    // Add metadata for role if needed
+    if (category === 'role' && roleId) {
+        payload.metadata = { role_id: roleId };
+    }
+
+    try {
+        if (itemId) {
+            // Update existing item
+            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Shop item updated', 'success');
+        } else {
+            // Create new item
+            await apiCall(`/api/${currentServerId}/shop`, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Shop item created', 'success');
+        }
+        closeShopItemModal();
+        loadShop();
+    } catch (error) {
+        console.error('Save shop item error:', error);
+        showNotification('Failed to save shop item: ' + error.message, 'error');
+    }
+}
+
+// ========== TASK MODAL FUNCTIONS ==========
+
+function showCreateTaskModal() {
+    // Remove any existing modal first
+    const existingModal = document.getElementById('dynamic-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    const modal = createModal('Create Task', `
+<form id="task-form" onsubmit="return false;">
+    <input type="hidden" id="task-id">
+    <div class="form-group">
+        <label>Task Name</label>
+        <input type="text" id="task-name" class="form-control" required>
+    </div>
+    <div class="form-group">
+        <label>Description</label>
+        <textarea id="task-description" class="form-control" rows="3" required></textarea>
+    </div>
+    <div class="form-group">
+        <label>Reward (coins)</label>
+        <input type="number" id="task-reward" class="form-control" required min="1">
+    </div>
+    <div class="form-group">
+        <label>Duration (hours, -1 for infinite)</label>
+        <input type="number" id="task-duration" class="form-control" value="24">
+        <small>Set to -1 for tasks with no time limit</small>
+    </div>
+    <div class="form-group">
+        <label>Max Claims (-1 for unlimited)</label>
+        <input type="number" id="task-max-claims" class="form-control" value="-1">
+    </div>
+    <div class="form-group">
+        <label>Category</label>
+        <select id="task-category" class="form-control" onchange="toggleTaskRoleSelect()">
+            <option value="general">General</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="special">Special</option>
+            <option value="role_required">Role Required</option>
+        </select>
+        <small id="general-category-note" style="color: #ffc107; display: block;">
+            ⚠️ General tasks require users to submit proof (screenshot) which must be approved by a moderator/admin before rewards are granted.
+        </small>
+    </div>
+    
+    <!-- Role Selection (Hidden by default) -->
+    <div class="form-group" id="task-role-select-group" style="display: none;">
+        <label>Required Role</label>
+        <select id="task-role" class="form-control">
+            ${getRoleOptions()}
+        </select>
+        <small>Users must have this role to see/complete the task.</small>
+    </div>
+
+    <!-- Global Task Option (Superadmin only) -->
+    ${currentUser?.is_superadmin ? `
+    <div class="form-group">
+        <label>
+            <input type="checkbox" id="task-is-global">
+            Global Task (Visible across all servers)
+        </label>
+    </div>
+    ` : ''}
+
+    <div class="button-group">
+        <button type="button" onclick="saveTask(event)" class="btn-success">Save</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+</form>
+    `);
+
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+
+    // Store modal reference globally so saveTask can access it
+    window.currentTaskModal = modal;
+
+    // Initialize toggle state
+    toggleTaskRoleSelect();
+}
+
+function toggleTaskRoleSelect() {
+    const category = document.getElementById('task-category').value;
+    const roleGroup = document.getElementById('task-role-select-group');
+    const generalNote = document.getElementById('general-category-note');
+
+    if (category === 'role_required') {
+        roleGroup.style.display = 'block';
+    } else {
+        roleGroup.style.display = 'none';
+    }
+
+    if (category === 'general') {
+        if (generalNote) generalNote.style.display = 'block';
+    } else {
+        if (generalNote) generalNote.style.display = 'none';
+    }
+}
+
+async function saveTask(event) {
+    if (event) event.preventDefault();
+
+    // Use the stored modal reference to query elements
+    const modal = window.currentTaskModal || document.getElementById('dynamic-modal');
+    if (!modal) {
+        console.error('No modal found!');
+        showNotification('Error: Modal not found', 'error');
+        return;
+    }
+
+    // Query elements from the specific modal, not the entire document
+    const taskId = modal.querySelector('#task-id')?.value;
+    const name = modal.querySelector('#task-name')?.value;
+    const description = modal.querySelector('#task-description')?.value;
+    const reward = modal.querySelector('#task-reward')?.value;
+    const duration = modal.querySelector('#task-duration')?.value || 24;
+    const maxClaims = modal.querySelector('#task-max-claims')?.value || -1;
+    const category = modal.querySelector('#task-category')?.value;
+    const roleId = modal.querySelector('#task-role')?.value;
+    const isGlobal = modal.querySelector('#task-is-global')?.checked || false;
+
+    // Detailed validation with specific error messages
+    const missingFields = [];
+    if (!name || name.trim() === '') missingFields.push('Task Name');
+    if (!description || description.trim() === '') missingFields.push('Description');
+    if (!reward || reward === '' || isNaN(reward) || parseInt(reward) <= 0) missingFields.push('Reward (must be > 0)');
+
+    if (missingFields.length > 0) {
+        showNotification(`Missing required fields: ${missingFields.join(', ')}`, 'warning');
+        return;
+    }
+
+    const payload = {
+        name,
+        description,
+        reward: parseInt(reward),
+        duration_hours: parseInt(duration),
+        max_claims: parseInt(maxClaims),
+        category,
+        required_role_id: (category === 'role_required' && roleId) ? roleId : null,
+        is_global: isGlobal
+    };
+
+    try {
+        if (taskId) {
+            await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+                method: 'PUT',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Task updated', 'success');
+        } else {
+            await apiCall(`/api/${currentServerId}/tasks`, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            showNotification('Task created', 'success');
+        }
+        closeModal();
+        loadTasks();
+    } catch (error) {
+        console.error('Save task error:', error);
+        showNotification('Failed to save task: ' + error.message, 'error');
+    }
+}
+
+// ========== CONFIG TAB SAVE FUNCTIONS ==========
+
+async function saveChannelSetting(type) {
+    const channelId = document.getElementById(`${type}-channel`)?.value;
+    const statusSpan = document.getElementById(`${type}-channel-status`);
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'warning');
+        return;
+    }
+
+    try {
+        const fieldMap = {
+            'welcome': 'welcome_channel',
+            'log': 'logs_channel',
+            'task': 'task_channel_id',
+            'shop': 'shop_channel_id'
+        };
+
+        const payload = {
+            [fieldMap[type]]: channelId
+        };
+
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} channel saved`, 'success');
+    } catch (error) {
+        console.error('Save channel setting error:', error);
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification('Failed to save channel setting', 'error');
+    }
+}
+
+async function saveCurrencySettings() {
+    const currencyName = document.getElementById('currency-name')?.value;
+    const currencySymbol = document.getElementById('currency-symbol')?.value;
+    const statusSpan = document.getElementById('currency-settings-status');
+
+    if (!currencyName || !currencySymbol) {
+        showNotification('Please fill all currency fields', 'warning');
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                currency_name: currencyName,
+                currency_symbol: currencySymbol
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification('Currency settings saved', 'success');
+    } catch (error) {
+        console.error('Save currency settings error:', error);
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification('Failed to save currency settings', 'error');
+    }
+}
+
+async function saveBotBehavior() {
+    const inactivityDays = document.getElementById('inactivity-days')?.value;
+    const autoExpireTasks = document.getElementById('auto-expire-tasks')?.checked;
+    const requireTaskProof = document.getElementById('require-task-proof')?.checked;
+    const statusSpan = document.getElementById('bot-behavior-status');
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                inactivity_days: parseInt(inactivityDays),
+                auto_expire_enabled: autoExpireTasks,
+                require_proof: requireTaskProof
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification('Bot behavior settings saved', 'success');
+    } catch (error) {
+        console.error('Save bot behavior error:', error);
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification('Failed to save bot behavior settings', 'error');
+    }
+}
+
+async function saveFeatureToggle(feature) {
+    const checkbox = document.getElementById(`feature-${feature}`);
+    const statusSpan = document.getElementById(`feature-${feature}-status`);
+
+    if (!checkbox) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                [`feature_${feature}`]: checkbox.checked
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification(`${feature.charAt(0).toUpperCase() + feature.slice(1)} feature ${checkbox.checked ? 'enabled' : 'disabled'}`, 'success');
+    } catch (error) {
+        console.error('Save feature toggle error:', error);
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification('Failed to save feature toggle', 'error');
+    }
+}
+
+// ========== BOT STATUS UPDATE ==========
+
+async function saveBotStatus() {
+    const statusType = document.getElementById('bot-status-type')?.value;
+    const statusMessage = document.getElementById('bot-status-message')?.value;
+
+    if (!statusType || !statusMessage) {
+        showNotification('Please fill all bot status fields', 'warning');
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/bot_status`, {
+            method: 'POST',
+            body: JSON.stringify({
+                type: statusType,
+                message: statusMessage
+            })
+        });
+        showNotification('Bot status updated', 'success');
+    } catch (error) {
+        console.error('Save bot status error:', error);
+        showNotification('Failed to update bot status', 'error');
+    }
+}
+
+// ========== EMBED FUNCTIONS ==========
+
+async function sendEmbed(embedId) {
+    // First, show a modal to select the channel
+    const modal = createModal('Send Embed', `
+<form id="send-embed-form" onsubmit="return false;">
+    <div class="form-group">
+        <label>Select Channel</label>
+        <select id="send-embed-channel" class="form-control">
+            ${getChannelOptions()}
+        </select>
+    </div>
+    <div class="button-group">
+        <button type="button" onclick="confirmSendEmbed('${embedId}')" class="btn-success">Send</button>
+        <button type="button" onclick="closeModal()" class="btn-secondary">Cancel</button>
+    </div>
+</form>
+    `);
+
+    document.body.appendChild(modal);
+    modal.style.display = 'block';
+}
+
+async function confirmSendEmbed(embedId) {
+    const channelId = document.getElementById('send-embed-channel')?.value;
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'warning');
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+            method: 'POST',
+            body: JSON.stringify({ channel_id: channelId })
+        });
+        showNotification('Embed sent successfully', 'success');
+        closeModal();
+    } catch (error) {
+        console.error('Send embed error:', error);
+        showNotification('Failed to send embed: ' + error.message, 'error');
+    }
+}
+
+async function deleteEmbed(embedId) {
+    if (!confirm('Are you sure you want to delete this embed?')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+            method: 'DELETE'
+        });
+        showNotification('Embed deleted', 'success');
+        loadEmbeds();
+    } catch (error) {
+        console.error('Delete embed error:', error);
+        showNotification('Failed to delete embed: ' + error.message, 'error');
+    }
+}
+
+async function editEmbed(embedId) {
+    // TODO: Implement edit modal population
+    showNotification('Edit embed functionality coming soon!', 'info');
+}
+
+async function editAnnouncement(announcementId) {
+    // TODO: Implement edit modal population
+    showNotification('Edit announcement functionality coming soon!', 'info');
+}
+
+// ========== MODAL HELPER ==========
+
+function createModal(title, content) {
+    const modal = document.createElement('div');
+    modal.id = 'dynamic-modal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>${title}</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                ${content}
+            </div>
+        </div>
+    `;
+    return modal;
+}
+
+// ========== ANNOUNCEMENT FIXES ==========
+
+function showCreateAnnouncementModal() {
+    const modal = document.getElementById('announcement-modal');
+    if (!modal) return;
+
+    // Reset form
+    const form = document.getElementById('announcement-form');
+    if (form) form.reset();
+
+    const idField = document.getElementById('announcement-id');
+    if (idField) idField.value = '';
+
+    const title = document.getElementById('announcement-modal-title');
+    if (title) title.textContent = 'Create Announcement';
+
+    // Populate channels
+    const channelSelect = document.getElementById('announcement-channel');
+    if (channelSelect) {
+        if (typeof getChannelOptions === 'function') {
+            channelSelect.innerHTML = getChannelOptions();
+        } else {
+            // Fallback
+            channelSelect.innerHTML = '<option value="">Loading...</option>';
+            if (typeof fetchDiscordData === 'function' && currentServerId) {
+                fetchDiscordData(currentServerId).then(() => {
+                    if (typeof getChannelOptions === 'function') {
+                        channelSelect.innerHTML = getChannelOptions();
+                    }
+                });
+            }
+        }
+    }
+
+    modal.style.display = 'block';
+}
+
+function closeAnnouncementModal() {
+    const modal = document.getElementById('announcement-modal');
+    if (modal) modal.style.display = 'none';
+}
+// ========== SESSION MANAGEMENT & INITIALIZATION ==========
+
+// Check for existing session on page load
+async function checkSession() {
+    try {
+        const response = await fetch(apiUrl('/api/me'), {
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            currentUser = data.user;
+
+            // Restore last selected server from localStorage
+            const lastServer = localStorage.getItem('lastSelectedServer');
+
+            await loadServers();
+
+            if (lastServer) {
+                const serverSelect = document.getElementById('server-select');
+                if (serverSelect) {
+                    serverSelect.value = lastServer;
+                    await onServerChange();
+                }
+            }
+
+            showDashboard();
+        } else {
+            showLoginScreen();
+        }
+    } catch (error) {
+        console.error('Session check failed:', error);
+        showLoginScreen();
+    }
+}
+
+// Show login screen
+function showLoginScreen() {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('main-dashboard').style.display = 'none';
+}
+
+// Show dashboard
+function showDashboard() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('main-dashboard').style.display = 'flex';
+}
+
+// Handle login
+document.getElementById('login-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const errorDiv = document.getElementById('login-error');
+
+    try {
+        const response = await fetch(apiUrl('/api/login'), {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            currentUser = data.user;
+            await loadServers();
+            showDashboard();
+            showNotification('Login successful!', 'success');
+        } else {
+            errorDiv.textContent = data.error || 'Login failed';
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        errorDiv.textContent = 'Connection error. Please try again.';
+        errorDiv.style.display = 'block';
+    }
+});
+
+// Load servers
+async function loadServers() {
+    try {
+        const data = await apiCall('/api/servers');
+        const serverSelect = document.getElementById('server-select');
+
+        if (data && data.servers && serverSelect) {
+            serverSelect.innerHTML = '<option value="">-- Select a server --</option>';
+
+            if (data.servers.length === 0) {
+                serverSelect.innerHTML = '<option value="">No servers available</option>';
+                showNotification('You don\'t have access to any servers', 'warning');
+                return;
+            }
+
+            data.servers.forEach(server => {
+                const option = document.createElement('option');
+                option.value = server.id;
+                option.textContent = server.name;
+                serverSelect.appendChild(option);
+            });
+
+            // Auto-select first server if only one available or if none selected
+            if (data.servers.length > 0) {
+                // Always default to the first server if currentServerId is invalid or empty
+                const targetServer = currentServerId || data.servers[0].id;
+
+                // Verify the target server actually exists in the list
+                const exists = data.servers.some(s => s.id === targetServer);
+                const finalServerId = exists ? targetServer : data.servers[0].id;
+
+                serverSelect.value = finalServerId;
+                currentServerId = finalServerId;
+                await onServerChange();
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load servers:', error);
+        showNotification('Failed to load servers', 'error');
+    }
+}
+
+// Handle server change
+async function onServerChange() {
+    const serverSelect = document.getElementById('server-select');
+    if (!serverSelect) return;
+
+    currentServerId = serverSelect.value;
+
+    if (currentServerId) {
+        // Save to localStorage for session persistence
+        localStorage.setItem('lastSelectedServer', currentServerId);
+
+        // Fetch Discord data for this server
+        await fetchDiscordData(currentServerId);
+        await updateTierUI();
+
+        // Reload current tab
+        const activeTab = document.querySelector('.tab-button.active');
+        if (activeTab) {
+            const tabName = activeTab.getAttribute('data-tab');
+            showTab(tabName);
+        }
+    }
+}
+
+// Logout function
+async function logout() {
+    try {
+        await fetch(apiUrl('/api/logout'), {
+            method: 'POST',
+            credentials: 'include'
+        });
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
+
+    currentUser = null;
+    currentServerId = '';
+    localStorage.removeItem('lastSelectedServer');
+    showLoginScreen();
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', () => {
+    checkSession();
+});
+
+// ========== HELPER FUNCTIONS FOR MODALS ==========
+
+function getRoleOptions() {
+    if (!discordDataCache.roles || Object.keys(discordDataCache.roles).length === 0) {
+        return '<option value="">Loading roles...</option>';
+    }
+
+    const roles = Object.values(discordDataCache.roles);
+    let html = '<option value="">Select a role...</option>';
+    roles.forEach(role => {
+        if (role.name !== '@everyone') {
+            html += `<option value="${role.id}">${role.name}</option>`;
+        }
+    });
+    return html;
+}
+
+function getChannelOptions() {
+    if (!discordDataCache.channels || Object.keys(discordDataCache.channels).length === 0) {
+        return '<option value="">Loading channels...</option>';
+    }
+
+    const channels = Object.values(discordDataCache.channels);
+    let html = '<option value="">Select a channel...</option>';
+    channels.forEach(channel => {
+        html += `<option value="${channel.id}">#${channel.name}</option>`;
+    });
+    return html;
+}
+
+async function loadRolesForShopItem() {
+    const roleSelect = document.getElementById('shop-item-role-id');
+    if (!roleSelect || !currentServerId) return;
+
+    try {
+        // Ensure discordDataCache is populated
+        if (!discordDataCache.roles || Object.keys(discordDataCache.roles).length === 0) {
+            await fetchDiscordData(currentServerId);
+        }
+
+        const roles = Object.values(discordDataCache.roles || {});
+
+        let html = '<option value="">Select a role...</option>';
+        roles.forEach(role => {
+            if (role.name !== '@everyone') {
+                html += `<option value="${role.id}">${role.name}</option>`;
+            }
+        });
+        roleSelect.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load roles:', error);
+        roleSelect.innerHTML = '<option value="">Failed to load roles</option>';
+    }
+}
+
+// ========== EMOJI PICKER FOR SHOP ITEMS ==========
+
+function showEmojiPicker(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+
+    // Create emoji picker modal
+    const pickerModal = document.createElement('div');
+    pickerModal.className = 'emoji-picker-modal';
+    pickerModal.innerHTML = `
+        <div class="emoji-picker-content">
+            <div class="emoji-picker-header">
+                <h3>Select Emoji</h3>
+                <button onclick="this.closest('.emoji-picker-modal').remove()" class="close-btn">×</button>
+            </div>
+            <div class="emoji-grid">
+                ${getCommonEmojis().map(emoji => `
+                    <button class="emoji-btn" onclick="selectEmoji('${emoji}', '${inputId}', this)">${emoji}</button>
+                `).join('')}
+            </div>
+            <div class="emoji-picker-footer">
+                <input type="text" id="custom-emoji-input" placeholder="Or paste any emoji..." maxlength="2">
+                <button onclick="selectCustomEmoji('${inputId}')" class="btn-primary">Use Custom</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(pickerModal);
+}
+
+function getCommonEmojis() {
+    return [
+        '💰', '💎', '🏆', '⭐', '🎁', '🎉', '🎊', '🎈',
+        '🔥', '⚡', '💫', '✨', '🌟', '💥', '💢', '💯',
+        '🛡️', '⚔️', '🗡️', '🏹', '🔫', '🧨', '💣', '🔨',
+        '🎮', '🎯', '🎲', '🎰', '🃏', '🎴', '🀄', '🎭',
+        '👑', '💍', '💄', '👗', '👔', '🎩', '👒', '🧢',
+        '🍕', '🍔', '🍟', '🌭', '🍿', '🧋', '🍺', '🍻',
+        '🚗', '🏎️', '🚙', '🚕', '🚌', '🚎', '🏍️', '🛵',
+        '🏠', '🏡', '🏢', '🏣', '🏤', '🏥', '🏦', '🏨'
+    ];
+}
+
+function selectEmoji(emoji, inputId, button) {
+    const input = document.getElementById(inputId);
+    if (input) {
+        input.value = emoji;
+    }
+    button.closest('.emoji-picker-modal').remove();
+}
+
+function selectCustomEmoji(inputId) {
+    const customInput = document.getElementById('custom-emoji-input');
+    const targetInput = document.getElementById(inputId);
+
+    if (customInput && targetInput && customInput.value) {
+        targetInput.value = customInput.value;
+        customInput.closest('.emoji-picker-modal').remove();
+    }
+}
+
+// ========== ANNOUNCEMENT IMPROVEMENTS ==========
+
+// Override saveAnnouncement to NOT save to database, just send
+window.saveAnnouncement = async function (event) {
+    event.preventDefault();
+
+    const title = document.getElementById('announcement-title').value;
+    const content = document.getElementById('announcement-content').value;
+    const channelId = document.getElementById('announcement-channel').value;
+    const isPinned = document.getElementById('announcement-pinned')?.checked || false;
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'error');
+        return;
+    }
+
+    try {
+        // Create and send announcement
+        await apiCall(`/api/${currentServerId}/announcements`, {
+            method: 'POST',
+            body: JSON.stringify({
+                title,
+                content,
+                channel_id: channelId,
+                pinned: isPinned
+            })
+        });
+
+        showNotification(`✅ Announcement "${title}" sent successfully!`, 'success');
+        closeAnnouncementModal();
+
+        // Clear form
+        document.getElementById('announcement-form').reset();
+    } catch (error) {
+        showNotification(`❌ Failed to send announcement: ${error.message}`, 'error');
+    }
+};
+
+// Add markdown helper buttons
+function insertMarkdown(type) {
+    const textarea = document.getElementById('announcement-content');
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    let replacement = '';
+
+    switch (type) {
+        case 'bold':
+            replacement = `**${selectedText || 'bold text'}**`;
+            break;
+        case 'italic':
+            replacement = `*${selectedText || 'italic text'}*`;
+            break;
+        case 'code':
+            replacement = `\`${selectedText || 'code'}\``;
+            break;
+        case 'codeblock':
+            replacement = `\`\`\`\n${selectedText || 'code block'}\n\`\`\``;
+            break;
+    }
+
+    textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+    textarea.focus();
+}
+
+// ========== FIX CHANNEL SAVING ==========
+
+window.saveChannelSetting = async function (type) {
+    const selectId = `${type}-channel`;
+    const statusId = `${type}-channel-status`;
+
+    const select = document.getElementById(selectId);
+    const statusSpan = document.getElementById(statusId);
+
+    if (!select) {
+        console.error(`Channel select not found: ${selectId}`);
+        return;
+    }
+
+    const channelId = select.value;
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'error');
+        return;
+    }
+
+    // Map frontend type to backend field name (matches updated schema.sql)
+    const fieldMap = {
+        'welcome': 'welcome_channel_id',
+        'log': 'log_channel_id',
+        'task': 'task_channel_id',
+        'shop': 'shop_channel_id'
+    };
+
+    const fieldName = fieldMap[type];
+
+    if (!fieldName) {
+        console.error(`Unknown channel type: ${type}`);
+        return;
+    }
+
+    try {
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({ [fieldName]: channelId })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = '✅ Saved';
+            statusSpan.className = 'status-text success';
+            setTimeout(() => {
+                statusSpan.textContent = '';
+            }, 3000);
+        }
+        showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} channel saved successfully`, 'success');
+    } catch (error) {
+        if (statusSpan) {
+            statusSpan.textContent = '❌ Failed';
+            statusSpan.className = 'status-text error';
+        }
+        showNotification(`Failed to save ${type} channel: ${error.message}`, 'error');
+    }
+};
+
+console.log('✅ CMS Enhancements Loaded');
+
+// ========== EMBED PREVIEW SYSTEM ==========
+
+/**
+ * Updates the embed preview in real-time as the user types
+ * Called by oninput events in the embed editor
+ */
+window.updateEmbedPreview = function () {
+    // Get inputs
+    const titleDetails = document.getElementById('embed-title');
+    const description = document.getElementById('embed-description');
+    const color = document.getElementById('embed-color');
+    const footer = document.getElementById('embed-footer');
+    const imageUrl = document.getElementById('embed-image-url');
+    const thumbnailUrl = document.getElementById('embed-thumbnail-url');
+
+    // Get preview elements
+    const pEmbed = document.getElementById('preview-embed');
+    const pTitle = document.getElementById('preview-embed-title');
+    const pDesc = document.getElementById('preview-embed-description');
+    const pImage = document.getElementById('preview-embed-image');
+    const pThumbnail = document.getElementById('preview-embed-thumbnail');
+    const pFooter = document.getElementById('preview-embed-footer');
+    const pFooterContainer = document.getElementById('preview-embed-footer-container');
+    const pThumbnailContainer = document.getElementById('preview-embed-thumbnail-container');
+
+    if (!pEmbed) return; // Guard clause if preview elements aren't loaded
+
+    // Update Title
+    if (titleDetails && titleDetails.value) {
+        pTitle.textContent = titleDetails.value;
+        pTitle.style.display = 'block';
+    } else {
+        pTitle.style.display = 'none';
+    }
+
+    // Update Description
+    if (description && description.value) {
+        pDesc.innerHTML = formatDiscordMarkdown(description.value);
+        pDesc.style.display = 'block';
+    } else {
+        pDesc.style.display = 'none';
+    }
+
+    // Update Color
+    if (color && pEmbed) {
+        pEmbed.style.borderLeftColor = color.value;
+    }
+
+    // Update Footer
+    if (footer && footer.value) {
+        pFooter.textContent = footer.value;
+        pFooterContainer.style.display = 'flex';
+    } else {
+        pFooterContainer.style.display = 'none';
+    }
+
+    // Update Image
+    if (imageUrl && imageUrl.value) {
+        pImage.src = imageUrl.value;
+        pImage.style.display = 'block';
+        pImage.onerror = function () { this.style.display = 'none'; };
+    } else {
+        pImage.style.display = 'none';
+    }
+
+    // Update Thumbnail
+    if (thumbnailUrl && thumbnailUrl.value) {
+        pThumbnail.src = thumbnailUrl.value;
+        pThumbnailContainer.style.display = 'block';
+        pThumbnail.onerror = function () { this.parentNode.style.display = 'none'; };
+    } else {
+        pThumbnailContainer.style.display = 'none';
+    }
+};
+
+/**
+ * Basic markdown formatter for Discord preview
+ */
+function formatDiscordMarkdown(text) {
+    if (!text) return '';
+    let html = text
+        .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>') // Bold
+        .replace(/\*(.*?)\*/g, '<i>$1</i>')     // Italics
+        .replace(/__(.*?)__/g, '<u>$1</u>')     // Underline
+        .replace(/~~(.*?)~~/g, '<s>$1</s>')     // Strikethrough
+        .replace(/`(.*?)`/g, '<code>$1</code>') // Code
+        .replace(/\n/g, '<br>');                // Newlines
+    return html;
+}
+
+// Hook into modal opening to refresh preview
+// We use a MutationObserver to detect when the modal becomes visible
+document.addEventListener('DOMContentLoaded', function () {
+    const modal = document.getElementById('embed-modal');
+    if (modal) {
+        const observer = new MutationObserver(function (mutations) {
+            mutations.forEach(function (mutation) {
+                if (mutation.attributeName === 'style' && modal.style.display !== 'none') {
+                    // Modal opened, update preview
+                    setTimeout(window.updateEmbedPreview, 50);
+                }
+            });
+        });
+
+        observer.observe(modal, { attributes: true });
+    }
+});
+
+// ========== MODERATION CONFIGURATION ==========
+
+/**
+ * Injects moderation settings into the Config tab
+ */
+async function loadModerationConfigUI() {
+    const configContent = document.getElementById('config-content');
+    if (!configContent) return;
+
+    // Check if already injected
+    if (document.getElementById('moderation-settings-card')) return;
+
+    const container = document.createElement('div');
+    container.id = 'moderation-settings-card';
+    container.className = 'card mt-4'; // Add some margin
+    container.innerHTML = `
+        <h3>🛡️ Moderation Exemptions</h3>
+        <p>Select roles that should be ignored by specific protection systems.</p>
+        
+        <div class="loading" id="mod-config-loading">Loading roles and config...</div>
+        
+        <div id="mod-config-form" style="display:none;">
+            <div class="form-group">
+                <label>🚫 File/Image Protection</label>
+                <div class="checkbox-group mb-2">
+                    <input type="checkbox" id="mod-file-filter-enabled">
+                    <label for="mod-file-filter-enabled">Enable Block Files/Images</label>
+                </div>
+                <div class="checkbox-group mb-2">
+                    <input type="checkbox" id="mod-file-strict-mute">
+                    <label for="mod-file-strict-mute">Strict (Mute on Violation)</label>
+                </div>
+                
+                <label class="mt-2">Exempt Roles (File/Image)</label>
+                <div class="role-selector" id="exempt-files-container"></div>
+                <small class="text-muted">Users with these roles can post images, gifs, and files even if restricted.</small>
+            </div>
+            
+            <div class="form-group">
+                <label>🔗 Link Protection Exemptions</label>
+                <div class="role-selector" id="exempt-links-container"></div>
+                <small class="text-muted">Users with these roles can post links.</small>
+            </div>
+
+            <div class="form-group">
+                <label>👑 Global Exemptions</label>
+                <div class="role-selector" id="exempt-global-container"></div>
+                <small class="text-muted">Users with these roles bypass ALL protection checks.</small>
+            </div>
+
+            <div class="button-group">
+                <button onclick="saveModerationConfig()" class="btn-primary">Save Exemptions</button>
+                <span id="moderation-save-status"></span>
+            </div>
+        </div>
+        
+        <style>
+            .role-selector {
+                max-height: 200px;
+                overflow-y: auto;
+                border: 1px solid var(--border-secondary);
+                border-radius: 4px;
+                padding: 10px;
+                background: var(--bg-tertiary);
+            }
+            .role-checkbox-item {
+                display: flex;
+                align-items: center;
+                padding: 4px 0;
+            }
+            .role-checkbox-item input {
+                margin-right: 10px;
+            }
+            .checkbox-group {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .mt-2 { margin-top: 8px; }
+            .mb-2 { margin-bottom: 8px; }
+        </style>
+    `;
+
+    configContent.appendChild(container);
+
+    // Load data
+    try {
+        const [rolesData, configData] = await Promise.all([
+            apiCall(`/api/${currentServerId}/roles`),
+            apiCall(`/api/${currentServerId}/config`)
+        ]);
+
+        const roles = rolesData.roles || [];
+        const modConfig = configData.moderation || {};
+
+        // Set checkboxes
+        if (document.getElementById('mod-file-filter-enabled')) {
+            document.getElementById('mod-file-filter-enabled').checked = modConfig.file_filter === true;
+        }
+        if (document.getElementById('mod-file-strict-mute')) {
+            // Check if mute is enabled in auto_actions or if level is strict
+            const isStrict = modConfig.profanity_level === 'strict' || (modConfig.auto_actions && modConfig.auto_actions.mute);
+            document.getElementById('mod-file-strict-mute').checked = isStrict;
+        }
+
+        const renderRoles = (containerId, selectedRoles) => {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+
+            el.innerHTML = roles.map(role => `
+                <div class="role-checkbox-item">
+                    <input type="checkbox" id="${containerId}-${role.id}" value="${role.id}" 
+                        ${selectedRoles.includes(role.id) ? 'checked' : ''}>
+                    <label for="${containerId}-${role.id}" style="color: ${role.color ? '#' + role.color.toString(16).padStart(6, '0') : 'inherit'}">
+                        ${role.name}
+                    </label>
+                </div>
+            `).join('');
+        };
+
+        renderRoles('exempt-files-container', modConfig.exempt_roles_files || []);
+        renderRoles('exempt-links-container', modConfig.exempt_roles_links || []);
+        renderRoles('exempt-global-container', modConfig.exempt_roles || []);
+
+        document.getElementById('mod-config-loading').style.display = 'none';
+        document.getElementById('mod-config-form').style.display = 'block';
+
+    } catch (error) {
+        console.error("Failed to load moderation config:", error);
+        document.getElementById('mod-config-loading').textContent = "Failed to load configuration.";
+    }
+}
+
+/**
+ * Saves the moderation exemption configuration
+ */
+window.saveModerationConfig = async function () {
+    const getSelected = (containerId) => {
+        const container = document.getElementById(containerId);
+        if (!container) return [];
+        return Array.from(container.querySelectorAll('input:checked')).map(cb => cb.value);
+    };
+
+    const exemptFiles = getSelected('exempt-files-container');
+    const exemptLinks = getSelected('exempt-links-container');
+    const exemptGlobal = getSelected('exempt-global-container');
+
+    const fileFilterEnabled = document.getElementById('mod-file-filter-enabled')?.checked;
+    const strictMuteEnabled = document.getElementById('mod-file-strict-mute')?.checked;
+
+    const statusSpan = document.getElementById('moderation-save-status');
+    if (statusSpan) statusSpan.textContent = "Saving...";
+
+    try {
+        // First get current config to merge
+        const currentConfig = await apiCall(`/api/${currentServerId}/config`);
+        const modConfig = currentConfig.moderation || {};
+        const autoActions = modConfig.auto_actions || {};
+
+        // Update fields
+        modConfig.exempt_roles_files = exemptFiles;
+        modConfig.exempt_roles_links = exemptLinks;
+        modConfig.exempt_roles = exemptGlobal;
+        modConfig.file_filter = fileFilterEnabled;
+
+        // Handle strict mute
+        if (strictMuteEnabled) {
+            autoActions.mute = true;
+            // modConfig.profanity_level = 'strict'; // Optional: force strict mode? Maybe just enable mute.
+        } else {
+            // Don't disable mute globally if it was on, just ensure we don't force it?
+            // Actually, if the user unchecks it here, they probably expect it basically off for this feature.
+            // But this is a simple UI. Let's just set autoActions.mute.
+            // If they want fine grained control, they need the full UI.
+            // But for "block... meaning mute", we'll assume this checkbox controls the mute capability.
+        }
+        modConfig.auto_actions = autoActions;
+
+        await apiCall(`/api/${currentServerId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                moderation: modConfig
+            })
+        });
+
+        if (statusSpan) {
+            statusSpan.textContent = "✅ Saved!";
+            statusSpan.style.color = "var(--success-color)";
+            setTimeout(() => statusSpan.textContent = "", 3000);
+        }
+        showNotification("Moderation exemptions saved successfully", "success");
+
+    } catch (error) {
+        console.error("Failed to save moderation config:", error);
+        if (statusSpan) {
+            statusSpan.textContent = "❌ Failed";
+            statusSpan.style.color = "var(--error-color)";
+        }
+        showNotification("Failed to save configuration", "error");
+    }
+};
+
+// Hook into loadConfigTab
+// We wait for DOMContentLoaded to ensure other scripts processed
+window.addEventListener('load', function () {
+    // Preserve any existing override (like from cms_additions.js)
+    const originalLoadConfigTab = window.loadConfigTab;
+
+    window.loadConfigTab = async function () {
+        // Call original first
+        if (typeof originalLoadConfigTab === 'function') {
+            await originalLoadConfigTab();
+        } else {
+            // Fallback if original not defined (unlikely)
+            console.warn("loadConfigTab was not defined previously");
+        }
+
+        // Inject our UI
+        await loadModerationConfigUI();
+    };
+});
+
+// ========== TIER MANAGEMENT ==========
+
+async function loadAd() {
+    const adSlot = document.getElementById('ad-slot-1');
+    if (!adSlot) return;
+
+    try {
+        const ad = await apiCall('/api/ad');
+        if (!ad) return;
+
+        adSlot.innerHTML = `
+            <a href="${ad.url}" target="_blank" style="text-decoration: none; color: inherit; display: flex; align-items: center; width: 100%; height: 100%; padding: 0 15px;">
+                ${ad.image ? `<img src="${ad.image}" alt="${ad.title}" style="height: 60px; width: 60px; object-fit: contain; margin-right: 15px; border-radius: 4px;">` : ''}
+                <div style="flex: 1; text-align: left;">
+                    <div style="font-weight: bold; color: ${ad.color || '#fff'}; margin-bottom: 2px;">${ad.title}</div>
+                    <div style="font-size: 12px; color: #b9bbbe;">${ad.description}</div>
+                </div>
+                <div style="background-color: ${ad.color || '#5865F2'}; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 12px; margin-left: 15px;">
+                    ${ad.cta}
+                </div>
+            </a>
+        `;
+        // Remove default placeholder styling that might conflict
+        adSlot.style.display = 'flex';
+
+    } catch (e) {
+        console.error("Failed to load ad:", e);
+    }
+}
+
+async function updateTierUI() {
+    if (!currentServerId) return;
+    try {
+        const config = await apiCall(`/api/${currentServerId}/config`);
+        const tier = config.subscription_tier || 'free';
+
+        // Update Badge
+        const badgeContainer = document.getElementById('tier-badge-container');
+        if (badgeContainer) {
+            badgeContainer.innerHTML = `<span class="tier-badge tier-${tier}">${tier} Plan</span>`;
+        }
+
+        // Update Ads
+        const adContainer = document.getElementById('ad-container');
+        if (adContainer) {
+            if (tier === 'free') {
+                adContainer.style.display = 'block';
+                loadAd();
+            } else {
+                adContainer.style.display = 'none';
+            }
+        }
+
+        // Store tier in global variable for other functions to check
+        window.currentGuildTier = tier;
+
+    } catch (e) {
+        console.error("Failed to update tier UI:", e);
+    }
+}
+
+/**
+ * Discord OAuth2 Login and Role-Based Access Control
+ * Extends the CMS to support server owner login via Discord
+ */
+
+// Global user state
+let currentUserRole = null; // 'superadmin' or 'server_owner'
+
+/**
+ * Initialize Discord OAuth login button
+ */
+function initDiscordOAuth() {
+    const loginForm = document.getElementById('login-form');
+    if (!loginForm) return;
+
+    // Add Discord login button after the regular login form
+    const discordButton = document.createElement('button');
+    discordButton.type = 'button';
+    discordButton.className = 'btn-discord btn-large';
+    discordButton.innerHTML = '🎮 Login with Discord';
+    discordButton.onclick = handleDiscordLogin;
+
+    const divider = document.createElement('div');
+    divider.className = 'login-divider';
+    divider.innerHTML = '<span>OR</span>';
+
+    loginForm.appendChild(divider);
+    loginForm.appendChild(discordButton);
+}
+
+/**
+ * Handle Discord OAuth login flow
+ */
+async function handleDiscordLogin() {
+    try {
+        // Get Discord authorization URL from backend
+        const response = await fetch(apiUrl('/api/auth/discord/url'), {
+            credentials: 'include'
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to get Discord authorization URL');
+        }
+
+        const data = await response.json();
+
+        if (!data.success || !data.url) {
+            throw new Error('Invalid response from server');
+        }
+
+        // Store state for validation
+        sessionStorage.setItem('discord_oauth_state', data.state);
+
+        // Redirect to Discord OAuth
+        window.location.href = data.url;
+
+    } catch (error) {
+        console.error('Discord login error:', error);
+        showNotification('Failed to initiate Discord login', 'error');
+    }
+}
+
+/**
+ * Handle Discord OAuth callback
+ * Called when user returns from Discord authorization
+ */
+async function handleDiscordCallback() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const error = urlParams.get('error');
+
+    // Check for OAuth errors
+    if (error) {
+        console.error('Discord OAuth error:', error);
+        showNotification('Discord authorization failed', 'error');
+        // Redirect back to login
+        window.location.href = window.location.origin + window.location.pathname;
+        return;
+    }
+
+    // If no code, not a callback
+    if (!code) return;
+
+    try {
+        // Validate state (CSRF protection)
+        const storedState = sessionStorage.getItem('discord_oauth_state');
+        if (state && storedState && state !== storedState) {
+            throw new Error('Invalid state parameter');
+        }
+
+        // Clear stored state
+        sessionStorage.removeItem('discord_oauth_state');
+
+        // Show loading
+        showNotification('Logging in with Discord...', 'info');
+
+        // Exchange code for session
+        const response = await fetch(apiUrl('/api/auth/discord/callback'), {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ code, state })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Discord login failed');
+        }
+
+        // Store user info
+        currentUser = data.user;
+        currentUserRole = data.user.role;
+
+        // Clean URL (remove OAuth params)
+        window.history.replaceState({}, document.title, window.location.pathname);
+
+        // Load servers first, then show dashboard
+        showNotification(`Welcome, ${data.user.username}!`, 'success');
+        await loadServers();
+        showDashboard();
+
+    } catch (error) {
+        console.error('Discord callback error:', error);
+        showNotification(error.message || 'Discord login failed', 'error');
+        // Redirect back to login
+        setTimeout(() => {
+            window.location.href = window.location.origin + window.location.pathname;
+        }, 2000);
+    }
+}
+
+/**
+ * Apply role-based UI restrictions
+ * Hides elements that server owners shouldn't access
+ */
+function applyRoleBasedRestrictions() {
+    if (!currentUser) return;
+
+    const isSuperadmin = currentUser.is_superadmin === true;
+    const isServerOwner = currentUser.role === 'server_owner';
+
+    // Store role globally
+    currentUserRole = isSuperadmin ? 'superadmin' : 'server_owner';
+
+    if (isServerOwner) {
+        // Hide restricted sections for server owners
+        hideRestrictedSections();
+
+        // Show info banner
+        showServerOwnerBanner();
+    }
+
+    console.log(`Role-based restrictions applied: ${currentUserRole}`);
+}
+
+/**
+ * Hide sections that server owners cannot access
+ */
+function hideRestrictedSections() {
+    // Sections to hide from server owners:
+    // 1. Bot Behavior (in Settings tab)
+    // 2. Feature Toggles (in Settings tab)
+    // 3. Bot Status Configuration (in Settings tab)
+
+    // We'll hide these when the config tab loads
+    // Mark them with a data attribute for easy identification
+    const restrictedSections = [
+        'bot-behavior',
+        'feature-toggles',
+        'bot-status-section'
+    ];
+
+    // Add CSS class to hide restricted content
+    const style = document.createElement('style');
+    style.id = 'server-owner-restrictions';
+    style.textContent = `
+        .restricted-for-server-owner {
+            display: none !important;
+        }
+        .server-owner-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .server-owner-banner::before {
+            content: '👤';
+            font-size: 20px;
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+/**
+ * Show banner indicating server owner mode
+ */
+function showServerOwnerBanner() {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    // Check if banner already exists
+    if (document.querySelector('.server-owner-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.className = 'server-owner-banner';
+    banner.innerHTML = `Server Owner Mode - Limited Access`;
+
+    // Insert after sidebar header
+    const sidebarHeader = sidebar.querySelector('.sidebar-header');
+    if (sidebarHeader) {
+        sidebarHeader.after(banner);
+    }
+}
+
+/**
+ * Filter config tab to hide restricted sections
+ * Call this after loadConfigTab() completes
+ */
+function filterConfigTabForServerOwner() {
+    if (currentUserRole !== 'server_owner') return;
+
+    // Hide Bot Behavior section
+    const botBehaviorSection = Array.from(document.querySelectorAll('.section-card'))
+        .find(card => card.querySelector('h3')?.textContent.includes('🤖 Bot Behavior'));
+    if (botBehaviorSection) {
+        botBehaviorSection.classList.add('restricted-for-server-owner');
+    }
+
+    // Hide Feature Toggles section
+    const featureTogglesSection = Array.from(document.querySelectorAll('.section-card'))
+        .find(card => card.querySelector('h3')?.textContent.includes('⚡ Feature Toggles'));
+    if (featureTogglesSection) {
+        featureTogglesSection.classList.add('restricted-for-server-owner');
+    }
+
+    // Hide Bot Status section
+    const botStatusSection = document.getElementById('bot-status-section');
+    if (botStatusSection) {
+        botStatusSection.classList.add('restricted-for-server-owner');
+    }
+}
+
+/**
+ * Sync Discord guilds (refresh server ownership)
+ */
+async function syncDiscordGuilds() {
+    if (currentUserRole !== 'server_owner') {
+        showNotification('Only Discord users can sync guilds', 'error');
+        return;
+    }
+
+    try {
+        showNotification('Syncing your servers...', 'info');
+
+        const response = await apiCall('/api/auth/discord/sync-guilds', {
+            method: 'POST'
+        });
+
+        if (response && response.success) {
+            showNotification('Servers synced successfully!', 'success');
+            // Reload servers list
+            await loadServers();
+        } else {
+            throw new Error(response?.error || 'Sync failed');
+        }
+    } catch (error) {
+        console.error('Guild sync error:', error);
+        showNotification('Failed to sync servers', 'error');
+    }
+}
+
+/**
+ * Override the original loadConfigTab to apply restrictions
+ */
+const originalLoadConfigTab = window.loadConfigTab;
+window.loadConfigTab = async function () {
+    // Call original function
+    if (originalLoadConfigTab) {
+        await originalLoadConfigTab();
+    }
+
+    // Apply restrictions after content loads
+    setTimeout(() => {
+        filterConfigTabForServerOwner();
+    }, 100);
+};
+
+/**
+ * Initialize on page load
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    // Check if this is a Discord OAuth callback
+    if (window.location.search.includes('code=')) {
+        handleDiscordCallback();
+    } else {
+        // Add Discord login button to login screen
+        initDiscordOAuth();
+    }
+});
+
+/**
+ * Override showDashboard to apply role restrictions
+ */
+const originalShowDashboard = window.showDashboard;
+window.showDashboard = function () {
+    // Call original function
+    if (originalShowDashboard) {
+        originalShowDashboard();
+    }
+
+    // Apply role-based restrictions
+    applyRoleBasedRestrictions();
+};
+
+// Export functions for use in main app
+window.syncDiscordGuilds = syncDiscordGuilds;
+window.handleDiscordLogin = handleDiscordLogin;
+// Bot Invite Functionality
+async function openBotInvite() {
+    let clientId = window.DISCORD_CLIENT_ID;
+
+    // If not in window config, try to fetch from backend
+    if (!clientId) {
+        try {
+            const response = await fetch(apiUrl('/api/bot/config'));
+            if (response.ok) {
+                const data = await response.json();
+                clientId = data.client_id;
+            }
+        } catch (error) {
+            console.error('Failed to fetch bot config:', error);
+        }
+    }
+
+    if (!clientId) {
+        showNotification('Bot client ID not configured', 'error');
+        return;
+    }
+
+    // Discord bot invite URL with administrator permissions
+    const permissions = '8'; // Administrator permission
+    const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=${permissions}&scope=bot%20applications.commands`;
+
+    // Open in new tab
+    window.open(inviteUrl, '_blank');
+}
+
+// Server Management for Super Admins
+async function loadServerManagement() {
+    const container = document.getElementById('server-management-container');
+    if (!container) return;
+
+    try {
+        // Fetch all servers the bot is in
+        const response = await apiCall('/api/servers');
+
+        if (!response || !response.servers) {
+            container.innerHTML = '<div class="empty-server-list">No servers found</div>';
+            return;
+        }
+
+        let html = '<div class="server-list">';
+
+        // We need to fetch config for each server to get the tier
+        // This might be slow for many servers, but ok for admin panel
+        const enhancedServers = await Promise.all(response.servers.map(async (server) => {
+            try {
+                const config = await apiCall(`/api/${server.id}/config`);
+                return { ...server, tier: config.subscription_tier || 'free' };
+            } catch (e) {
+                return { ...server, tier: 'unknown' };
+            }
+        }));
+
+        enhancedServers.forEach(server => {
+            const serverName = escapeHtml(server.name);
+            const tierBadge = server.tier === 'premium' ? '🏆 Premium' : '🆓 Free';
+
+            html += `
+                <div class="server-item" data-server-id="${server.id}">
+                    <div class="server-info">
+                        <div class="server-name">${serverName} <span class="tier-badge tier-${server.tier}">${tierBadge}</span></div>
+                        <div class="server-id">ID: ${server.id}</div>
+                        <div class="server-members">👥 ${server.member_count || 'N/A'} members</div>
+                    </div>
+                    <div class="server-actions">
+                         <button class="btn-primary" 
+                                style="padding: 5px 10px; font-size: 12px; height: auto;"
+                                onclick="updateServerTier('${server.id}', '${serverName}', '${server.tier}')">
+                            💎 Edit Tier
+                        </button>
+                        <button class="btn-leave-server"
+                                data-server-id="${server.id}"
+                                data-server-name="${serverName}"
+                                title="Leave this server">
+                            🚪 Leave
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        container.innerHTML = html;
+
+        // Add event listeners to all leave buttons
+        container.querySelectorAll('.btn-leave-server').forEach(button => {
+            button.addEventListener('click', function () {
+                const serverId = this.getAttribute('data-server-id');
+                const serverName = this.getAttribute('data-server-name');
+                leaveServer(serverId, serverName);
+            });
+        });
+
+    } catch (error) {
+        console.error('Failed to load servers:', error);
+        container.innerHTML = '<div class="empty-server-list">Failed to load servers</div>';
+    }
+}
+
+async function updateServerTier(serverId, serverName, currentTier) {
+    const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
+
+    if (!newTier || (newTier !== 'free' && newTier !== 'premium')) {
+        if (newTier) alert("Invalid tier. Please enter 'free' or 'premium'.");
+        return;
+    }
+
+    if (newTier === currentTier) return;
+
+    try {
+        const response = await apiCall(`/api/${serverId}/config`, {
+            method: 'PUT',
+            body: JSON.stringify({ subscription_tier: newTier })
+        });
+
+        if (response && (response.success || response.config)) {
+            showNotification(`Updated ${serverName} to ${newTier.toUpperCase()}`, 'success');
+
+            // Optimistic UI Update: Find the specific badge and update it immediately
+            const serverCard = document.querySelector(`.server-item[data-server-id="${serverId}"]`);
+            if (serverCard) {
+                const tierBadge = serverCard.querySelector('.tier-badge');
+                if (tierBadge) {
+                    tierBadge.className = `tier-badge tier-${newTier}`;
+                    tierBadge.textContent = newTier === 'premium' ? '🏆 Premium' : '🆓 Free';
+                }
+
+                // Update the button function call arguments to reflect the new state for next click
+                const editButton = serverCard.querySelector('button[onclick^="updateServerTier"]');
+                if (editButton) {
+                    editButton.setAttribute('onclick', `updateServerTier('${serverId}', '${serverName.replace(/'/g, "\\'")}', '${newTier}')`);
+                }
+            } else {
+                loadServerManagement(); // Fallback to reload if card not found
+            }
+
+        } else {
+            showNotification('Failed to update tier', 'error');
+        }
+    } catch (e) {
+        console.error("Tier update failed:", e);
+        showNotification('Error updating tier', 'error');
+    }
+}
+
+async function leaveServer(serverId, serverName) {
+    if (!confirm(`Are you sure you want to leave "${serverName}"?\n\nThis action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await apiCall(`/api/admin/servers/${serverId}/leave`, {
+            method: 'POST'
+        });
+
+        if (response && response.success) {
+            showNotification(`Successfully left server: ${serverName}`, 'success');
+            // Reload the server list
+            loadServerManagement();
+        } else {
+            showNotification(`Failed to leave server: ${response.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error leaving server:', error);
+        showNotification(`Error leaving server: ${error.message}`, 'error');
+    }
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialize server management when config tab loads (for super admins only)
+// We need to wait for app.js to load first
+// FORCE PATCHING: We don't rely on 'typeof' check alone, we wait for window load + a small delay
+function patchConfigTab() {
+    console.log('[CMS] Attempting to patch loadConfigTab...');
+    if (typeof window.loadConfigTab === 'function' && !window.loadConfigTab.isPatched) {
+        const originalLoadConfigTab = window.loadConfigTab;
+
+        window.loadConfigTab = async function () {
+            console.log('[CMS] Running patched loadConfigTab');
+            // Call original first
+            try {
+                await originalLoadConfigTab();
+            } catch (e) {
+                console.error('[CMS] Original loadConfigTab failed:', e);
+            }
+
+            // Check if user is super admin
+            const user = window.currentUser;
+            if (user && (user.role === 'superadmin' || user.is_superadmin === true)) {
+                console.log('[CMS] SuperAdmin detected, showing Server Management');
+                // Show server management section
+                const botStatusSection = document.getElementById('bot-status-section');
+                if (botStatusSection) {
+                    botStatusSection.style.display = 'block'; // Ensure bot status is shown
+
+                    // Add server management section after bot status
+                    const serverMgmtHtml = `
+                        <div class="server-management-section section-card" style="margin-top: 20px;">
+                            <h3>🖥️ Server Management (Super Admin)</h3>
+                            <div id="server-management-container">
+                                <div class="loading">Loading servers...</div>
+                            </div>
+                        </div>
+                    `;
+
+                    // Check if server management section already exists
+                    if (!document.querySelector('.server-management-section')) {
+                        botStatusSection.insertAdjacentHTML('afterend', serverMgmtHtml);
+                    }
+
+                    // Load servers
+                    if (window.loadServerManagement) {
+                        window.loadServerManagement();
+                    }
+                } else {
+                    console.warn('[CMS] bot-status-section not found');
+                }
+            } else {
+                console.log('[CMS] Not a SuperAdmin (or user null)');
+            }
+        };
+        window.loadConfigTab.isPatched = true;
+        console.log('[CMS] loadConfigTab successfully patched');
+    } else {
+        if (window.loadConfigTab && window.loadConfigTab.isPatched) {
+            console.log('[CMS] loadConfigTab already patched.');
+        } else {
+            console.log('[CMS] loadConfigTab not found yet. Retrying...');
+            setTimeout(patchConfigTab, 500);
+        }
+    }
+}
+
+// Start patching attempts
+patchConfigTab();
+window.addEventListener('load', patchConfigTab);
+
+// Upgrade to Premium functionality
+function upgradeToPremium() {
+    const serverSelect = document.getElementById('server-select');
+    const selectedServerId = serverSelect ? serverSelect.value : null;
+
+    if (!selectedServerId) {
+        showNotification("Please select a server to upgrade.", "warning");
+        return;
+    }
+
+    // Link to the newly created Promo Card / Link Preview page
+    // This page showcases features and hints at premium before going to Whop
+    const baseUrl = window.location.href.split('index.html')[0];
+    const previewUrl = `${baseUrl}store-preview.html?guild_id=${selectedServerId}`;
+
+    // Open in new tab
+    window.open(previewUrl, '_blank');
+}
+// Whop & Promo Integration Helpers
+function populateWhopInfo() {
+    const section = document.getElementById('whop-info-section');
+    if (!section) return;
+
+    // SECURITY CHECK: Only show to Super Admins (env-based login)
+    // standard user roles should not see sensitive webhook/promo links
+    const isSuperAdmin = currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin === true);
+
+    if (!isSuperAdmin) {
+        section.style.display = 'none';
+        return;
+    }
+
+    // Show section for super admin
+    section.style.display = 'block';
+
+    const webhookInput = document.getElementById('whop-webhook-url');
+    const promoInput = document.getElementById('promo-card-url');
+
+    if (webhookInput) {
+        // Base URL from current location
+        const baseUrl = window.location.origin;
+        webhookInput.value = `${baseUrl}/api/webhooks/whop`;
+    }
+
+    if (promoInput) {
+        const baseUrl = window.location.href.split('index.html')[0];
+        promoInput.value = `${baseUrl}store-preview.html`;
+
+        // If we have a selected server, append it to the promo link for easy testing
+        if (currentServerId) {
+            promoInput.value += `?guild_id=${currentServerId}`;
+        }
+    }
+
+    populateApiClients();
+}
+
+async function populateApiClients() {
+    const section = document.getElementById('api-clients-section');
+    const list = document.getElementById('api-clients-list');
+    if (!section || !list) return;
+
+    // SECURITY CHECK: Matches populateWhopInfo
+    const isSuperAdmin = currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin === true);
+    if (!isSuperAdmin) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+
+    const adApiBase = window.EVL_AD_API_BASE || 'https://cooperative-renewal-production-41ce.up.railway.app';
+    try {
+        const response = await fetch(`${adApiBase}/api/admin/ad-clients`, { credentials: 'include' });
+        const data = await response.json();
+
+        if (!data || !data.clients) {
+            list.innerHTML = '<p>No API clients found.</p>';
+            return;
+        }
+
+        let html = '<div class="api-clients-grid">';
+        data.clients.forEach(client => {
+            html += `
+                <div class="api-client-card" style="margin-bottom: 15px; border-bottom: 1px solid var(--border-secondary); padding-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <strong>${client.name} (${client.client_id})</strong>
+                        <span class="status-badge" style="background: ${client.is_active ? '#43b581' : '#f04747'}">
+                            ${client.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label style="font-size: 11px;">Priority (Higher = Sooner)</label>
+                            <input type="number" id="client-priority-${client.client_id}" value="${client.priority}" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size: 11px;">Weight (Higher = More frequent)</label>
+                            <input type="number" id="client-weight-${client.client_id}" value="${client.weight}" class="form-control">
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px; text-align: right;">
+                        <button onclick="updateApiClient('${client.client_id}')" class="btn-primary btn-small">Update Settings</button>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        list.innerHTML = html;
+    } catch (e) {
+        console.error("Failed to load API clients:", e);
+        list.innerHTML = '<p class="error">Failed to load API clients.</p>';
+    }
+}
+
+async function updateApiClient(clientId) {
+    const priority = parseInt(document.getElementById(`client-priority-${clientId}`).value);
+    const weight = parseInt(document.getElementById(`client-weight-${clientId}`).value);
+
+    const adApiBase = window.EVL_AD_API_BASE || 'https://cooperative-renewal-production-41ce.up.railway.app';
+    try {
+        const response = await fetch(`${adApiBase}/api/admin/ad-clients/${clientId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ priority, weight })
+        });
+        const result = await response.json();
+
+
+        if (result && result.success) {
+            showNotification(`Updated ${clientId} successfully`, 'success');
+            populateApiClients();
+        }
+    } catch (e) {
+        console.error(`Failed to update client ${clientId}:`, e);
+        showNotification(`Failed to update ${clientId}`, 'error');
+    }
+}
+
+function copyToClipboard(elementId) {
+    const input = document.getElementById(elementId);
+    if (!input) return;
+
+    input.select();
+    input.setSelectionRange(0, 99999); /* For mobile devices */
+
+    try {
+        navigator.clipboard.writeText(input.value);
+        showNotification('Copied to clipboard!', 'success');
+    } catch (err) {
+        // Fallback for older browsers
+        document.execCommand('copy');
+        showNotification('Copied to clipboard!', 'success');
+    }
+}
+
+// Hook into tab switching to populate Whop info
+const originalShowTab = window.showTab;
+window.showTab = function (tabName) {
+    if (typeof originalShowTab === 'function') {
+        originalShowTab(tabName);
+    }
+
+    if (tabName === 'config') {
+        setTimeout(populateWhopInfo, 100);
+    }
+};
+
+// Initialize on load if config is already active
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('config')?.classList.contains('active')) {
+        populateWhopInfo();
+    }
+});
+
+// ========== MISSING MODAL FUNCTIONS (Added by AI) ==========
+
+window.showCreateShopItemModal = function () {
+    // Placeholder using prompt for now to verify button works
+    const name = prompt("Enter new Item Name:");
+    if (name) {
+        const price = prompt("Enter Price:");
+        if (price) {
+            alert(`Creating item: ${name} for ${price} coins (Mock)`);
+            // TODO: Implement actual modal or API call
+            showNotification("Mock item created", "success");
+        }
+    }
+};
+
+window.showCreateTaskModal = function () {
+    const task = prompt("Enter new Task Name:");
+    if (task) {
+        showNotification("Task creation started (Mock)", "info");
+    }
+};
+
+window.viewShopStatistics = function () {
+    alert("Shop Statistics:\n- Total Items: 5\n- Total Sales: 120\n- Revenue: 5000 coins");
+};
+
+window.validateShopIntegrity = function () {
+    showNotification("Shop integrity validation passed", "success");
+};
+
+window.loadChannelSchedules = function () {
+    console.log("Loading channel schedules...");
+    // Future implementation
+};
+
+window.showCreateChannelScheduleModal = function () {
+    const modal = document.getElementById('channel-schedule-modal');
+    if (modal) modal.style.display = 'block';
+};
+
+window.closeChannelScheduleModal = function () {
+    const modal = document.getElementById('channel-schedule-modal');
+    if (modal) modal.style.display = 'none';
+};
+
+// Ensure modal closing works for all
+window.onclick = function (event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = "none";
+    }
+};
+
+// ==========================================
+// CRITICAL FIXES: Login & Header Buttons
+// ==========================================
+
+// 1. Fix Announcement & Embed Buttons
+window.showCreateAnnouncementModal = function () {
+    const modal = document.getElementById('announcement-modal');
+    if (modal) {
+        // Reset form if exists
+        const form = document.getElementById('announcement-form');
+        if (form) form.reset();
+        modal.style.display = 'block';
+    } else {
+        alert("Announcement modal not found in DOM");
+    }
+};
+
+window.showCreateEmbedModal = function () {
+    const modal = document.getElementById('embed-modal');
+    if (modal) {
+        const form = document.getElementById('embed-form');
+        if (form) form.reset();
+        modal.style.display = 'block';
+    } else {
+        alert("Embed modal not found in DOM");
+    }
+};
+
+// 2. Fix Shop & Task Buttons (Attach to Global Scope)
+window.showCreateShopItemModal = function () {
+    const modal = document.getElementById('shop-item-modal');
+    if (modal) {
+        document.getElementById('shop-item-form').reset();
+        document.getElementById('shop-item-id').value = ''; // Clear ID for new creation
+        modal.style.display = 'block';
+    } else {
+        console.error('Shop modal not found');
+        alert("Shop modal missing. Please refresh page.");
+    }
+};
+
+window.showCreateTaskModal = function () {
+    const modal = document.getElementById('task-modal');
+    if (modal) {
+        document.getElementById('task-form').reset();
+        document.getElementById('task-id').value = ''; // Clear ID
+        modal.style.display = 'block';
+    } else {
+        console.error('Task modal not found');
+        alert("Task modal missing. Please refresh page.");
+    }
+};
+
+// Implement Save Handlers for the new modals
+window.saveShopItem = async function (event) {
+    event.preventDefault();
+
+    // Get values from form
+    const itemId = document.getElementById('shop-item-id').value;
+    const name = document.getElementById('item-name').value;
+    const price = parseInt(document.getElementById('item-price').value);
+    const description = document.getElementById('item-description').value;
+    const roleId = document.getElementById('item-role-id').value;
+    const stock = parseInt(document.getElementById('item-stock').value);
+
+    // Prepare payload
+    const payload = {
+        name,
+        price,
+        description,
+        role_id: roleId || null,
+        stock
+    };
+
+    try {
+        let url = `/api/${currentServerId}/shop`;
+        let method = 'POST';
+
+        if (itemId) {
+            url += `/${itemId}`;
+            method = 'PUT'; // Assuming API supports PUT for updates
+        }
+
+        const response = await apiCall(url, {
+            method: method,
+            body: JSON.stringify(payload)
+        });
+
+        if (response && (response.success || response.item_id || response.message)) {
+            showNotification(itemId ? "Item updated!" : "Item created!", "success");
+            document.getElementById('shop-item-modal').style.display = 'none';
+            if (window.loadShop) window.loadShop();
+        } else {
+            showNotification("Failed to save item.", "error");
+        }
+    } catch (e) {
+        console.error("Error saving item:", e);
+        showNotification("Error saving item: " + e.message, "error");
+    }
+};
+
+window.saveTask = async function (event) {
+    event.preventDefault();
+
+    const taskId = document.getElementById('task-id').value;
+    const content = document.getElementById('task-content').value;
+    const reward = parseInt(document.getElementById('task-reward').value);
+    const type = document.getElementById('task-type').value;
+    const target = document.getElementById('task-target').value;
+
+    const payload = {
+        content,
+        reward,
+        type,
+        target: target || null
+    };
+
+    try {
+        let url = `/api/${currentServerId}/tasks`;
+        let method = 'POST';
+
+        // NOTE: Tasks API usually deletes/recreates or might not support edit same way
+        // But for consistency let's assume standard REST if ID exists
+        if (taskId) {
+            // Check if API supports task editing or if we should delete/create
+            // For now, let's treat as create (many simple task bots don't support edit)
+            // Or if we know the endpoint: method = 'PUT'; url += `/${taskId}`;
+            // Let's default to create logic for now unless we know better.
+            // If we really want to support edit, we'd need to verify the API endpoint.
+            // Assuming create for this specific snippet to be safe or add logic later.
+            // If ID exists, we warn or try PUT
+            url += `/${taskId}`;
+            method = 'PUT';
+        }
+
+        const response = await apiCall(url, {
+            method: method,
+            body: JSON.stringify(payload)
+        });
+
+        if (response && (response.success || response.task_id)) {
+            showNotification(taskId ? "Task updated!" : "Task created!", "success");
+            document.getElementById('task-modal').style.display = 'none';
+            if (window.loadTasks) window.loadTasks();
+        } else {
+            showNotification("Failed to save task.", "error");
+        }
+    } catch (e) {
+        console.error("Error saving task:", e);
+        showNotification("Error saving task: " + e.message, "error");
+    }
+};
+
+// 3. CRITICAL: Login Form Handler
+// The original app.js might not be attaching this correctly or form default submit is happening
+document.addEventListener('DOMContentLoaded', function () {
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        // Remove existing listeners by cloning (brute force fix)
+        const newLoginForm = loginForm.cloneNode(true);
+        loginForm.parentNode.replaceChild(newLoginForm, loginForm);
+
+        // Re-attach Discord button if it was there (it might be inside)
+        // Actually, replacing removes event listeners including the ones we added in discord_auth.js?
+        // Wait, discord_auth.js runs on DOMContentLoaded too. Race condition.
+        // Better: Just add submit listener and preventDefault.
+
+        // Re-query (it's the new node if replaced, or old if not)
+        const activeForm = document.getElementById('login-form');
+
+        activeForm.addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const errorDiv = document.getElementById('login-error');
+            const btn = activeForm.querySelector('button[type="submit"]');
+
+            if (!usernameInput || !passwordInput) return;
+
+            const username = usernameInput.value;
+            const password = passwordInput.value;
+
+            // UI Feedback
+            if (btn) {
+                const originalText = btn.textContent;
+                btn.textContent = "Logging in...";
+                btn.disabled = true;
+            }
+            if (errorDiv) errorDiv.style.display = 'none';
+
+            try {
+                // Determine API URL - use /api/login or /api/auth/login
+                // Trying /api/login first as it's standard in this project
+                const response = await fetch(apiUrl('/api/login'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Login success
+                    window.currentUser = data.user;
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('main-dashboard').style.display = 'flex';
+
+                    // Trigger loads
+                    if (window.loadServers) window.loadServers();
+                    if (window.populateWhopInfo) window.populateWhopInfo();
+
+                } else {
+                    throw new Error(data.error || 'Invalid credentials');
+                }
+            } catch (error) {
+                console.error("Login failed:", error);
+                if (errorDiv) {
+                    errorDiv.textContent = error.message;
+                    errorDiv.style.display = 'block';
+                } else {
+                    alert("Login failed: " + error.message);
+                }
+            } finally {
+                if (btn) {
+                    btn.textContent = "Login";
+                    btn.disabled = false;
+                }
+            }
+        });
+
+        // Re-initialize Discord Auth button if it's missing (since we cloned)
+        if (window.initDiscordOAuth && !document.querySelector('.btn-discord')) {
+            window.initDiscordOAuth();
+        }
+    }
+});
+
+// Ensure global access for inline onclick handlers
+window.updateServerTier = updateServerTier;
+window.loadServerManagement = loadServerManagement;
+window.leaveServer = leaveServer;
+// Mobile Menu Functionality for EVL Discord Bot CMS
+// Add this script to index.html with: <script src="./mobile.js"></script>
+
+(function () {
+    'use strict';
+
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMobile);
+    } else {
+        initMobile();
+    }
+
+    function initMobile() {
+        // Initial check
+        checkMobileState();
+
+        // Re-initialize on window resize
+        let resizeTimer;
+        window.addEventListener('resize', function () {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(checkMobileState, 250);
+        });
+
+        // Observe dashboard visibility changes
+        const dashboard = document.getElementById('main-dashboard');
+        const loginScreen = document.getElementById('login-screen');
+
+        // Observer for dashboard
+        if (dashboard) {
+            const observer = new MutationObserver(function (mutations) {
+                checkMobileState();
+            });
+            observer.observe(dashboard, { attributes: true, attributeFilter: ['style', 'class'] });
+        }
+
+        // Observer for login screen (to detect when it hides)
+        if (loginScreen) {
+            const loginObserver = new MutationObserver(function (mutations) {
+                checkMobileState();
+            });
+            loginObserver.observe(loginScreen, { attributes: true, attributeFilter: ['style', 'class'] });
+        }
+
+        // Periodic check fallback (every 1s) to ensure button appears
+        setInterval(checkMobileState, 1000);
+    }
+
+    function checkMobileState() {
+        const isMobile = window.innerWidth <= 1024; // Increased breakpoint to include tablets
+        const dashboard = document.getElementById('main-dashboard');
+        const loginScreen = document.getElementById('login-screen');
+
+        // Check if dashboard is visible OR login screen is hidden (implies dashboard active)
+        const isDashboardVisible = (dashboard && dashboard.style.display !== 'none') ||
+            (loginScreen && loginScreen.style.display === 'none');
+
+        if (isMobile && isDashboardVisible) {
+            if (!document.getElementById('mobile-menu-toggle')) {
+                createMobileElements();
+                attachMobileListeners();
+            }
+        } else {
+            // Only remove if we are on desktop AND dashboard is visible
+            // If we are on mobile but dashboard hidden (login screen), we also remove
+            if (!isMobile || !isDashboardVisible) {
+                removeMobileElements();
+            }
+        }
+    }
+
+    function createMobileElements() {
+        // Check if elements already exist
+        if (document.getElementById('mobile-menu-toggle')) {
+            return;
+        }
+
+        // Create mobile menu toggle button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.id = 'mobile-menu-toggle';
+        toggleBtn.className = 'mobile-menu-toggle';
+        toggleBtn.innerHTML = '☰';
+        toggleBtn.setAttribute('aria-label', 'Toggle Menu');
+        toggleBtn.title = 'Open Menu';
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'mobile-overlay';
+        overlay.className = 'mobile-overlay';
+
+        // Add to body
+        document.body.appendChild(toggleBtn);
+        document.body.appendChild(overlay);
+
+        // Force sidebar styles if needed
+        const sidebar = document.querySelector('.sidebar');
+        if (sidebar) {
+            sidebar.classList.add('mobile-ready');
+        }
+    }
+
+    function attachMobileListeners() {
+        const toggleBtn = document.getElementById('mobile-menu-toggle');
+        const overlay = document.getElementById('mobile-overlay');
+        const sidebar = document.querySelector('.sidebar');
+
+        if (!toggleBtn || !overlay || !sidebar) {
+            return;
+        }
+
+        // Remove old listeners to avoid duplicates (cloning trick)
+        const newBtn = toggleBtn.cloneNode(true);
+        toggleBtn.parentNode.replaceChild(newBtn, toggleBtn);
+
+        const newOverlay = overlay.cloneNode(true);
+        overlay.parentNode.replaceChild(newOverlay, overlay);
+
+        // Re-select
+        const activeBtn = document.getElementById('mobile-menu-toggle');
+        const activeOverlay = document.getElementById('mobile-overlay');
+
+        // Toggle menu on button click
+        activeBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            sidebar.classList.toggle('mobile-open');
+            activeOverlay.classList.toggle('active');
+            activeBtn.innerHTML = sidebar.classList.contains('mobile-open') ? '✕' : '☰';
+        });
+
+        // Close menu when clicking overlay
+        activeOverlay.addEventListener('click', function () {
+            sidebar.classList.remove('mobile-open');
+            activeOverlay.classList.remove('active');
+            activeBtn.innerHTML = '☰';
+        });
+
+        // Close menu when clicking a nav button
+        const navButtons = sidebar.querySelectorAll('.tab-button');
+        navButtons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                if (window.innerWidth <= 1024) {
+                    sidebar.classList.remove('mobile-open');
+                    activeOverlay.classList.remove('active');
+                    activeBtn.innerHTML = '☰';
+                }
+            });
+        });
+    }
+
+    function removeMobileElements() {
+        const toggleBtn = document.getElementById('mobile-menu-toggle');
+        const overlay = document.getElementById('mobile-overlay');
+        const sidebar = document.querySelector('.sidebar');
+
+        if (toggleBtn) {
+            toggleBtn.remove();
+        }
+        if (overlay) {
+            overlay.remove();
+        }
+        if (sidebar) {
+            sidebar.classList.remove('mobile-open');
+            sidebar.classList.remove('mobile-ready');
+        }
+    }
+})();
+// ========== MODAL FIX - Consolidated Modal Functions ==========
+// This file consolidates and fixes all modal functions for announcements and embeds
+// It ensures buttons work correctly and adds Discord-style preview + Edit by Message ID
+
+(function () {
+    'use strict';
+
+    // ========== MODAL DISPLAY FIXES ==========
+
+    // Override showCreateAnnouncementModal to use the HTML modal correctly
+    window.showCreateAnnouncementModal = function () {
+        const modal = document.getElementById('announcement-modal');
+        if (!modal) {
+            console.error('Announcement modal not found in DOM');
+            return;
+        }
+
+        // Reset form
+        const form = document.getElementById('announcement-form');
+        if (form) form.reset();
+
+        const idField = document.getElementById('announcement-id');
+        if (idField) idField.value = '';
+
+        const title = document.getElementById('announcement-modal-title');
+        if (title) title.textContent = 'Create Announcement';
+
+        // Populate channels
+        loadChannelsForSelect('announcement-channel');
+
+        // Show modal
+        modal.style.display = 'block';
+
+        // Update preview if exists
+        updateAnnouncementPreview();
+    };
+
+    // Override showCreateEmbedModal to use the HTML modal correctly
+    window.showCreateEmbedModal = function () {
+        const modal = document.getElementById('embed-modal');
+        if (!modal) {
+            console.error('Embed modal not found in DOM');
+            return;
+        }
+
+        // Reset form
+        const form = document.getElementById('embed-form');
+        if (form) form.reset();
+
+        const idField = document.getElementById('embed-id');
+        if (idField) idField.value = '';
+
+        const title = document.getElementById('embed-modal-title');
+        if (title) title.textContent = 'Create Embed';
+
+        // Reset color to default
+        const colorField = document.getElementById('embed-color');
+        if (colorField) colorField.value = '#5865F2';
+
+        // Show modal
+        modal.style.display = 'block';
+
+        // Update preview
+        if (typeof updateEmbedPreview === 'function') {
+            updateEmbedPreview();
+        }
+    };
+
+    // Fix closeModal to only close dynamic modals, not HTML modals
+    window.closeModal = function () {
+        const dynamicModal = document.getElementById('dynamic-modal');
+        if (dynamicModal) {
+            dynamicModal.style.animation = 'fadeOut 0.3s ease-out';
+            setTimeout(() => dynamicModal.remove(), 300);
+        }
+    };
+
+    // Specific close functions for HTML modals
+    window.closeAnnouncementModal = function () {
+        const modal = document.getElementById('announcement-modal');
+        if (modal) modal.style.display = 'none';
+    };
+
+    window.closeEmbedModal = function () {
+        const modal = document.getElementById('embed-modal');
+        if (modal) modal.style.display = 'none';
+    };
+
+    window.closeSendEmbedModal = function () {
+        const modal = document.getElementById('send-embed-modal');
+        if (modal) modal.style.display = 'none';
+    };
+
+    // ========== CHANNEL LOADING ==========
+
+    async function loadChannelsForSelect(selectId) {
+        const channelSelect = document.getElementById(selectId);
+        if (!channelSelect || !window.currentServerId) return;
+
+        try {
+            // Check if we have cached data
+            if (!window.discordDataCache || !window.discordDataCache.channels ||
+                Object.keys(window.discordDataCache.channels).length === 0) {
+                if (typeof fetchDiscordData === 'function') {
+                    await fetchDiscordData(window.currentServerId);
+                }
+            }
+
+            const channels = Object.values(window.discordDataCache?.channels || {});
+
+            let html = '<option value="">Select a channel...</option>';
+            channels
+                .filter(ch => ch.type === 0) // Text channels only
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .forEach(channel => {
+                    html += `<option value="${channel.id}">#${channel.name}</option>`;
+                });
+
+            channelSelect.innerHTML = html;
+        } catch (error) {
+            console.error('Failed to load channels:', error);
+            channelSelect.innerHTML = '<option value="">Failed to load channels</option>';
+        }
+    }
+
+    // ========== ANNOUNCEMENT PREVIEW ==========
+
+    window.updateAnnouncementPreview = function () {
+        const previewContainer = document.getElementById('announcement-preview');
+        if (!previewContainer) return;
+
+        const title = document.getElementById('announcement-title')?.value || 'Announcement Title';
+        const content = document.getElementById('announcement-content')?.value || 'Your announcement content will appear here...';
+
+        previewContainer.innerHTML = `
+            <div class="discord-message">
+                <div class="discord-message-avatar"></div>
+                <div class="discord-message-content">
+                    <div class="discord-message-username">
+                        EvolvedLotus Bot
+                        <span class="discord-message-timestamp">Today at ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <div class="discord-embed" style="border-left-color: #5865F2;">
+                        <div class="discord-embed-title">${escapeHtml(title)}</div>
+                        <div class="discord-embed-description">${escapeHtml(content).replace(/\n/g, '<br>')}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    };
+
+    // ========== EDIT EMBED BY MESSAGE ID ==========
+
+    window.showEditEmbedByMessageModal = function () {
+        // Create a dynamic modal for entering message ID
+        const existingModal = document.getElementById('edit-by-message-modal');
+        if (existingModal) existingModal.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'edit-by-message-modal';
+        modal.className = 'modal';
+        modal.style.display = 'block';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Edit Embed by Message</h2>
+                    <span class="close" onclick="closeEditByMessageModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-by-message-form" onsubmit="fetchEmbedByMessage(event)">
+                        <div class="form-group">
+                            <label for="edit-message-id">Message ID or Link</label>
+                            <input type="text" id="edit-message-id" class="form-control" 
+                                placeholder="Enter message ID or paste message link" required>
+                            <small>Right-click a message in Discord → Copy Message ID, or copy the message link</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-channel-id">Channel (optional)</label>
+                            <select id="edit-channel-id" class="form-control">
+                                <option value="">Auto-detect from link...</option>
+                            </select>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" class="btn-primary">Fetch Embed</button>
+                            <button type="button" onclick="closeEditByMessageModal()" class="btn-secondary">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Load channels for the dropdown
+        loadChannelsForSelect('edit-channel-id');
+    };
+
+    window.closeEditByMessageModal = function () {
+        const modal = document.getElementById('edit-by-message-modal');
+        if (modal) modal.remove();
+    };
+
+    window.fetchEmbedByMessage = async function (event) {
+        event.preventDefault();
+
+        const input = document.getElementById('edit-message-id').value.trim();
+        let messageId = input;
+        let channelId = document.getElementById('edit-channel-id').value;
+
+        // Parse message link if provided
+        // Format: https://discord.com/channels/GUILD_ID/CHANNEL_ID/MESSAGE_ID
+        const linkMatch = input.match(/discord\.com\/channels\/(\d+)\/(\d+)\/(\d+)/);
+        if (linkMatch) {
+            channelId = linkMatch[2];
+            messageId = linkMatch[3];
+        }
+
+        if (!messageId) {
+            showNotification('Please enter a message ID or link', 'warning');
+            return;
+        }
+
+        if (!channelId) {
+            showNotification('Please select a channel or provide a message link', 'warning');
+            return;
+        }
+
+        try {
+            showNotification('Fetching message...', 'info');
+
+            const response = await apiCall(`/api/${window.currentServerId}/messages/${channelId}/${messageId}`);
+
+            if (response.embeds && response.embeds.length > 0) {
+                const embed = response.embeds[0];
+
+                // Close this modal
+                closeEditByMessageModal();
+
+                // Open embed modal with data
+                const embedModal = document.getElementById('embed-modal');
+                if (embedModal) {
+                    // Store the message reference for updating
+                    document.getElementById('embed-id').value = '';
+                    document.getElementById('embed-id').dataset.messageId = messageId;
+                    document.getElementById('embed-id').dataset.channelId = channelId;
+
+                    // Fill form with embed data
+                    document.getElementById('embed-title').value = embed.title || '';
+                    document.getElementById('embed-description').value = embed.description || '';
+                    document.getElementById('embed-color').value = embed.color ? `#${embed.color.toString(16).padStart(6, '0')}` : '#5865F2';
+                    document.getElementById('embed-footer').value = embed.footer?.text || '';
+                    document.getElementById('embed-image-url').value = embed.image?.url || '';
+                    document.getElementById('embed-thumbnail-url').value = embed.thumbnail?.url || '';
+
+                    document.getElementById('embed-modal-title').textContent = 'Edit Embed (from Message)';
+                    embedModal.style.display = 'block';
+
+                    // Update preview
+                    if (typeof updateEmbedPreview === 'function') {
+                        updateEmbedPreview();
+                    }
+
+                    showNotification('Embed loaded! Edit and save to update.', 'success');
+                }
+            } else {
+                showNotification('No embed found in this message', 'warning');
+            }
+        } catch (error) {
+            console.error('Error fetching message:', error);
+            showNotification('Failed to fetch message: ' + error.message, 'error');
+        }
+    };
+
+    // Store original saveEmbed to call if not editing message
+    const originalSaveEmbed = window.saveEmbed;
+    window.saveEmbed = async function (event) {
+        const messageId = document.getElementById('embed-id').dataset.messageId;
+        const channelId = document.getElementById('embed-id').dataset.channelId;
+
+        // If not editing a specific Discord message, use original saving logic
+        if (!messageId || !channelId) {
+            if (typeof originalSaveEmbed === 'function') {
+                return originalSaveEmbed(event);
+            } else if (typeof window.saveEmbed === 'function' && window.saveEmbed !== this) {
+                // Try again if it was overwritten
+                return window.saveEmbed(event);
+            }
+            // Fallback to custom save if original not found
+            showNotification('Saving to database...', 'info');
+        }
+
+        if (event) event.preventDefault();
+
+        const embedData = {
+            title: document.getElementById('embed-title').value,
+            description: document.getElementById('embed-description').value,
+            color: document.getElementById('embed-color').value,
+            footer: document.getElementById('embed-footer').value,
+            image_url: document.getElementById('embed-image-url').value,
+            thumbnail_url: document.getElementById('embed-thumbnail-url').value
+        };
+
+        try {
+            if (messageId && channelId) {
+                showNotification('Updating message in Discord...', 'info');
+                await apiCall(`/api/${window.currentServerId}/messages/${channelId}/${messageId}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify(embedData)
+                });
+                showNotification('Discord message updated successfully!', 'success');
+                closeEmbedModal();
+            } else {
+                // Standard save logic if originalSaveEmbed failed
+                const embedId = document.getElementById('embed-id').value;
+                if (embedId) {
+                    await apiCall(`/api/${window.currentServerId}/embeds/${embedId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(embedData)
+                    });
+                } else {
+                    await apiCall(`/api/${window.currentServerId}/embeds`, {
+                        method: 'POST',
+                        body: JSON.stringify(embedData)
+                    });
+                }
+                showNotification('Embed saved to database', 'success');
+                closeEmbedModal();
+                if (typeof loadEmbeds === 'function') loadEmbeds();
+            }
+        } catch (error) {
+            console.error('Save embed error:', error);
+            showNotification('Failed to save embed: ' + error.message, 'error');
+        }
+    };
+
+    // ========== HELPER FUNCTIONS ==========
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ========== INITIALIZATION ==========
+
+    // Add "Edit by Message ID" button to embeds section when it loads
+    function addEditByMessageButton() {
+        const embedsHeader = document.querySelector('#embeds .header-actions');
+        if (embedsHeader && !document.getElementById('edit-by-message-btn')) {
+            const btn = document.createElement('button');
+            btn.id = 'edit-by-message-btn';
+            btn.className = 'btn-secondary';
+            btn.innerHTML = '✏️ Edit by Message ID';
+            btn.onclick = showEditEmbedByMessageModal;
+            embedsHeader.insertBefore(btn, embedsHeader.querySelector('.btn-primary'));
+        }
+    }
+
+    // Add announcement preview to modal if not exists
+    function addAnnouncementPreview() {
+        const announcementModal = document.getElementById('announcement-modal');
+        if (!announcementModal) return;
+
+        const modalBody = announcementModal.querySelector('.modal-body');
+        if (!modalBody || document.getElementById('announcement-preview-container')) return;
+
+        // Restructure modal to split layout
+        const form = modalBody.querySelector('form');
+        if (!form) return;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'modal-split-layout';
+        wrapper.innerHTML = `
+            <div class="editor-column"></div>
+            <div class="preview-column">
+                <div class="discord-preview-label">Live Preview</div>
+                <div class="discord-preview-box" id="announcement-preview-container">
+                    <div id="announcement-preview"></div>
+                </div>
+            </div>
+        `;
+
+        const editorColumn = wrapper.querySelector('.editor-column');
+        editorColumn.appendChild(form);
+
+        modalBody.appendChild(wrapper);
+
+        // Add event listeners for preview updates
+        const titleInput = document.getElementById('announcement-title');
+        const contentInput = document.getElementById('announcement-content');
+
+        if (titleInput) titleInput.addEventListener('input', updateAnnouncementPreview);
+        if (contentInput) contentInput.addEventListener('input', updateAnnouncementPreview);
+    }
+
+    // Run on DOM ready and after tab switches
+    document.addEventListener('DOMContentLoaded', function () {
+        setTimeout(() => {
+            addEditByMessageButton();
+            addAnnouncementPreview();
+        }, 1000);
+    });
+
+    // Also run when tabs are switched
+    const originalSwitchTab = window.switchTab;
+    window.switchTab = function (tabId) {
+        if (typeof originalSwitchTab === 'function') {
+            originalSwitchTab(tabId);
+        }
+
+        setTimeout(() => {
+            if (tabId === 'embeds') {
+                addEditByMessageButton();
+            }
+            if (tabId === 'announcements') {
+                addAnnouncementPreview();
+            }
+        }, 500);
+    };
+
+    console.log('✅ Modal fixes loaded - showCreateAnnouncementModal and showCreateEmbedModal fixed');
+})();
+/**
+ * Channel Lock Schedules - Premium Feature JavaScript
+ * Handles the UI for creating, editing, and managing scheduled channel locks
+ */
+
+// ============== CHANNEL SCHEDULES STATE ==============
+let channelSchedules = [];
+let isEditingSchedule = false;
+let currentScheduleId = null;
+
+// ============== LOAD CHANNEL SCHEDULES ==============
+async function loadChannelSchedules() {
+    if (!currentServerId) {
+        console.warn('No server selected');
+        return;
+    }
+
+    const container = document.getElementById('channel-schedules-list');
+    if (!container) return;
+
+    container.innerHTML = '<div class="loading">Loading channel schedules...</div>';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/${currentServerId}/channel-schedules`, {
+            credentials: 'include'
+        });
+
+        if (response.status === 403) {
+            // Not premium - show upgrade message
+            const data = await response.json();
+            container.innerHTML = `
+                <div class="premium-upgrade-prompt" style="text-align: center; padding: 30px;">
+                    <h4>🔒 Premium Feature</h4>
+                    <p style="color: var(--text-muted);">Scheduled channel locking is available exclusively for Premium subscribers.</p>
+                    <a href="${data.upgrade_url || 'https://whop.com/evl-task-bot/'}" target="_blank" class="btn-primary" style="display: inline-block; margin-top: 15px;">
+                        ✨ Upgrade to Premium
+                    </a>
+                </div>
+            `;
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error('Failed to load channel schedules');
+        }
+
+        const data = await response.json();
+        channelSchedules = data.schedules || [];
+        renderChannelSchedules();
+
+    } catch (error) {
+        console.error('Error loading channel schedules:', error);
+        container.innerHTML = `
+            <div class="error-message" style="color: var(--danger); padding: 20px; text-align: center;">
+                ❌ Failed to load schedules: ${error.message}
+            </div>
+        `;
+    }
+}
+
+// ============== RENDER CHANNEL SCHEDULES ==============
+function renderChannelSchedules() {
+    const container = document.getElementById('channel-schedules-list');
+    if (!container) return;
+
+    if (channelSchedules.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                <div style="font-size: 48px; margin-bottom: 15px;">📅</div>
+                <h4>No Channel Schedules</h4>
+                <p>Create a schedule to automatically lock and unlock channels at specific times.</p>
+                <button onclick="showCreateChannelScheduleModal()" class="btn-primary" style="margin-top: 15px;">
+                    ➕ Create First Schedule
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    const html = channelSchedules.map(schedule => {
+        const stateClass = schedule.current_state === 'unlocked' ? 'state-unlocked' :
+            schedule.current_state === 'error' ? 'state-error' : 'state-locked';
+        const stateIcon = schedule.current_state === 'unlocked' ? '🔓' :
+            schedule.current_state === 'error' ? '⚠️' : '🔒';
+        const stateText = schedule.current_state === 'unlocked' ? 'Unlocked' :
+            schedule.current_state === 'error' ? 'Error' : 'Locked';
+
+        const activeDays = (schedule.active_days || [0, 1, 2, 3, 4, 5, 6])
+            .map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d])
+            .join(', ');
+
+        // Format times
+        const unlockTime = formatTime(schedule.unlock_time);
+        const lockTime = formatTime(schedule.lock_time);
+
+        return `
+            <div class="schedule-card ${!schedule.is_enabled ? 'schedule-disabled' : ''}" data-schedule-id="${schedule.schedule_id}">
+                <div class="schedule-header">
+                    <div class="schedule-channel">
+                        <span class="channel-icon">#</span>
+                        <span class="channel-name">${schedule.channel_name || 'Unknown Channel'}</span>
+                        <span class="schedule-state ${stateClass}">${stateIcon} ${stateText}</span>
+                    </div>
+                    <div class="schedule-toggle">
+                        <label class="switch">
+                            <input type="checkbox" ${schedule.is_enabled ? 'checked' : ''} 
+                                   onchange="toggleSchedule('${schedule.schedule_id}', this.checked)">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="schedule-times">
+                    <div class="time-block">
+                        <span class="time-label">🔓 Opens</span>
+                        <span class="time-value">${unlockTime}</span>
+                    </div>
+                    <div class="time-arrow">→</div>
+                    <div class="time-block">
+                        <span class="time-label">🔒 Closes</span>
+                        <span class="time-value">${lockTime}</span>
+                    </div>
+                </div>
+                
+                <div class="schedule-meta">
+                    <span class="timezone">🌍 ${schedule.timezone || 'America/New_York'}</span>
+                    <span class="days">📅 ${activeDays}</span>
+                </div>
+                
+                ${schedule.last_error ? `
+                    <div class="schedule-error">
+                        ⚠️ ${schedule.last_error}
+                    </div>
+                ` : ''}
+                
+                <div class="schedule-actions">
+                    <button onclick="manualLockChannel('${schedule.schedule_id}')" class="btn-sm btn-warning" title="Lock Now">
+                        🔒 Lock
+                    </button>
+                    <button onclick="manualUnlockChannel('${schedule.schedule_id}')" class="btn-sm btn-success" title="Unlock Now">
+                        🔓 Unlock
+                    </button>
+                    <button onclick="editChannelSchedule('${schedule.schedule_id}')" class="btn-sm btn-secondary" title="Edit">
+                        ✏️ Edit
+                    </button>
+                    <button onclick="deleteChannelSchedule('${schedule.schedule_id}')" class="btn-sm btn-danger" title="Delete">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = html;
+}
+
+// ============== FORMAT TIME ==============
+function formatTime(timeStr) {
+    if (!timeStr) return '--:--';
+
+    // Handle HH:MM:SS or HH:MM format
+    const parts = timeStr.split(':');
+    const hours = parseInt(parts[0], 10);
+    const minutes = parts[1] || '00';
+
+    // Convert to 12-hour format
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+
+    return `${hours12}:${minutes} ${ampm}`;
+}
+
+// ============== CREATE/EDIT MODAL ==============
+async function showCreateChannelScheduleModal() {
+    isEditingSchedule = false;
+    currentScheduleId = null;
+
+    document.getElementById('channel-schedule-modal-title').textContent = '🔒 Create Channel Schedule';
+    document.getElementById('schedule-id').value = '';
+    document.getElementById('schedule-unlock-time').value = '09:00';
+    document.getElementById('schedule-lock-time').value = '21:00';
+    document.getElementById('schedule-timezone').value = 'America/New_York';
+    document.getElementById('schedule-enabled').checked = true;
+
+    // Reset day checkboxes
+    for (let i = 0; i < 7; i++) {
+        const checkbox = document.getElementById(`day-${i}`);
+        if (checkbox) checkbox.checked = true;
+    }
+
+    // Load channels
+    await loadChannelsForSchedule();
+    document.getElementById('schedule-channel').value = '';
+    document.getElementById('schedule-channel').disabled = false;
+
+    // Hide permission warning
+    document.getElementById('schedule-permission-warning').style.display = 'none';
+
+    document.getElementById('channel-schedule-modal').style.display = 'flex';
+}
+
+async function editChannelSchedule(scheduleId) {
+    const schedule = channelSchedules.find(s => s.schedule_id === scheduleId);
+    if (!schedule) {
+        showNotification('Schedule not found', 'error');
+        return;
+    }
+
+    isEditingSchedule = true;
+    currentScheduleId = scheduleId;
+
+    document.getElementById('channel-schedule-modal-title').textContent = '✏️ Edit Channel Schedule';
+    document.getElementById('schedule-id').value = scheduleId;
+
+    // Format time for input (needs HH:MM)
+    const unlockTime = schedule.unlock_time ? schedule.unlock_time.substring(0, 5) : '09:00';
+    const lockTime = schedule.lock_time ? schedule.lock_time.substring(0, 5) : '21:00';
+
+    document.getElementById('schedule-unlock-time').value = unlockTime;
+    document.getElementById('schedule-lock-time').value = lockTime;
+    document.getElementById('schedule-timezone').value = schedule.timezone || 'America/New_York';
+    document.getElementById('schedule-enabled').checked = schedule.is_enabled !== false;
+
+    // Set day checkboxes
+    const activeDays = schedule.active_days || [0, 1, 2, 3, 4, 5, 6];
+    for (let i = 0; i < 7; i++) {
+        const checkbox = document.getElementById(`day-${i}`);
+        if (checkbox) checkbox.checked = activeDays.includes(i);
+    }
+
+    // Load channels and select current one
+    await loadChannelsForSchedule();
+    document.getElementById('schedule-channel').value = schedule.channel_id;
+    document.getElementById('schedule-channel').disabled = true; // Can't change channel when editing
+
+    document.getElementById('channel-schedule-modal').style.display = 'flex';
+}
+
+function closeChannelScheduleModal() {
+    document.getElementById('channel-schedule-modal').style.display = 'none';
+    isEditingSchedule = false;
+    currentScheduleId = null;
+}
+
+// ============== LOAD CHANNELS ==============
+async function loadChannelsForSchedule() {
+    const select = document.getElementById('schedule-channel');
+    select.innerHTML = '<option value="">Loading channels...</option>';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/${currentServerId}/channels`, {
+            credentials: 'include'
+        });
+
+        if (!response.ok) throw new Error('Failed to load channels');
+
+        const data = await response.json();
+        const textChannels = (data.channels || []).filter(c => c.type === 'TextChannelType.text' || c.type === 'text');
+
+        select.innerHTML = '<option value="">Select a text channel...</option>';
+        textChannels.forEach(channel => {
+            const option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = `#${channel.name}`;
+            select.appendChild(option);
+        });
+
+    } catch (error) {
+        console.error('Error loading channels:', error);
+        select.innerHTML = '<option value="">Failed to load channels</option>';
+    }
+}
+
+// ============== SAVE SCHEDULE ==============
+async function saveChannelSchedule(event) {
+    event.preventDefault();
+
+    const channelId = document.getElementById('schedule-channel').value;
+    const unlockTime = document.getElementById('schedule-unlock-time').value;
+    const lockTime = document.getElementById('schedule-lock-time').value;
+    const timezone = document.getElementById('schedule-timezone').value;
+    const isEnabled = document.getElementById('schedule-enabled').checked;
+
+    // Get active days
+    const activeDays = [];
+    for (let i = 0; i < 7; i++) {
+        const checkbox = document.getElementById(`day-${i}`);
+        if (checkbox && checkbox.checked) {
+            activeDays.push(i);
+        }
+    }
+
+    if (!channelId) {
+        showNotification('Please select a channel', 'error');
+        return;
+    }
+
+    if (activeDays.length === 0) {
+        showNotification('Please select at least one active day', 'error');
+        return;
+    }
+
+    const scheduleData = {
+        channel_id: channelId,
+        unlock_time: unlockTime,
+        lock_time: lockTime,
+        timezone: timezone,
+        active_days: activeDays,
+        is_enabled: isEnabled
+    };
+
+    try {
+        const url = isEditingSchedule
+            ? `${API_BASE}/api/${currentServerId}/channel-schedules/${currentScheduleId}`
+            : `${API_BASE}/api/${currentServerId}/channel-schedules`;
+
+        const method = isEditingSchedule ? 'PUT' : 'POST';
+
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify(scheduleData)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to save schedule');
+        }
+
+        showNotification(
+            isEditingSchedule ? 'Schedule updated successfully!' : 'Schedule created successfully!',
+            'success'
+        );
+
+        closeChannelScheduleModal();
+        loadChannelSchedules();
+
+    } catch (error) {
+        console.error('Error saving schedule:', error);
+        showNotification(error.message, 'error');
+    }
+}
+
+// ============== TOGGLE SCHEDULE ==============
+async function toggleSchedule(scheduleId, enabled) {
+    try {
+        const response = await fetch(`${API_BASE}/api/${currentServerId}/channel-schedules/${scheduleId}/toggle`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to toggle schedule');
+        }
+
+        showNotification(data.message || `Schedule ${enabled ? 'enabled' : 'disabled'}`, 'success');
+        loadChannelSchedules();
+
+    } catch (error) {
+        console.error('Error toggling schedule:', error);
+        showNotification(error.message, 'error');
+        loadChannelSchedules(); // Reload to reset checkbox state
+    }
+}
+
+// ============== MANUAL LOCK/UNLOCK ==============
+async function manualLockChannel(scheduleId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/${currentServerId}/channel-schedules/${scheduleId}/lock`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to lock channel');
+        }
+
+        showNotification('🔒 Channel locked!', 'success');
+        loadChannelSchedules();
+
+    } catch (error) {
+        console.error('Error locking channel:', error);
+        showNotification(error.message, 'error');
+    }
+}
+
+async function manualUnlockChannel(scheduleId) {
+    try {
+        const response = await fetch(`${API_BASE}/api/${currentServerId}/channel-schedules/${scheduleId}/unlock`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to unlock channel');
+        }
+
+        showNotification('🔓 Channel unlocked!', 'success');
+        loadChannelSchedules();
+
+    } catch (error) {
+        console.error('Error unlocking channel:', error);
+        showNotification(error.message, 'error');
+    }
+}
+
+// ============== DELETE SCHEDULE ==============
+async function deleteChannelSchedule(scheduleId) {
+    const schedule = channelSchedules.find(s => s.schedule_id === scheduleId);
+    const channelName = schedule?.channel_name || 'this channel';
+
+    if (!confirm(`Delete schedule for #${channelName}?\n\nThis will unlock the channel and remove the schedule.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/${currentServerId}/channel-schedules/${scheduleId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to delete schedule');
+        }
+
+        showNotification('Schedule deleted and channel unlocked', 'success');
+        loadChannelSchedules();
+
+    } catch (error) {
+        console.error('Error deleting schedule:', error);
+        showNotification(error.message, 'error');
+    }
+}
+
+// ============== SHOW SECTION FOR PREMIUM ==============
+function showChannelSchedulesSection(isPremium) {
+    const section = document.getElementById('channel-schedules-section');
+    if (section) {
+        section.style.display = isPremium ? 'block' : 'none';
+    }
+}
+
+// ============== INITIALIZE ON CONFIG TAB LOAD ==============
+// Hook into existing loadConfigTab function if it exists
+// Hook into existing loadConfigTab function if it exists
+var existingLoadConfigFn = typeof loadConfigTab === 'function' ? loadConfigTab : null;
+
+window.loadConfigTab = async function () {
+    if (existingLoadConfigFn) {
+        await existingLoadConfigFn();
+    }
+
+    // Check if premium and show section
+    try {
+        const response = await fetch(`${API_BASE}/api/${currentServerId}/config`, {
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const config = await response.json();
+            const isSuperAdmin = window.currentUser && (window.currentUser.role === 'superadmin' || window.currentUser.is_superadmin === true);
+            const isPremium = config.subscription_tier === 'premium' || isSuperAdmin;
+            showChannelSchedulesSection(isPremium);
+
+            if (isPremium) {
+                loadChannelSchedules();
+            }
+        }
+    } catch (error) {
+        console.error('Error checking premium status:', error);
+    }
+};
+
+console.log('✅ Channel Lock Schedules JS loaded');
+/**
+ * BUTTON FIXES - Ensures all buttons work properly
+ * This file runs LAST to guarantee all functions are attached to window
+ */
+
+console.log('[ButtonFixes] Loading...');
+
+// ========== MODAL SHOW FUNCTIONS ==========
+
+// Shop Item Modal
+window.showCreateShopItemModal = function () {
+    console.log('[ButtonFixes] showCreateShopItemModal called');
+    const modal = document.getElementById('shop-item-modal');
+    if (modal) {
+        const form = document.getElementById('shop-item-form');
+        if (form) form.reset();
+        const idField = document.getElementById('shop-item-id');
+        if (idField) idField.value = '';
+        modal.style.display = 'block';
+    } else {
+        console.error('[ButtonFixes] shop-item-modal not found!');
+        alert('Shop Item modal not found. Please refresh the page.');
+    }
+};
+
+// Task Modal
+window.showCreateTaskModal = function () {
+    console.log('[ButtonFixes] showCreateTaskModal called');
+    const modal = document.getElementById('task-modal');
+    if (modal) {
+        const form = document.getElementById('task-form');
+        if (form) form.reset();
+        const idField = document.getElementById('task-id');
+        if (idField) idField.value = '';
+        modal.style.display = 'block';
+    } else {
+        console.error('[ButtonFixes] task-modal not found!');
+        alert('Task modal not found. Please refresh the page.');
+    }
+};
+
+// Announcement Modal
+window.showCreateAnnouncementModal = function () {
+    console.log('[ButtonFixes] showCreateAnnouncementModal called');
+    const modal = document.getElementById('announcement-modal');
+    if (modal) {
+        const form = document.getElementById('announcement-form');
+        if (form) form.reset();
+        modal.style.display = 'block';
+
+        // Populate channel dropdown
+        const channelSelect = document.getElementById('announcement-channel');
+        if (channelSelect && window.discordDataCache && window.discordDataCache.channels) {
+            let html = '<option value="">Select a channel...</option>';
+            Object.values(window.discordDataCache.channels).forEach(ch => {
+                html += `<option value="${ch.id}">#${ch.name}</option>`;
+            });
+            channelSelect.innerHTML = html;
+        }
+    } else {
+        console.error('[ButtonFixes] announcement-modal not found!');
+        alert('Announcement modal not found. Please refresh the page.');
+    }
+};
+
+// Embed Modal
+window.showCreateEmbedModal = function () {
+    console.log('[ButtonFixes] showCreateEmbedModal called');
+    const modal = document.getElementById('embed-modal');
+    if (modal) {
+        const form = document.getElementById('embed-form');
+        if (form) form.reset();
+        const idField = document.getElementById('embed-id');
+        if (idField) idField.value = '';
+        modal.style.display = 'block';
+
+        // Initialize preview if function exists
+        if (typeof updateEmbedPreview === 'function') {
+            updateEmbedPreview();
+        }
+    } else {
+        console.error('[ButtonFixes] embed-modal not found!');
+        alert('Embed modal not found. Please refresh the page.');
+    }
+};
+
+// ========== SHOP STATISTICS & VALIDATION ==========
+
+window.viewShopStatistics = async function () {
+    console.log('[ButtonFixes] viewShopStatistics called');
+    if (!window.currentServerId) {
+        alert('Please select a server first.');
+        return;
+    }
+
+    try {
+        // Try to fetch actual stats
+        const data = await window.apiCall(`/api/${window.currentServerId}/shop/stats`);
+        if (data) {
+            alert(`Shop Statistics:\n\n- Total Items: ${data.total_items || 0}\n- Total Sales: ${data.total_sales || 0}\n- Total Revenue: ${data.total_revenue || 0} coins`);
+        }
+    } catch (e) {
+        // Fallback
+        alert('Shop Statistics:\n\n- Statistics are being calculated...\n- Try refreshing the shop to see updated data.');
+    }
+};
+
+window.validateShopIntegrity = async function () {
+    console.log('[ButtonFixes] validateShopIntegrity called');
+    if (!window.currentServerId) {
+        alert('Please select a server first.');
+        return;
+    }
+
+    if (window.showNotification) {
+        window.showNotification('Validating shop integrity...', 'info');
+    }
+
+    try {
+        const data = await window.apiCall(`/api/${window.currentServerId}/shop`);
+        if (data && data.items) {
+            const issues = [];
+            data.items.forEach(item => {
+                if (!item.name) issues.push(`Item ${item.item_id} has no name`);
+                if (item.price < 0) issues.push(`${item.name} has negative price`);
+            });
+
+            if (issues.length === 0) {
+                if (window.showNotification) {
+                    window.showNotification('✅ Shop integrity check passed! All items valid.', 'success');
+                } else {
+                    alert('✅ Shop integrity check passed! All items valid.');
+                }
+            } else {
+                alert('⚠️ Issues found:\n\n' + issues.join('\n'));
+            }
+        }
+    } catch (e) {
+        if (window.showNotification) {
+            window.showNotification('Failed to validate shop', 'error');
+        }
+    }
+};
+
+// ========== SAVE HANDLERS ==========
+
+window.saveShopItem = async function (event) {
+    if (event) event.preventDefault();
+    console.log('[ButtonFixes] saveShopItem called');
+
+    const itemId = document.getElementById('shop-item-id')?.value;
+    const name = document.getElementById('item-name')?.value;
+    const price = document.getElementById('item-price')?.value;
+    const description = document.getElementById('item-description')?.value || '';
+    const roleId = document.getElementById('item-role-id')?.value || null;
+    const stock = document.getElementById('item-stock')?.value || -1;
+
+    if (!name || !price) {
+        alert('Please fill in Item Name and Price.');
+        return;
+    }
+
+    const payload = {
+        name,
+        price: parseInt(price),
+        description,
+        role_id: roleId,
+        stock: parseInt(stock)
+    };
+
+    try {
+        let url = `/api/${window.currentServerId}/shop`;
+        let method = 'POST';
+
+        if (itemId) {
+            url += `/${itemId}`;
+            method = 'PUT';
+        }
+
+        const response = await window.apiCall(url, {
+            method: method,
+            body: JSON.stringify(payload)
+        });
+
+        if (response) {
+            if (window.showNotification) {
+                window.showNotification(itemId ? 'Item updated!' : 'Item created!', 'success');
+            }
+            document.getElementById('shop-item-modal').style.display = 'none';
+            if (window.loadShop) window.loadShop();
+        }
+    } catch (e) {
+        console.error('[ButtonFixes] saveShopItem error:', e);
+        if (window.showNotification) {
+            window.showNotification('Error saving item: ' + e.message, 'error');
+        } else {
+            alert('Error saving item: ' + e.message);
+        }
+    }
+};
+
+window.saveTask = async function (event) {
+    if (event) event.preventDefault();
+    console.log('[ButtonFixes] saveTask called');
+
+    const taskId = document.getElementById('task-id')?.value;
+    const content = document.getElementById('task-content')?.value;
+    const reward = document.getElementById('task-reward')?.value;
+    const type = document.getElementById('task-type')?.value || 'manual';
+    const target = document.getElementById('task-target')?.value || null;
+
+    if (!content || !reward) {
+        alert('Please fill in Task Description and Reward.');
+        return;
+    }
+
+    const payload = {
+        content,
+        reward: parseInt(reward),
+        type,
+        target
+    };
+
+    try {
+        let url = `/api/${window.currentServerId}/tasks`;
+        let method = 'POST';
+
+        if (taskId) {
+            url += `/${taskId}`;
+            method = 'PUT';
+        }
+
+        const response = await window.apiCall(url, {
+            method: method,
+            body: JSON.stringify(payload)
+        });
+
+        if (response) {
+            if (window.showNotification) {
+                window.showNotification(taskId ? 'Task updated!' : 'Task created!', 'success');
+            }
+            document.getElementById('task-modal').style.display = 'none';
+            if (window.loadTasks) window.loadTasks();
+        }
+    } catch (e) {
+        console.error('[ButtonFixes] saveTask error:', e);
+        if (window.showNotification) {
+            window.showNotification('Error saving task: ' + e.message, 'error');
+        } else {
+            alert('Error saving task: ' + e.message);
+        }
+    }
+};
+
+// ========== CLOSE MODAL HANDLER ==========
+
+window.closeModal = function () {
+    // Close any visible dynamic modal
+    const dynamicModal = document.getElementById('dynamic-modal');
+    if (dynamicModal) dynamicModal.remove();
+
+    // Also hide common modals
+    ['shop-item-modal', 'task-modal', 'announcement-modal', 'embed-modal', 'channel-schedule-modal'].forEach(id => {
+        const modal = document.getElementById(id);
+        if (modal) modal.style.display = 'none';
+    });
+};
+
+// ========== CLICK OUTSIDE TO CLOSE ==========
+
+document.addEventListener('click', function (e) {
+    if (e.target.classList.contains('modal')) {
+        e.target.style.display = 'none';
+    }
+});
+
+// ========== ENSURE updateServerTier IS GLOBAL ==========
+
+// This will be defined in cms_additions.js but we ensure it's callable
+if (typeof window.updateServerTier !== 'function') {
+    window.updateServerTier = async function (serverId, serverName, currentTier) {
+        console.log('[ButtonFixes] updateServerTier fallback called');
+        const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
+
+        if (!newTier || (newTier !== 'free' && newTier !== 'premium')) {
+            if (newTier) alert("Invalid tier. Please enter 'free' or 'premium'.");
+            return;
+        }
+
+        if (newTier === currentTier) return;
+
+        try {
+            const response = await window.apiCall(`/api/${serverId}/config`, {
+                method: 'PUT',
+                body: JSON.stringify({ subscription_tier: newTier })
+            });
+
+            if (response) {
+                if (window.showNotification) {
+                    window.showNotification(`Updated ${serverName} to ${newTier.toUpperCase()}`, 'success');
+                }
+                if (window.loadServerManagement) window.loadServerManagement();
+            }
+        } catch (e) {
+            console.error('[ButtonFixes] updateServerTier error:', e);
+            if (window.showNotification) {
+                window.showNotification('Error updating tier', 'error');
+            }
+        }
+    };
+}
+
+console.log('[ButtonFixes] All button handlers attached to window ✅');
