@@ -326,11 +326,25 @@ class ShopManager:
         # Remove from active shop
         del shop_items[item_id]
 
-        # Explicitly delete from database
-        db_success = self.data_manager.delete_shop_item(guild_id, item_id)
-        if not db_success:
-            logger.error(f"Failed to delete shop item {item_id} from database")
-            # We continue anyway to update cache and memory
+        # Explicitly delete from database with verification
+        # Use count='exact' to verify deletion
+        try:
+             delete_result = self.data_manager.admin_client.table('shop_items') \
+                 .delete(count='exact') \
+                 .eq('guild_id', str(guild_id)) \
+                 .eq('item_id', item_id) \
+                 .execute()
+                 
+             deleted_count = delete_result.count if hasattr(delete_result, 'count') else (len(delete_result.data) if delete_result.data else 0)
+             
+             if deleted_count == 0 and (not delete_result.data):
+                 logger.warning(f"Shop item {item_id} was not found during delete operation (or 0 rows affected)")
+             else:
+                 logger.info(f"Successfully deleted {deleted_count} rows for shop item {item_id}")
+                 
+        except Exception as e:
+             logger.error(f"Failed to delete shop item {item_id} from database: {e}")
+             # We continue anyway to update cache and memory
 
         # Save other changes (like archive)
         success = self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
@@ -339,7 +353,10 @@ class ShopManager:
 
         # Clear caches - both shop manager and data manager
         self._clear_shop_cache(guild_id)
-        self.data_manager.invalidate_cache(guild_id, 'currency')
+        if hasattr(self.data_manager, 'invalidate_cache'):
+            self.data_manager.invalidate_cache(guild_id, 'currency')
+        else:
+            self.data_manager.invalidate_cache(guild_id, 'currency')
 
         # Trigger SSE update
         self._broadcast_event('shop_update', {

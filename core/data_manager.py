@@ -529,19 +529,27 @@ class DataManager:
                             owner_id = str(guild.owner_id)
 
                     # If not found, try to load from existing database record
+                    existing_tier = 'free'
                     if not server_name or not owner_id:
                         try:
-                            existing_result = self.admin_client.table('guilds').select('server_name, owner_id').eq('guild_id', guild_id_str).execute()
+                            existing_result = self.admin_client.table('guilds').select('server_name, owner_id, subscription_tier').eq('guild_id', guild_id_str).execute()
                             if existing_result.data and len(existing_result.data) > 0:
                                 existing_data = existing_result.data[0]
                                 server_name = server_name or existing_data.get('server_name')
                                 owner_id = owner_id or existing_data.get('owner_id')
+                                existing_tier = existing_data.get('subscription_tier', 'free')
                         except Exception:
                             pass  # Continue with defaults if error
 
                     # Set defaults if still not found
                     server_name = server_name or save_data.get('server_name') or f'Guild_{guild_id_str}'
                     owner_id = owner_id or save_data.get('owner_id') or 'unknown'
+                    
+                    # Use provided tier, or existing tier, or default to free
+                    # This prevents resetting to 'free' if save_data is partial
+                    subscription_tier = save_data.get('subscription_tier')
+                    if subscription_tier is None:
+                        subscription_tier = existing_tier
 
                     guild_data = {
                         'guild_id': guild_id_str,
@@ -567,7 +575,7 @@ class DataManager:
                         'global_tasks': save_data.get('global_tasks', False),
                         'bot_status_message': save_data.get('bot_status_message'),
                         'bot_status_type': save_data.get('bot_status_type', 'playing'),
-                        'subscription_tier': save_data.get('subscription_tier', 'free')
+                        'subscription_tier': subscription_tier
                     }
 
                     # Save guild data
