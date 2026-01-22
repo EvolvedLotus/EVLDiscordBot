@@ -136,13 +136,24 @@ h6 {
     background: var(--accent-gradient);
 }
 
-.login-header h1 {
-    font-size: 2.2rem;
-    margin-bottom: 12px;
-    background: var(--accent-gradient);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+/* Login Form Spacing */
+.login-form .form-group {
+    margin-bottom: 24px;
+}
+
+.login-form button {
+    width: 100%;
+    margin-top: 16px;
+    height: 48px;
+    font-size: 16px;
+}
+
+/* Bot Invite Button fix */
+.bot-invite-button {
+    right: 20px;
+    bottom: 20px;
+    top: auto;
+    transform: none;
 }
 
 /* Dashboard Container */
@@ -236,6 +247,8 @@ h6 {
     position: relative;
     overflow-y: auto;
     overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .section-header {
@@ -248,21 +261,34 @@ h6 {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    position: sticky;
-    top: 0;
     z-index: 50;
 }
 
 .header-actions {
     display: flex;
-    gap: 16px;
+    gap: 12px;
     align-items: center;
+}
+
+.header-actions button,
+.header-actions select {
+    height: 38px !important;
+    /* Force unison height */
+    padding: 0 16px !important;
+    font-size: 14px !important;
+    border-radius: 8px !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .content-area {
     padding: 40px;
     max-width: 1600px;
     margin: 0 auto;
+    width: 100%;
+    flex: 1;
+    /* Allow expansion */
 }
 
 /* Cards & Containers - Glassmorphism */
@@ -272,7 +298,8 @@ h6 {
 .task-card,
 .section-card,
 .notification,
-.modal-content {
+.modal-content,
+.embed-card {
     background: var(--glass-bg);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -280,6 +307,9 @@ h6 {
     border-radius: 16px;
     box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.2);
     transition: all var(--transition-normal);
+    padding: 32px;
+    /* Increased padding */
+    margin-bottom: 24px;
 }
 
 .stat-card:hover,
@@ -376,6 +406,14 @@ h6 {
     border-radius: 16px;
     border: var(--glass-border);
     overflow: hidden;
+    width: 100%;
+    padding: 0;
+    /* Let table fill it */
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
 }
 
 thead {
@@ -482,4 +520,49 @@ tbody tr:hover {
     100% {
         transform: rotate(360deg);
     }
+}
+
+/* Pagination Controls */
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-top: 32px;
+}
+
+.pagination-controls button {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+    background: var(--discord-blurple);
+    border-color: var(--discord-blurple);
+}
+
+.pagination-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pagination-info {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+/* Ad Banner Footer Position */
+.ad-banner {
+    margin-top: auto !important;
+    /* Push to bottom */
+    border-radius: 0 !important;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    background: rgba(15, 16, 20, 0.95) !important;
 }

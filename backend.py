@@ -1139,6 +1139,18 @@ def update_server_config(server_id):
         
         # Save merged config
         success = data_manager.save_guild_data(server_id, 'config', current_config)
+        
+        # SYNC FIX: Also update the main guilds table if subscription_tier changed
+        if success and 'subscription_tier' in data:
+            try:
+                data_manager.admin_client.table('guilds').update({
+                    'subscription_tier': data['subscription_tier'],
+                    'last_synced': datetime.now(timezone.utc).isoformat()
+                }).eq('guild_id', str(server_id)).execute()
+                logger.info(f"Synced subscription_tier update for guild {server_id} to guilds table")
+            except Exception as sync_error:
+                logger.error(f"Failed to sync subscription_tier to guilds table: {sync_error}")
+
         if success:
             return jsonify({'success': True}), 200
         else:

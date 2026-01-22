@@ -705,10 +705,20 @@ select[multiple].form-control option:checked,
 }
 
 .bot-status-control {
-    display: grid;
-    grid-template-columns: 1fr 2fr;
-    gap: 16px;
-    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: flex-end;
+}
+
+.bot-status-control .form-group {
+    flex: 1;
+    min-width: 200px;
+}
+
+.bot-status-control button {
+    height: 42px;
+    margin-bottom: 2px;
 }
 
 .bot-status-control .form-group {
