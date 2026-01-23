@@ -4835,29 +4835,26 @@ window.showCreateChannelScheduleModal = async function () {
 
     // Helper to render options
     const renderOptions = (channelsObj) => {
-        console.log('[CMS] Rendering channels for schedule modal:', channelsObj);
-        let html = '<option value="">Select a text channel...</option>';
+        console.log('[CMS] Rendering channels for schedule modal (All types):', channelsObj);
+        let html = '<option value="">Select a channel...</option>';
 
-        const channels = Object.values(channelsObj);
-
-        if (channels.length > 0) {
-            console.log('[CMS] Sample channel type:', channels[0].type, typeof channels[0].type);
-        }
-
-        const filteredChannels = channels
-            .filter(ch => ch.type == 0) // Loose equality: 0 is GUILD_TEXT
+        // Show ALL channels, sorted by position
+        const channels = Object.values(channelsObj)
             .sort((a, b) => (a.position || 0) - (b.position || 0));
 
-        console.log(`[CMS] Found ${filteredChannels.length} text channels out of ${channels.length} total.`);
+        channels.forEach(ch => {
+            // Optional: Add emoji indicating type if known
+            let prefix = '#';
+            if (ch.type == 2) prefix = '🔊'; // Voice
+            if (ch.type == 4) prefix = '📂'; // Category
+            if (ch.type == 13) prefix = '🛑'; // Stage
+            if (ch.type == 5) prefix = '📢'; // Announcement
 
-        if (filteredChannels.length === 0 && channels.length > 0) {
-            html += '<option disabled>No text channels found (check filters)</option>';
-        }
-
-        filteredChannels.forEach(ch => {
-            html += `<option value="${ch.id}">#${ch.name}</option>`;
+            html += `<option value="${ch.id}">${prefix} ${ch.name}</option>`;
         });
+
         channelSelect.innerHTML = html;
+        console.log(`[CMS] Rendered ${channels.length} channels.`);
     };
 
     // Try using cache first
