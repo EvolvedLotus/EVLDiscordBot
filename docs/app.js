@@ -5796,9 +5796,77 @@ window.validateShopIntegrity = function () {
     showNotification("Shop integrity validation passed", "success");
 };
 
-window.loadChannelSchedules = function () {
-    console.log("Loading channel schedules...");
-    // Future implementation
+window.loadChannelSchedules = async function () {
+    if (!currentServerId) return;
+    const list = document.getElementById('channel-schedules-list');
+    if (!list) return;
+
+    list.innerHTML = '<div class="loading">Loading schedules...</div>';
+    console.log("[CMS] Loading channel schedules for", currentServerId);
+
+    try {
+        const data = await apiCall(`/api/${currentServerId}/channel-schedules`);
+
+        if (data && data.schedules && data.schedules.length > 0) {
+            let html = '<div class="schedules-grid" style="display: grid; gap: 15px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">';
+
+            data.schedules.forEach(schedule => {
+                const isActive = schedule.is_enabled;
+                const activeDays = schedule.active_days.length === 7 ? 'Every day' :
+                    schedule.active_days.length === 0 ? 'Never' :
+                        `${schedule.active_days.length} days/week`;
+
+                const statusClass = isActive ? 'status-active' : 'status-inactive';
+                const statusText = isActive ? 'Active' : 'Disabled';
+                const currentState = schedule.current_state === 'locked' ? '🔒 Locked' : '🔓 Unlocked';
+
+                html += `
+                    <div class="schedule-card card" style="border-left: 4px solid ${isActive ? 'var(--success-color)' : 'var(--text-muted)'}; padding: 15px;">
+                        <div class="schedule-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                            <h4 style="margin: 0;">#${schedule.channel_name || schedule.channel_id}</h4>
+                            <span class="badge ${statusClass}">${statusText}</span>
+                        </div>
+                        <div class="schedule-details" style="font-size: 0.9em; line-height: 1.6;">
+                            <div><strong>Open:</strong> ${schedule.unlock_time}</div>
+                            <div><strong>Close:</strong> ${schedule.lock_time}</div>
+                            <div><strong>Days:</strong> ${activeDays}</div>
+                            <div><strong>State:</strong> ${currentState}</div>
+                            <div style="color: var(--text-muted); font-size: 0.85em; margin-top: 5px;">${schedule.timezone}</div>
+                        </div>
+                        <div class="schedule-actions" style="margin-top: 15px; display: flex; gap: 10px;">
+                            <button class="btn-sm btn-danger" onclick="deleteChannelSchedule('${schedule.schedule_id}')" style="width: 100%;">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            list.innerHTML = html;
+        } else {
+            list.innerHTML = `
+                <div class="empty-state">
+                    <p>No active schedules found.</p>
+                    <button class="btn-success btn-sm" onclick="showCreateChannelScheduleModal()">Create First Schedule</button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading channel schedules:', error);
+        list.innerHTML = `<div class="error-state">Failed to load schedules: ${error.message}</div>`;
+    }
+};
+
+window.deleteChannelSchedule = async function (scheduleId) {
+    if (!confirm('Are you sure you want to delete this schedule? The channel will be unlocked.')) return;
+
+    try {
+        await apiCall(`/api/${currentServerId}/channel-schedules/${scheduleId}`, { method: 'DELETE' });
+        showNotification('Schedule deleted', 'success');
+        loadChannelSchedules();
+    } catch (error) {
+        console.error('Delete failed:', error);
+        showNotification('Failed to delete schedule: ' + error.message, 'error');
+    }
 };
 
 
