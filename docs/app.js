@@ -448,8 +448,8 @@ async function loadConfigTab() {
                 const taskChannel = document.getElementById('task-channel');
                 const shopChannel = document.getElementById('shop-channel');
 
-                if (welcomeChannel && config.welcome_channel) welcomeChannel.value = config.welcome_channel;
-                if (logChannel && config.logs_channel) logChannel.value = config.logs_channel;
+                if (welcomeChannel && config.welcome_channel_id) welcomeChannel.value = config.welcome_channel_id;
+                if (logChannel && config.log_channel_id) logChannel.value = config.log_channel_id;
                 if (taskChannel && config.task_channel_id) taskChannel.value = config.task_channel_id;
                 if (shopChannel && config.shop_channel_id) shopChannel.value = config.shop_channel_id;
 
@@ -1199,7 +1199,7 @@ async function loadEmbeds() {
         const data = await apiCall(`/api/${currentServerId}/embeds`);
 
         if (data && data.embeds && data.embeds.length > 0) {
-            let html = '<div class="embeds-grid">';
+            let html = '<div class="embeds-list-container"><div class="embeds-grid">';
 
             data.embeds.forEach(embed => {
                 const channelName = getChannelDisplay(embed.channel_id);
@@ -1224,7 +1224,7 @@ async function loadEmbeds() {
                 `;
             });
 
-            html += '</div>';
+            html += '</div></div>';
             list.innerHTML = html;
         } else {
             list.innerHTML = `<div class="empty-state"><h3>No embeds yet</h3></div>`;
@@ -5462,43 +5462,23 @@ function upgradeToPremium() {
     // Open in new tab
     window.open(previewUrl, '_blank');
 }
-// Whop & Promo Integration Helpers
+// Whop & Promo Integration Helpers - DISABLED
 function populateWhopInfo() {
+    // DISABLED: Remove Whop & Promo Integration from CMS
     const section = document.getElementById('whop-info-section');
-    if (!section) return;
-
-    // SECURITY CHECK: Only show to Super Admins (env-based login)
-    // standard user roles should not see sensitive webhook/promo links
-    const isSuperAdmin = currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin === true);
-
-    if (!isSuperAdmin) {
+    if (section) {
         section.style.display = 'none';
-        return;
+        section.remove(); // Remove from DOM entirely
     }
 
-    // Show section for super admin
-    section.style.display = 'block';
-
-    const webhookInput = document.getElementById('whop-webhook-url');
-    const promoInput = document.getElementById('promo-card-url');
-
-    if (webhookInput) {
-        // Base URL from current location
-        const baseUrl = window.location.origin;
-        webhookInput.value = `${baseUrl}/api/webhooks/whop`;
+    // Also hide API clients section
+    const apiSection = document.getElementById('api-clients-section');
+    if (apiSection) {
+        apiSection.style.display = 'none';
+        apiSection.remove(); // Remove from DOM entirely
     }
 
-    if (promoInput) {
-        const baseUrl = window.location.href.split('index.html')[0];
-        promoInput.value = `${baseUrl}store-preview.html`;
-
-        // If we have a selected server, append it to the promo link for easy testing
-        if (currentServerId) {
-            promoInput.value += `?guild_id=${currentServerId}`;
-        }
-    }
-
-    populateApiClients();
+    return; // Exit early - no longer populate these sections
 }
 
 async function populateApiClients() {
