@@ -5801,15 +5801,7 @@ window.loadChannelSchedules = function () {
     // Future implementation
 };
 
-window.showCreateChannelScheduleModal = function () {
-    const modal = document.getElementById('channel-schedule-modal');
-    if (modal) modal.style.display = 'block';
-};
 
-window.closeChannelScheduleModal = function () {
-    const modal = document.getElementById('channel-schedule-modal');
-    if (modal) modal.style.display = 'none';
-};
 
 // Ensure modal closing works for all
 window.onclick = function (event) {
