@@ -4895,6 +4895,7 @@ window.saveChannelSchedule = async function (event) {
 };
 /**
  * Handle Discord OAuth login flow
+ */
 async function handleDiscordLogin() {
     try {
         showNotification('Redirecting to Discord...', 'info');
