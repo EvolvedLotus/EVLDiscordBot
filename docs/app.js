@@ -4779,10 +4779,16 @@ function initDiscordOAuth() {
     if (!loginForm) return;
 
     // Check for existing button to prevent duplicates
-    if (document.querySelector('.btn-discord')) return;
+    let discordButton = document.querySelector('.btn-discord');
+
+    if (discordButton) {
+        // If button exists (hardcoded in HTML), just attach handler
+        discordButton.onclick = handleDiscordLogin;
+        return;
+    }
 
     // Add Discord login button after the regular login form
-    const discordButton = document.createElement('button');
+    discordButton = document.createElement('button');
     discordButton.type = 'button';
     discordButton.className = 'btn-discord btn-large';
     discordButton.innerHTML = '🎮 Login with Discord';
