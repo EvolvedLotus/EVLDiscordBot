@@ -4793,11 +4793,17 @@ function initDiscordOAuth() {
     loginForm.appendChild(discordButton);
 }
 
+// Initialize Discord OAuth button when DOM is ready
+document.addEventListener('DOMContentLoaded', initDiscordOAuth);
+
 /**
  * Handle Discord OAuth login flow
  */
 async function handleDiscordLogin() {
     try {
+        showNotification('Redirecting to Discord...', 'info');
+        console.log('Initiating Discord login with API base:', API_BASE_URL);
+
         // Get Discord authorization URL from backend
         const response = await fetch(apiUrl('/api/auth/discord/url'), {
             credentials: 'include'
@@ -4897,6 +4903,9 @@ async function handleDiscordCallback() {
         }, 2000);
     }
 }
+
+// Handle OAuth callback on load
+document.addEventListener('DOMContentLoaded', handleDiscordCallback);
 
 /**
  * Apply role-based UI restrictions
