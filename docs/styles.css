@@ -501,6 +501,52 @@ h6 {
     border-color: rgba(255, 255, 255, 0.2);
 }
 
+/* Discord Login Button */
+.btn-discord {
+    background-color: #5865F2;
+    color: white;
+    border: none;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3);
+    transition: all var(--transition-fast);
+}
+
+.btn-discord:hover {
+    background-color: #4752C4;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(88, 101, 242, 0.5);
+}
+
+.btn-large {
+    width: 100%;
+    padding: 14px 24px !important;
+    font-size: 16px !important;
+    height: auto !important;
+}
+
+.login-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 20px 0;
+    color: var(--text-muted);
+}
+
+.login-divider::before,
+.login-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.login-divider span {
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
 /* Utils needed for JS compatibility */
 .hidden {
     display: none !important;
@@ -2440,6 +2486,63 @@ small.text-muted,
         height: 50px;
         bottom: 20px;
         right: 20px;
+    }
+}
+
+/* Notification Toasts */
+#notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10002;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.toast {
+    background: rgba(20, 20, 25, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: white;
+    padding: 16px 24px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    min-width: 300px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-left-width: 4px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.toast.success {
+    border-left-color: var(--discord-green);
+}
+
+.toast.error {
+    border-left-color: var(--discord-red);
+}
+
+.toast.warning {
+    border-left-color: var(--discord-yellow);
+}
+
+.toast.info {
+    border-left-color: var(--discord-blurple);
+}
+
+@keyframes toastSlideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
     }
 }
 
