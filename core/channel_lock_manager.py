@@ -336,14 +336,15 @@ class ChannelLockManager:
             # Get @everyone role
             everyone_role = guild.default_role
             
-            # Store original permissions before modifying
-            original_overwrite = channel.overwrites_for(everyone_role)
-            original_send = original_overwrite.send_messages
+            # Get current overwrite
+            overwrite = channel.overwrites_for(everyone_role)
             
-            # Set send_messages to False for @everyone
+            # Update only send_messages, preserving other settings
+            overwrite.send_messages = False
+            
             await channel.set_permissions(
                 everyone_role,
-                send_messages=False,
+                overwrite=overwrite,
                 reason="Scheduled channel lock by EVL Bot"
             )
             
@@ -352,7 +353,7 @@ class ChannelLockManager:
                 await self._update_schedule_state(
                     schedule_id, 
                     'locked',
-                    original_permissions={'everyone_send_messages': original_send}
+                    original_permissions={'everyone_send_messages': None} # Not storing original anymore as we don't revert blindly
                 )
             
             logger.info(f"🔒 Locked channel #{channel.name} in guild {guild.name}")
@@ -403,11 +404,15 @@ class ChannelLockManager:
             # Get @everyone role
             everyone_role = guild.default_role
             
-            # Set send_messages to None (inherit from category/server) for @everyone
-            # Using None instead of True to restore default behavior
+            # Get current overwrite
+            overwrite = channel.overwrites_for(everyone_role)
+            
+            # Set send_messages to None (inherit) to unlock
+            overwrite.send_messages = None
+            
             await channel.set_permissions(
                 everyone_role,
-                send_messages=None,  # Reset to inherit
+                overwrite=overwrite,
                 reason="Scheduled channel unlock by EVL Bot"
             )
             
