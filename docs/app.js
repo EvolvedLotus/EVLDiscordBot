@@ -4803,11 +4803,98 @@ function initDiscordOAuth() {
 }
 
 // Initialize Discord OAuth button when DOM is ready
-document.addEventListener('DOMContentLoaded', initDiscordOAuth);
+document.addEventListener('DOMContentLoaded', function () {
+    initDiscordOAuth();
 
+    // Document-level event delegation for Discord login button
+    // This catches clicks even if the button is replaced or added dynamically later
+    document.addEventListener('click', function (e) {
+        if (e.target && (e.target.matches('.btn-discord') || e.target.closest('.btn-discord'))) {
+            e.preventDefault();
+            handleDiscordLogin();
+        }
+    });
+
+    // Handle OAuth callback
+    handleDiscordCallback();
+});
+
+// ========== CHANNEL SCHEDULE FUNCTIONS (Premium) ==========
+window.showCreateChannelScheduleModal = function () {
+    window.logCmsAction('show_create_schedule_modal');
+    document.getElementById('channel-schedule-modal').style.display = 'block';
+    const form = document.getElementById('channel-schedule-form');
+    if (form) form.reset();
+    document.getElementById('schedule-id').value = '';
+
+    // Populate channels dropdown
+    const channelSelect = document.getElementById('schedule-channel');
+    if (channelSelect && window.discordDataCache && window.discordDataCache.channels) {
+        let html = '<option value="">Select a text channel...</option>';
+        // Filter for text channels (type 0)
+        Object.values(window.discordDataCache.channels)
+            .filter(ch => ch.type === 0)
+            .sort((a, b) => a.position - b.position)
+            .forEach(ch => {
+                html += `<option value="${ch.id}">#${ch.name}</option>`;
+            });
+        channelSelect.innerHTML = html;
+    }
+};
+
+window.closeChannelScheduleModal = function () {
+    document.getElementById('channel-schedule-modal').style.display = 'none';
+};
+
+window.saveChannelSchedule = async function (event) {
+    if (event) event.preventDefault();
+    const id = document.getElementById('schedule-id').value;
+    const channelId = document.getElementById('schedule-channel').value;
+
+    if (!channelId) return showNotification('Please select a channel', 'error');
+
+    // Get active days
+    const activeDays = [];
+    for (let i = 0; i < 7; i++) {
+        if (document.getElementById(`day-${i}`).checked) activeDays.push(i);
+    }
+
+    const payload = {
+        channel_id: channelId,
+        unlock_time: document.getElementById('schedule-unlock-time').value,
+        lock_time: document.getElementById('schedule-lock-time').value,
+        timezone: document.getElementById('schedule-timezone').value,
+        active_days: activeDays,
+        enabled: document.getElementById('schedule-enabled').checked,
+        guild_id: currentServerId
+    };
+
+    window.logCmsAction('save_schedule_start', { id, channel_id: channelId });
+    showNotification('Saving schedule...', 'info');
+
+    try {
+        const method = id ? 'PUT' : 'POST';
+        const url = id
+            ? `/api/${currentServerId}/channel-schedules/${id}`
+            : `/api/${currentServerId}/channel-schedules`;
+
+        await apiCall(url, {
+            method,
+            body: JSON.stringify(payload)
+        });
+
+        showNotification(id ? 'Schedule updated' : 'Schedule created', 'success');
+        window.closeChannelScheduleModal();
+        // Reload schedules if function exists
+        if (typeof loadChannelSchedules === 'function') loadChannelSchedules();
+
+    } catch (e) {
+        console.error('Save schedule error:', e);
+        showNotification('Failed to save: ' + e.message, 'error');
+    }
+};
 /**
  * Handle Discord OAuth login flow
- */
 async function handleDiscordLogin() {
     try {
         showNotification('Redirecting to Discord...', 'info');

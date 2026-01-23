@@ -1740,6 +1740,69 @@ def send_embed_to_channel(server_id, embed_id):
         logger.error(f"Error sending embed: {e}")
         return safe_error_response(e)
 
+# ========== CHANNEL SCHEDULES (PREMIUM) ==========
+
+@app.route('/api/<server_id>/channel-schedules', methods=['GET'])
+@require_guild_access
+def get_channel_schedules(server_id):
+    """Get all channel lock schedules for a guild"""
+    try:
+        schedules = channel_lock_manager.get_schedules(server_id)
+        return jsonify({'schedules': schedules}), 200
+    except Exception as e:
+        logger.error(f"Error getting schedules: {e}")
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules', methods=['POST'])
+@require_guild_access
+def create_channel_schedule(server_id):
+    """Create a new channel lock schedule"""
+    try:
+        data = request.get_json()
+        user_id = request.user.get('id')
+        
+        result = channel_lock_manager.create_schedule(server_id, data, created_by=user_id)
+        
+        if result.get('error'):
+            return jsonify(result), 400
+            
+        return jsonify(result), 201
+    except Exception as e:
+        logger.error(f"Error creating schedule: {e}")
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['PUT'])
+@require_guild_access
+def update_channel_schedule(server_id, schedule_id):
+    """Update an existing channel lock schedule"""
+    try:
+        data = request.get_json()
+        
+        result = channel_lock_manager.update_schedule(server_id, schedule_id, data)
+        
+        if result.get('error'):
+            return jsonify(result), 400
+            
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error updating schedule: {e}")
+        return safe_error_response(e)
+
+@app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['DELETE'])
+@require_guild_access
+def delete_channel_schedule(server_id, schedule_id):
+    """Delete a channel lock schedule"""
+    try:
+        result = channel_lock_manager.delete_schedule(server_id, schedule_id)
+        
+        if result.get('error'):
+            return jsonify(result), 400
+            
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error deleting schedule: {e}")
+        return safe_error_response(e)
+
 @app.route('/api/<server_id>/logs', methods=['GET'])
 @require_guild_access
 def get_logs(server_id):
