@@ -254,6 +254,10 @@ def set_bot_instance(bot):
     if 'announcement_manager' in globals() and announcement_manager:
         announcement_manager.set_bot(bot)
         logger.info("✓ Bot instance linked to announcement manager")
+        
+    if 'channel_lock_manager' in globals() and channel_lock_manager:
+        channel_lock_manager.set_bot_instance(bot)
+        logger.info("✓ Bot instance linked to channel lock manager")
 
 def set_data_manager(dm):
     """Set the global data manager reference"""
