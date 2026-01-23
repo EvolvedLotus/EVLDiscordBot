@@ -14,7 +14,7 @@ let discordDataCache = {
 };
 window.discordDataCache = discordDataCache;
 
-async function fetchDiscordData(serverId) {
+window.fetchDiscordData = async function (serverId) {
     if (!serverId) return;
 
     try {
@@ -52,7 +52,7 @@ async function fetchDiscordData(serverId) {
         console.error('Failed to fetch Discord data:', error);
         showNotification('Failed to load Discord data', 'error');
     }
-}
+};
 
 async function updateBotStatus() {
     const statusType = document.getElementById('bot-status-type');
