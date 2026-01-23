@@ -4820,25 +4820,64 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 // ========== CHANNEL SCHEDULE FUNCTIONS (Premium) ==========
-window.showCreateChannelScheduleModal = function () {
+
+window.showCreateChannelScheduleModal = async function () {
     window.logCmsAction('show_create_schedule_modal');
-    document.getElementById('channel-schedule-modal').style.display = 'block';
+    const modal = document.getElementById('channel-schedule-modal');
+    if (modal) modal.style.display = 'block';
+
     const form = document.getElementById('channel-schedule-form');
     if (form) form.reset();
     document.getElementById('schedule-id').value = '';
 
-    // Populate channels dropdown
     const channelSelect = document.getElementById('schedule-channel');
-    if (channelSelect && window.discordDataCache && window.discordDataCache.channels) {
+    if (!channelSelect) return;
+
+    // Helper to render options
+    const renderOptions = (channelsObj) => {
         let html = '<option value="">Select a text channel...</option>';
-        // Filter for text channels (type 0)
-        Object.values(window.discordDataCache.channels)
-            .filter(ch => ch.type === 0)
-            .sort((a, b) => a.position - b.position)
+        Object.values(channelsObj)
+            .filter(ch => ch.type == 0) // Loose equality for string/number match
+            .sort((a, b) => (a.position || 0) - (b.position || 0))
             .forEach(ch => {
                 html += `<option value="${ch.id}">#${ch.name}</option>`;
             });
         channelSelect.innerHTML = html;
+    };
+
+    // Try using cache first
+    if (window.discordDataCache && window.discordDataCache.channels && Object.keys(window.discordDataCache.channels).length > 0) {
+        renderOptions(window.discordDataCache.channels);
+    } else {
+        // Fallback: Fetch directly
+        channelSelect.innerHTML = '<option>Loading channels...</option>';
+        try {
+            if (window.fetchDiscordData && currentServerId) {
+                await window.fetchDiscordData(currentServerId);
+                if (window.discordDataCache && window.discordDataCache.channels) {
+                    renderOptions(window.discordDataCache.channels);
+                    return;
+                }
+            }
+
+            // Direct API fallback if global fetch failed
+            if (currentServerId) {
+                const data = await apiCall(`/api/${currentServerId}/channels`);
+                if (data && data.channels) {
+                    // Normalize array to object if needed, or handle array directly
+                    let channelsObj = {};
+                    if (Array.isArray(data.channels)) {
+                        data.channels.forEach(ch => channelsObj[ch.id] = ch);
+                    } else {
+                        channelsObj = data.channels;
+                    }
+                    renderOptions(channelsObj);
+                }
+            }
+        } catch (e) {
+            console.error('Error fetching channels for modal:', e);
+            channelSelect.innerHTML = '<option value="">Error loading channels</option>';
+        }
     }
 };
 
