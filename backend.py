@@ -642,67 +642,13 @@ def get_discord_auth_url():
         
         return jsonify({
             'success': True,
+
+
             'url': auth_url,
             'state': state
         }), 200
     except Exception as e:
         logger.error(f"Error generating Discord auth URL: {e}")
-        return safe_error_response(e)
-
-@app.route('/api/auth/discord/callback', methods=['POST'])
-def discord_auth_callback():
-    """Handle Discord OAuth2 callback"""
-    try:
-        data = request.get_json()
-        code = data.get('code')
-        state = data.get('state')
-        
-        if not code:
-            return jsonify({'error': 'Missing authorization code'}), 400
-            
-        # Verify state (optional but recommended)
-        # In stateless REST, we rely on the frontend to pass it back
-        
-        # Get user's IP for logging
-        ip_address = get_remote_address()
-        
-        # Authenticate with Discord
-        result = asyncio.run(discord_oauth_manager.authenticate_discord_user(code, ip_address))
-        
-        if not result:
-            return jsonify({'error': 'Authentication failed'}), 401
-            
-        if 'error' in result:
-            return jsonify(result), 403
-            
-        # Create CMS session
-        session_token = auth_manager.create_session(result)
-        
-        response = jsonify({
-            'success': True,
-            'user': result
-        })
-        
-        # Set session cookie
-        # Production: Secure, HttpOnly, SameSite=Lax
-        # Development: HttpOnly, SameSite=Lax
-        secure_cookie = IS_PRODUCTION
-        max_age = 60 * 60 * 24 # 24 hours
-        
-        response.set_cookie(
-            'session_token',
-            session_token,
-            max_age=max_age,
-            httponly=True,
-            secure=secure_cookie,
-            samesite='Lax',
-            path='/' # Available everywhere
-        )
-        
-        return response, 200
-        
-    except Exception as e:
-        logger.error(f"Error in Discord auth callback: {e}")
         return safe_error_response(e)
 
 @app.route('/api/ad-claim/create', methods=['POST'])
@@ -992,27 +938,8 @@ def logout_alias():
     return logout()
 
 # ========== DISCORD OAUTH2 AUTHENTICATION ==========
-@app.route('/api/auth/discord/url', methods=['GET'])
-def get_discord_auth_url():
-    """Get Discord OAuth2 authorization URL"""
-    try:
-        # Generate CSRF state token
-        import secrets
-        state = secrets.token_urlsafe(32)
-        
-        # Store state in session for validation
-        session['oauth_state'] = state
-        
-        auth_url = discord_oauth_manager.get_authorization_url(state)
-        
-        return jsonify({
-            'success': True,
-            'url': auth_url,
-            'state': state
-        }), 200
-    except Exception as e:
-        logger.error(f"Error generating Discord auth URL: {e}")
-        return safe_error_response(e)
+
+
 
 @app.route('/api/auth/discord/callback', methods=['POST'])
 @limiter.limit("10 per minute")
