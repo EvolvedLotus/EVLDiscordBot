@@ -2934,3 +2934,143 @@ small.text-muted,
         left: 12px;
     }
 }
+
+/* ===================================
+   LAYOUT FIX: REDUCE NESTED SCROLLBARS
+   =================================== 
+   This section fixes the squished layout and removes
+   unnecessary nested scrollbars on the main content area.
+*/
+
+/* Let content flow naturally - remove fixed heights */
+@media (min-width: 768px) {
+
+    /* Main content should fill available space and scroll */
+    .main-content {
+        height: 100vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    /* Remove fixed max-heights on content containers */
+    .server-list {
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    /* Sections should flow naturally without nested scroll */
+    .section-card,
+    .card,
+    .table-container {
+        overflow: visible;
+    }
+
+    /* Content area padding - more breathing room */
+    .content-area {
+        padding: 48px;
+        padding-bottom: 80px;
+        /* Extra bottom space for scrolling */
+    }
+
+    /* Stats grid - ensure cards don't feel squished */
+    .stats-grid,
+    .dashboard-grid {
+        gap: 28px;
+        margin-bottom: 40px;
+    }
+
+    /* Cards - more internal padding */
+    .stat-card,
+    .section-card {
+        padding: 28px;
+    }
+
+    /* Shop/Task grids - better spacing */
+    .shop-grid,
+    .tasks-grid,
+    .embeds-grid {
+        gap: 24px;
+    }
+
+    /* Remove min-height constraints that cause empty space */
+    .shop-card,
+    .task-card {
+        min-height: auto;
+    }
+}
+
+/* Configuration tab specific - prevent nested scroll */
+.config-content,
+.settings-panel,
+.premium-settings {
+    overflow: visible;
+    max-height: none;
+}
+
+/* Channel schedules list - should flow naturally */
+#channel-schedules-list {
+    overflow: visible;
+    max-height: none;
+}
+
+/* Logs container - this one SHOULD scroll since it can be very long */
+.logs-container,
+#logs-container {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+/* User management sections - flow naturally */
+.users-list,
+.members-list {
+    max-height: none;
+    overflow: visible;
+}
+
+/* Tables should fit content, not scroll unless on mobile */
+@media (min-width: 1024px) {
+    .table-container {
+        overflow-x: visible;
+    }
+}
+
+/* Form sections in settings - prevent squishing */
+.form-section,
+.settings-section {
+    margin-bottom: 32px;
+}
+
+.form-section:last-child,
+.settings-section:last-child {
+    margin-bottom: 0;
+}
+
+/* Ensure full height utilization */
+.tab-content {
+    min-height: calc(100vh - 200px);
+}
+
+/* Section headers - consistent spacing */
+.section-title,
+.section-header-title {
+    margin-bottom: 24px;
+}
+
+/* Grid containers - consistent gaps */
+.grid-2,
+.grid-3,
+.grid-4 {
+    gap: 24px;
+}
+
+/* Remove double scrollbars on nested containers */
+.scrollable-content {
+    overflow-y: auto;
+    max-height: calc(100vh - 300px);
+}
+
+/* Premium features section - flow naturally */
+.premium-features,
+.channel-lock-section {
+    overflow: visible;
+}
