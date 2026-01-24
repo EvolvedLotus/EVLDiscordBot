@@ -2936,141 +2936,198 @@ small.text-muted,
 }
 
 /* ===================================
-   LAYOUT FIX: REDUCE NESTED SCROLLBARS
+   LAYOUT FIX V2: NATURAL PAGE FLOW
    =================================== 
-   This section fixes the squished layout and removes
-   unnecessary nested scrollbars on the main content area.
+   - Page expands to show all content
+   - Only data lists scroll internally
+   - Main scrollbar is on the page, not containers
 */
 
-/* Let content flow naturally - remove fixed heights */
-@media (min-width: 768px) {
-
-    /* Main content should fill available space and scroll */
-    .main-content {
-        height: 100vh;
-        overflow-y: auto;
-        overflow-x: hidden;
-    }
-
-    /* Remove fixed max-heights on content containers */
-    .server-list {
-        max-height: none;
-        overflow-y: visible;
-    }
-
-    /* Sections should flow naturally without nested scroll */
-    .section-card,
-    .card,
-    .table-container {
-        overflow: visible;
-    }
-
-    /* Content area padding - more breathing room */
-    .content-area {
-        padding: 48px;
-        padding-bottom: 80px;
-        /* Extra bottom space for scrolling */
-    }
-
-    /* Stats grid - ensure cards don't feel squished */
-    .stats-grid,
-    .dashboard-grid {
-        gap: 28px;
-        margin-bottom: 40px;
-    }
-
-    /* Cards - more internal padding */
-    .stat-card,
-    .section-card {
-        padding: 28px;
-    }
-
-    /* Shop/Task grids - better spacing */
-    .shop-grid,
-    .tasks-grid,
-    .embeds-grid {
-        gap: 24px;
-    }
-
-    /* Remove min-height constraints that cause empty space */
-    .shop-card,
-    .task-card {
-        min-height: auto;
-    }
+/* Body/Dashboard structure - sidebar fixed, content scrolls */
+body {
+    overflow: hidden;
+    height: 100vh;
 }
 
-/* Configuration tab specific - prevent nested scroll */
+.dashboard-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* Sidebar stays fixed */
+.sidebar {
+    flex-shrink: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+/* Main content is the ONLY scrollable area */
+.main-content {
+    flex: 1;
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Content area - let it be as tall as needed */
+.content-area {
+    padding: 40px 48px 100px 48px;
+    min-height: auto;
+}
+
+/* Tab content - NO height restrictions, flow naturally */
+.tab-content {
+    min-height: auto;
+    height: auto;
+}
+
+/* ===================================
+   ALL CONTAINERS FLOW NATURALLY
+   =================================== */
+
+/* Section cards, settings panels - NO scroll, NO fixed height */
+.section-card,
+.card,
+.settings-grid,
 .config-content,
 .settings-panel,
-.premium-settings {
-    overflow: visible;
-    max-height: none;
+.premium-settings,
+.form-section,
+.settings-section,
+#config-content,
+#channel-schedules-list,
+.premium-features,
+.channel-lock-section {
+    overflow: visible !important;
+    max-height: none !important;
+    height: auto !important;
 }
 
-/* Channel schedules list - should flow naturally */
-#channel-schedules-list {
-    overflow: visible;
-    max-height: none;
+/* Grids - flow naturally with good spacing */
+.stats-grid,
+.dashboard-grid,
+.settings-grid {
+    display: grid;
+    gap: 24px;
+    margin-bottom: 32px;
 }
 
-/* Logs container - this one SHOULD scroll since it can be very long */
+/* Cards inside settings - consistent sizing */
+.section-card {
+    padding: 28px;
+    margin-bottom: 24px;
+}
+
+.section-card:last-child {
+    margin-bottom: 0;
+}
+
+/* ===================================
+   ONLY THESE SHOULD SCROLL INTERNALLY
+   =================================== */
+
+/* Logs - always scrollable (can be very long) */
 .logs-container,
-#logs-container {
+#logs-container,
+#system-logs-list {
+    max-height: 500px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* User/Member tables - scrollable when there are many */
+.users-table-container,
+.members-table-container,
+#users-list,
+#members-list {
     max-height: 600px;
     overflow-y: auto;
 }
 
-/* User management sections - flow naturally */
-.users-list,
-.members-list {
+/* Transaction list - scrollable */
+#transactions-list,
+.transactions-table-container {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+/* Role containers (many roles) */
+#user-roles-container,
+.roles-grid-scrollable {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Shop/Task grids - only scroll if many items */
+.shop-grid,
+.tasks-grid,
+.embeds-grid {
     max-height: none;
     overflow: visible;
 }
 
-/* Tables should fit content, not scroll unless on mobile */
-@media (min-width: 1024px) {
-    .table-container {
-        overflow-x: visible;
+/* Modals keep their internal scroll (they're overlay windows) */
+.modal-body {
+    max-height: calc(85vh - 100px);
+    overflow-y: auto;
+}
+
+/* ===================================
+   MOBILE ADJUSTMENTS
+   =================================== */
+@media (max-width: 768px) {
+    .content-area {
+        padding: 20px 16px 60px 16px;
+    }
+
+    .section-card {
+        padding: 20px;
+        margin-bottom: 16px;
+    }
+
+    .stats-grid,
+    .dashboard-grid,
+    .settings-grid {
+        gap: 16px;
     }
 }
 
-/* Form sections in settings - prevent squishing */
-.form-section,
-.settings-section {
-    margin-bottom: 32px;
+/* ===================================
+   SPECIFIC TAB CONTENT FIXES
+   =================================== */
+
+/* Config tab content - ensure all sections show */
+#config .content-area,
+#config-content,
+#settings .content-area,
+#server-settings .content-area {
+    height: auto !important;
+    overflow: visible !important;
 }
 
-.form-section:last-child,
-.settings-section:last-child {
+/* Settings grid - 2 column on desktop, stack on mobile */
+.settings-grid {
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+}
+
+@media (max-width: 900px) {
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Ensure form groups have breathing room */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group:last-child {
     margin-bottom: 0;
 }
 
-/* Ensure full height utilization */
-.tab-content {
-    min-height: calc(100vh - 200px);
-}
-
-/* Section headers - consistent spacing */
-.section-title,
-.section-header-title {
-    margin-bottom: 24px;
-}
-
-/* Grid containers - consistent gaps */
-.grid-2,
-.grid-3,
-.grid-4 {
-    gap: 24px;
-}
-
-/* Remove double scrollbars on nested containers */
-.scrollable-content {
-    overflow-y: auto;
-    max-height: calc(100vh - 300px);
-}
-
-/* Premium features section - flow naturally */
-.premium-features,
-.channel-lock-section {
-    overflow: visible;
+/* Button spacing in settings */
+.section-card .btn-primary,
+.section-card .btn-secondary {
+    margin-top: 16px;
 }
