@@ -336,7 +336,7 @@ class ChannelLockManager:
             # Get @everyone role
             everyone_role = guild.default_role
             
-            # Store original permissions for ALL targets that have overwrites
+            # Store original permissions for restoration later
             original_permissions = {}
             
             # First, set @everyone to deny send_messages
@@ -350,27 +350,35 @@ class ChannelLockManager:
                 reason="Scheduled channel lock by EVL Bot"
             )
             
-            # Deny send_messages for ALL roles and members with overwrites on this channel
-            # This ensures no one can send messages, regardless of their server-level permissions
+            # CRITICAL: Deny send_messages for ALL server roles that have send_messages permission
+            # This catches roles that don't have channel overwrites but inherit from server
             roles_modified = 0
-            for target, overwrite in list(channel.overwrites.items()):
-                if target == everyone_role:
+            for role in guild.roles:
+                if role == everyone_role:
                     continue  # Already handled
+                
+                # Check if this role has send_messages permission at server level
+                if role.permissions.send_messages:
+                    # Get current channel overwrite for this role
+                    role_overwrite = channel.overwrites_for(role)
                     
-                if isinstance(target, discord.Role):
-                    # Store original and set to False for ALL roles
-                    original_permissions[f"role_{target.id}"] = overwrite.send_messages
-                    if overwrite.send_messages is not False:  # Only modify if not already False
-                        overwrite.send_messages = False
+                    # Store original value (could be True, False, or None)
+                    original_permissions[f"role_{role.id}"] = role_overwrite.send_messages
+                    
+                    # Only set if not already False
+                    if role_overwrite.send_messages is not False:
+                        role_overwrite.send_messages = False
                         await channel.set_permissions(
-                            target,
-                            overwrite=overwrite,
+                            role,
+                            overwrite=role_overwrite,
                             reason="Scheduled channel lock by EVL Bot"
                         )
                         roles_modified += 1
-                        
-                elif isinstance(target, discord.Member):
-                    # Also deny for individual member overwrites
+                        logger.debug(f"Denied send_messages for role {role.name}")
+            
+            # Also handle individual member overwrites on this channel
+            for target, overwrite in list(channel.overwrites.items()):
+                if isinstance(target, discord.Member):
                     original_permissions[f"member_{target.id}"] = overwrite.send_messages
                     if overwrite.send_messages is not False:
                         overwrite.send_messages = False
@@ -655,26 +663,32 @@ class ChannelLockManager:
             'locked' if @everyone cannot send messages, 'unlocked' if they can, None if error
         """
         if not self._bot_instance:
+            logger.warning(f"Bot instance not set when checking channel state for {channel_id}")
             return None
         
         try:
             guild = self._bot_instance.get_guild(int(guild_id))
             if not guild:
+                logger.warning(f"Guild {guild_id} not found")
                 return None
             
             channel = guild.get_channel(int(channel_id))
             if not channel:
+                logger.warning(f"Channel {channel_id} not found in guild {guild.name}")
                 return None
             
-            # Check @everyone permissions on this channel
+            # Check @everyone OVERWRITE on this channel (not effective permissions)
             everyone_role = guild.default_role
-            permissions = channel.permissions_for(everyone_role)
+            everyone_overwrite = channel.overwrites_for(everyone_role)
             
-            # If @everyone can send messages, the channel is "unlocked"
-            if permissions.send_messages:
-                return 'unlocked'
-            else:
+            logger.debug(f"Channel {channel.name}: @everyone overwrite send_messages = {everyone_overwrite.send_messages}")
+            
+            # If @everyone overwrite is explicitly False, the channel is "locked"
+            # If it's True or None (inherit), we consider it "unlocked"
+            if everyone_overwrite.send_messages is False:
                 return 'locked'
+            else:
+                return 'unlocked'
                 
         except Exception as e:
             logger.error(f"Error checking channel state: {e}")
