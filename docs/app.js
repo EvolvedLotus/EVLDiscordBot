@@ -5077,11 +5077,20 @@ async function handleDiscordLogin() {
  * Handle Discord OAuth callback
  * Called when user returns from Discord authorization
  */
+let isDiscordCallbackRunning = false; // Guard against multiple calls
+
 async function handleDiscordCallback() {
+    if (isDiscordCallbackRunning) return;
+
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     const state = urlParams.get('state');
     const error = urlParams.get('error');
+
+    // If no code, not a callback - return early
+    if (!code && !error) return;
+
+    isDiscordCallbackRunning = true;
 
     // Check for OAuth errors
     if (error) {
