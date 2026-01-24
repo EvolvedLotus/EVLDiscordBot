@@ -336,24 +336,39 @@ class ChannelLockManager:
             # Get @everyone role
             everyone_role = guild.default_role
             
-            # Get current overwrite
-            overwrite = channel.overwrites_for(everyone_role)
+            # Store original permissions for all roles that have overwrites
+            original_permissions = {}
             
-            # Update only send_messages, preserving other settings
-            overwrite.send_messages = False
+            # First, set @everyone to deny send_messages
+            everyone_overwrite = channel.overwrites_for(everyone_role)
+            original_permissions['@everyone'] = everyone_overwrite.send_messages
+            everyone_overwrite.send_messages = False
             
             await channel.set_permissions(
                 everyone_role,
-                overwrite=overwrite,
+                overwrite=everyone_overwrite,
                 reason="Scheduled channel lock by EVL Bot"
             )
+            
+            # Also deny send_messages for any role that has an explicit allow
+            for target, overwrite in channel.overwrites.items():
+                if isinstance(target, discord.Role) and target != everyone_role:
+                    if overwrite.send_messages is True:
+                        # This role has explicit allow, we need to deny it
+                        original_permissions[str(target.id)] = True
+                        overwrite.send_messages = False
+                        await channel.set_permissions(
+                            target,
+                            overwrite=overwrite,
+                            reason="Scheduled channel lock by EVL Bot"
+                        )
             
             # Update schedule state
             if schedule_id:
                 await self._update_schedule_state(
                     schedule_id, 
                     'locked',
-                    original_permissions={'everyone_send_messages': None} # Not storing original anymore as we don't revert blindly
+                    original_permissions=original_permissions
                 )
             
             logger.info(f"🔒 Locked channel #{channel.name} in guild {guild.name}")
@@ -404,17 +419,38 @@ class ChannelLockManager:
             # Get @everyone role
             everyone_role = guild.default_role
             
-            # Get current overwrite
-            overwrite = channel.overwrites_for(everyone_role)
+            # Get stored original permissions from the schedule
+            schedule = self.get_schedule(guild_id, schedule_id) if schedule_id else None
+            original_permissions = schedule.get('original_permissions', {}) if schedule else {}
             
-            # Set send_messages to None (inherit) to unlock
-            overwrite.send_messages = None
+            # Restore @everyone permissions
+            everyone_overwrite = channel.overwrites_for(everyone_role)
+            original_everyone = original_permissions.get('@everyone')
+            everyone_overwrite.send_messages = original_everyone  # None = inherit, True = allow, False = deny
             
             await channel.set_permissions(
                 everyone_role,
-                overwrite=overwrite,
+                overwrite=everyone_overwrite,
                 reason="Scheduled channel unlock by EVL Bot"
             )
+            
+            # Restore permissions for any roles that were modified
+            for role_id_str, original_value in original_permissions.items():
+                if role_id_str == '@everyone':
+                    continue
+                
+                try:
+                    role = guild.get_role(int(role_id_str))
+                    if role:
+                        role_overwrite = channel.overwrites_for(role)
+                        role_overwrite.send_messages = original_value  # Restore to original (likely True)
+                        await channel.set_permissions(
+                            role,
+                            overwrite=role_overwrite,
+                            reason="Scheduled channel unlock by EVL Bot"
+                        )
+                except Exception as e:
+                    logger.warning(f"Failed to restore permissions for role {role_id_str}: {e}")
             
             # Update schedule state
             if schedule_id:
