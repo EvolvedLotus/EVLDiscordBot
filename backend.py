@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Flask app
 app = Flask(__name__, static_folder='docs', static_url_path='')
+logger.info("🚀 Flask app created - starting initialization...")
 
 # Environment detection
 IS_PRODUCTION = (
