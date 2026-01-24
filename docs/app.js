@@ -1,5 +1,5 @@
 // API Configuration
-console.log('EVL CMS v3.1 Loaded');
+console.log('EVL CMS v3.2 Loaded - Performance Optimized');
 const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.protocol === 'file:')
     ? 'http://localhost:5000'
     : (window.API_BASE_URL || 'https://evldiscordbot-production.up.railway.app');
@@ -7,51 +7,100 @@ const API_BASE_URL = (window.location.hostname === 'localhost' || window.locatio
 let currentServerId = '';
 let currentUser = null;
 
+// ========== PERFORMANCE: Smart Caching System ==========
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache validity
 let discordDataCache = {
     users: {},
     channels: {},
-    roles: {}
+    roles: {},
+    _lastFetchedServerId: null,
+    _lastFetchedAt: 0,
+    _fetchInProgress: null  // Prevents duplicate requests
 };
 window.discordDataCache = discordDataCache;
 
-window.fetchDiscordData = async function (serverId) {
+// Check if cache is valid for the current server
+function isCacheValid(serverId) {
+    const now = Date.now();
+    const cacheAge = now - discordDataCache._lastFetchedAt;
+    return (
+        discordDataCache._lastFetchedServerId === serverId &&
+        cacheAge < CACHE_TTL_MS &&
+        Object.keys(discordDataCache.channels).length > 0
+    );
+}
+
+// Force invalidate cache (use when data changes)
+window.invalidateDiscordCache = function () {
+    discordDataCache._lastFetchedAt = 0;
+    console.log('[CMS] Discord cache invalidated');
+};
+
+window.fetchDiscordData = async function (serverId, forceRefresh = false) {
     if (!serverId) return;
 
-    try {
-        console.log('Fetching Discord data for server:', serverId);
-
-        // Fetch in parallel
-        const [usersData, channelsData, rolesData] = await Promise.all([
-            apiCall(`/api/${serverId}/users`),
-            apiCall(`/api/${serverId}/channels`),
-            apiCall(`/api/${serverId}/roles`)
-        ]);
-
-        if (usersData && usersData.users) {
-            discordDataCache.users = {};
-            usersData.users.forEach(u => discordDataCache.users[u.user_id] = u);
-        }
-
-        if (channelsData && channelsData.channels) {
-            discordDataCache.channels = {};
-            channelsData.channels.forEach(c => discordDataCache.channels[c.id] = c);
-        }
-
-        if (rolesData && rolesData.roles) {
-            discordDataCache.roles = {};
-            rolesData.roles.forEach(r => discordDataCache.roles[r.id] = r);
-        }
-
-        console.log('Discord data cached:', {
-            users: Object.keys(discordDataCache.users).length,
-            channels: Object.keys(discordDataCache.channels).length,
-            roles: Object.keys(discordDataCache.roles).length
-        });
-
-    } catch (error) {
-        console.error('Failed to fetch Discord data:', error);
-        showNotification('Failed to load Discord data', 'error');
+    // Use cache if valid and not forcing refresh
+    if (!forceRefresh && isCacheValid(serverId)) {
+        console.log('[CMS] Using cached Discord data (age: ' +
+            Math.round((Date.now() - discordDataCache._lastFetchedAt) / 1000) + 's)');
+        return;
     }
+
+    // If fetch is already in progress for this server, wait for it
+    if (discordDataCache._fetchInProgress &&
+        discordDataCache._lastFetchedServerId === serverId) {
+        console.log('[CMS] Waiting for in-progress fetch...');
+        return discordDataCache._fetchInProgress;
+    }
+
+    const startTime = performance.now();
+    console.log('[CMS] Fetching Discord data for server:', serverId);
+
+    // Create the fetch promise and store it to prevent duplicates
+    discordDataCache._fetchInProgress = (async () => {
+        try {
+            // Fetch in parallel for speed
+            const [usersData, channelsData, rolesData] = await Promise.all([
+                apiCall(`/api/${serverId}/users`),
+                apiCall(`/api/${serverId}/channels`),
+                apiCall(`/api/${serverId}/roles`)
+            ]);
+
+            if (usersData && usersData.users) {
+                discordDataCache.users = {};
+                usersData.users.forEach(u => discordDataCache.users[u.user_id] = u);
+            }
+
+            if (channelsData && channelsData.channels) {
+                discordDataCache.channels = {};
+                channelsData.channels.forEach(c => discordDataCache.channels[c.id] = c);
+            }
+
+            if (rolesData && rolesData.roles) {
+                discordDataCache.roles = {};
+                rolesData.roles.forEach(r => discordDataCache.roles[r.id] = r);
+            }
+
+            // Update cache metadata
+            discordDataCache._lastFetchedServerId = serverId;
+            discordDataCache._lastFetchedAt = Date.now();
+
+            const elapsed = Math.round(performance.now() - startTime);
+            console.log(`[CMS] Discord data cached in ${elapsed}ms:`, {
+                users: Object.keys(discordDataCache.users).length,
+                channels: Object.keys(discordDataCache.channels).length,
+                roles: Object.keys(discordDataCache.roles).length
+            });
+
+        } catch (error) {
+            console.error('[CMS] Failed to fetch Discord data:', error);
+            showNotification('Failed to load Discord data', 'error');
+        } finally {
+            discordDataCache._fetchInProgress = null;
+        }
+    })();
+
+    return discordDataCache._fetchInProgress;
 };
 
 async function updateBotStatus() {
@@ -124,6 +173,39 @@ async function apiCall(endpoint, options = {}) {
         throw error;
     }
 }
+
+// ========== PERFORMANCE: Cached API Calls for GET requests ==========
+const apiResponseCache = new Map();
+const API_CACHE_TTL = 60 * 1000; // 1 minute cache for API responses
+
+/**
+ * Cached API call for frequently accessed GET endpoints
+ * Use for: /config, /status, tab data that doesn't change often
+ */
+async function cachedApiCall(endpoint, ttlMs = API_CACHE_TTL) {
+    const cacheKey = `${currentServerId}:${endpoint}`;
+    const cached = apiResponseCache.get(cacheKey);
+
+    if (cached && (Date.now() - cached.timestamp < ttlMs)) {
+        console.log(`[CMS] Cache hit: ${endpoint} (age: ${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+        return cached.data;
+    }
+
+    const data = await apiCall(endpoint);
+    apiResponseCache.set(cacheKey, { data, timestamp: Date.now() });
+    return data;
+}
+
+// Clear cache when server changes or data is modified
+window.clearApiCache = function (endpoint = null) {
+    if (endpoint) {
+        const cacheKey = `${currentServerId}:${endpoint}`;
+        apiResponseCache.delete(cacheKey);
+    } else {
+        apiResponseCache.clear();
+    }
+    console.log('[CMS] API cache cleared');
+};
 
 /**
  * Log CMS activity to backend
@@ -689,8 +771,11 @@ async function loadDashboard() {
     content.innerHTML = '<div class="loading">Loading dashboard...</div>';
 
     try {
-        const statusData = await apiCall('/api/status');
-        const serverConfig = await apiCall(`/api/${currentServerId}/config`);
+        // Fetch status and config in parallel, use cache for config
+        const [statusData, serverConfig] = await Promise.all([
+            cachedApiCall('/api/status', 30000),  // 30s cache for status
+            cachedApiCall(`/api/${currentServerId}/config`)  // 1 min cache for config
+        ]);
 
         // Get server name from select dropdown if config doesn't have it
         let serverName = serverConfig.server_name || 'Unknown Server';
