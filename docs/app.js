@@ -7557,6 +7557,7 @@ window.onServerChange = async function () {
         localStorage.setItem('lastSelectedServer', currentServerId);
         window.logCmsAction('server_changed', { id: currentServerId });
         await fetchDiscordData(currentServerId);
+        await window.updateTierUI(); // ✅ Critical: Update tier UI (ads/badge)
         const activeTab = document.querySelector('.tab-button.active');
         if (activeTab) showTab(activeTab.getAttribute('data-tab'));
     }
