@@ -195,45 +195,80 @@ else:
     app.config['SESSION_COOKIE_DOMAIN'] = None
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
 
-# Import core managers
+# Import and initialize core managers with robust error handling
+# Critical: Flask MUST start even if managers fail, so healthcheck passes
+data_manager = None
+cache_manager = None
+audit_manager = None
+auth_manager = None
+discord_oauth_manager = None
+transaction_manager = None
+task_manager = None
+shop_manager = None
+announcement_manager = None
+embed_builder = None
+embed_manager = None
+sync_manager = None
+ad_claim_manager = None
+channel_lock_manager = None
+
+def initialize_managers():
+    """Initialize managers - called after Flask starts to not block healthcheck"""
+    global data_manager, cache_manager, audit_manager, auth_manager, discord_oauth_manager
+    global transaction_manager, task_manager, shop_manager, announcement_manager
+    global embed_builder, embed_manager, sync_manager, ad_claim_manager, channel_lock_manager
+    
+    try:
+        logger.info("🔄 Initializing core managers...")
+        
+        from core.data_manager import DataManager
+        from core.transaction_manager import TransactionManager
+        from core.task_manager import TaskManager
+        from core.shop_manager import ShopManager
+        from core.announcement_manager import AnnouncementManager
+        from core.embed_builder import EmbedBuilder
+        from core.embed_manager import EmbedManager
+        from core.cache_manager import CacheManager
+        from core.auth_manager import AuthManager
+        from core.audit_manager import AuditManager, AuditEventType
+        from core.sync_manager import SyncManager
+        from core.sse_manager import sse_manager
+        from core.discord_oauth import DiscordOAuthManager
+        from core.ad_claim_manager import AdClaimManager
+        from core.tier_manager import TierManager
+        from core.evolved_lotus_api import evolved_lotus_api
+        from core.channel_lock_manager import ChannelLockManager
+
+        # Initialize managers
+        data_manager = DataManager()
+        cache_manager = CacheManager()
+        audit_manager = AuditManager(data_manager)
+        auth_manager = AuthManager(data_manager, os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me'))
+        discord_oauth_manager = DiscordOAuthManager(data_manager, auth_manager)
+        transaction_manager = TransactionManager(data_manager, audit_manager, cache_manager)
+        task_manager = TaskManager(data_manager, transaction_manager)
+        shop_manager = ShopManager(data_manager, transaction_manager)
+        announcement_manager = AnnouncementManager(data_manager)
+        embed_builder = EmbedBuilder()
+        embed_manager = EmbedManager(data_manager)
+        sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
+        ad_claim_manager = AdClaimManager(data_manager, transaction_manager)
+        channel_lock_manager = ChannelLockManager(data_manager)
+
+        logger.info("✅ All managers initialized successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize managers: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+# Try to initialize managers immediately (but don't crash if it fails)
 try:
-    from core.data_manager import DataManager
-    from core.transaction_manager import TransactionManager
-    from core.task_manager import TaskManager
-    from core.shop_manager import ShopManager
-    from core.announcement_manager import AnnouncementManager
-    from core.embed_builder import EmbedBuilder
-    from core.embed_manager import EmbedManager
-    from core.cache_manager import CacheManager
-    from core.auth_manager import AuthManager
-    from core.audit_manager import AuditManager, AuditEventType
-    from core.sync_manager import SyncManager
-    from core.sse_manager import sse_manager
-    from core.discord_oauth import DiscordOAuthManager
-    from core.ad_claim_manager import AdClaimManager
-    from core.tier_manager import TierManager
-    from core.evolved_lotus_api import evolved_lotus_api
-    from core.channel_lock_manager import ChannelLockManager
-
-    # Initialize managers
-    data_manager = DataManager()
-    cache_manager = CacheManager()
-    audit_manager = AuditManager(data_manager)
-    auth_manager = AuthManager(data_manager, os.environ.get('JWT_SECRET_KEY', 'dev-secret-key-change-me'))
-    discord_oauth_manager = DiscordOAuthManager(data_manager, auth_manager)
-    transaction_manager = TransactionManager(data_manager, audit_manager, cache_manager)
-    task_manager = TaskManager(data_manager, transaction_manager)
-    shop_manager = ShopManager(data_manager, transaction_manager)
-    announcement_manager = AnnouncementManager(data_manager)
-    embed_builder = EmbedBuilder()
-    embed_manager = EmbedManager(data_manager)
-    sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
-    ad_claim_manager = AdClaimManager(data_manager, transaction_manager)
-    channel_lock_manager = ChannelLockManager(data_manager)
-
-    logger.info("✅ All managers initialized")
-except ImportError as e:
-    logger.warning(f"⚠️  Some managers not available: {e}")
+    initialize_managers()
+except Exception as e:
+    logger.error(f"⚠️ Manager initialization failed: {e} - Flask will start anyway")
 
 # Global references for bot integration (avoid circular imports)
 _bot_instance = None
