@@ -534,6 +534,7 @@ class ChannelLockManager:
         """Process all enabled schedules and lock/unlock channels as needed.
         
         This should be called periodically by a background task.
+        Verifies actual Discord permissions, not just database state.
         
         Returns:
             Summary of actions taken
@@ -544,14 +545,15 @@ class ChannelLockManager:
             'locked': 0,
             'unlocked': 0,
             'errors': 0,
-            'skipped': 0
+            'skipped': 0,
+            'verified': 0
         }
         
         for schedule in schedules:
             guild_id = schedule['guild_id']
             schedule_id = schedule['schedule_id']
             channel_id = schedule['channel_id']
-            current_state = schedule.get('current_state', 'locked')
+            db_state = schedule.get('current_state', 'locked')
             
             try:
                 # Skip non-premium guilds
@@ -559,23 +561,41 @@ class ChannelLockManager:
                     results['skipped'] += 1
                     continue
                 
+                # Determine what state SHOULD be
                 should_unlock = self.should_be_unlocked(schedule)
+                desired_state = 'unlocked' if should_unlock else 'locked'
                 
-                if should_unlock and current_state != 'unlocked':
-                    # Should be unlocked but isn't
+                # Check ACTUAL Discord state
+                actual_state = await self._get_actual_channel_state(guild_id, channel_id)
+                
+                if actual_state is None:
+                    # Channel not found or error
+                    results['errors'] += 1
+                    continue
+                
+                # If actual state doesn't match desired state, fix it
+                if should_unlock and actual_state != 'unlocked':
+                    # Should be open but isn't - unlock it
+                    logger.info(f"Channel {channel_id} should be unlocked but is {actual_state}, fixing...")
                     result = await self.unlock_channel(guild_id, channel_id, schedule_id)
                     if result.get('success'):
                         results['unlocked'] += 1
                     else:
                         results['errors'] += 1
                         
-                elif not should_unlock and current_state != 'locked':
-                    # Should be locked but isn't
+                elif not should_unlock and actual_state != 'locked':
+                    # Should be locked but isn't - lock it
+                    logger.info(f"Channel {channel_id} should be locked but is {actual_state}, fixing...")
                     result = await self.lock_channel(guild_id, channel_id, schedule_id)
                     if result.get('success'):
                         results['locked'] += 1
                     else:
                         results['errors'] += 1
+                else:
+                    # State is correct, just verify DB matches
+                    if db_state != desired_state:
+                        await self._update_schedule_state(schedule_id, desired_state)
+                    results['verified'] += 1
                 
                 results['processed'] += 1
                 
@@ -585,9 +605,46 @@ class ChannelLockManager:
         
         if results['locked'] or results['unlocked']:
             logger.info(f"📅 Schedule processing: {results['locked']} locked, "
-                       f"{results['unlocked']} unlocked, {results['errors']} errors")
+                       f"{results['unlocked']} unlocked, {results['verified']} verified, "
+                       f"{results['errors']} errors")
         
         return results
+    
+    async def _get_actual_channel_state(self, guild_id: str, channel_id: str) -> Optional[str]:
+        """Check the actual Discord permission state of a channel.
+        
+        Args:
+            guild_id: The Discord guild ID
+            channel_id: The channel to check
+            
+        Returns:
+            'locked' if @everyone cannot send messages, 'unlocked' if they can, None if error
+        """
+        if not self._bot_instance:
+            return None
+        
+        try:
+            guild = self._bot_instance.get_guild(int(guild_id))
+            if not guild:
+                return None
+            
+            channel = guild.get_channel(int(channel_id))
+            if not channel:
+                return None
+            
+            # Check @everyone permissions on this channel
+            everyone_role = guild.default_role
+            permissions = channel.permissions_for(everyone_role)
+            
+            # If @everyone can send messages, the channel is "unlocked"
+            if permissions.send_messages:
+                return 'unlocked'
+            else:
+                return 'locked'
+                
+        except Exception as e:
+            logger.error(f"Error checking channel state: {e}")
+            return None
     
     async def sync_schedules_on_startup(self) -> Dict[str, Any]:
         """Sync all channel states on bot startup.
