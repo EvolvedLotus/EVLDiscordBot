@@ -369,15 +369,35 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="announcement-pinned">
-                            Pin this announcement
-                        </label>
-                    </div>
-                    <div class="button-group">
-                        <button type="submit" class="btn-success">Save Announcement</button>
-                        <button type="button" onclick="closeAnnouncementModal()" class="btn-secondary">Cancel</button>
-                    </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="announcement-pinned">
+                                Pin this announcement
+                            </label>
+                        </div>
+
+                        <div class="form-group"
+                            style="border-top: 1px solid var(--border-color); padding-top: 15px; margin-top: 15px;">
+                            <label>🕒 Scheduling (Optional)</label>
+                            <div style="display: flex; gap: 10px;">
+                                <div style="flex: 1;">
+                                    <label for="announcement-delay" style="font-size: 12px;">Delay (Minutes)</label>
+                                    <input type="number" id="announcement-delay" class="form-control" placeholder="0"
+                                        min="0">
+                                </div>
+                                <div style="flex: 1;">
+                                    <label for="announcement-scheduled-time" style="font-size: 12px;">Specific
+                                        Time</label>
+                                    <input type="datetime-local" id="announcement-scheduled-time" class="form-control">
+                                </div>
+                            </div>
+                            <small style="color: var(--text-muted);">Leave empty to send immediately.</small>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" class="btn-success">Save Announcement</button>
+                            <button type="button" onclick="closeAnnouncementModal()"
+                                class="btn-secondary">Cancel</button>
+                        </div>
                 </form>
             </div>
         </div>
@@ -486,6 +506,21 @@
                         <select id="send-embed-channel" class="form-control" required>
                             <option value="">Select a channel...</option>
                         </select>
+                    </div>
+
+                    <div class="form-group" style="border-top: 1px solid var(--border-color); padding-top: 15px;">
+                        <label>🕒 Scheduling (Optional)</label>
+                        <div style="display: flex; gap: 10px;">
+                            <div style="flex: 1;">
+                                <label for="send-embed-delay" style="font-size: 12px;">Delay (Minutes)</label>
+                                <input type="number" id="send-embed-delay" class="form-control" placeholder="0" min="0">
+                            </div>
+                            <div style="flex: 1;">
+                                <label for="send-embed-scheduled-time" style="font-size: 12px;">Specific Time</label>
+                                <input type="datetime-local" id="send-embed-scheduled-time" class="form-control">
+                            </div>
+                        </div>
+                        <small style="color: var(--text-muted);">Leave empty to send immediately.</small>
                     </div>
                     <div class="button-group">
                         <button type="submit" class="btn-success">Send Embed</button>

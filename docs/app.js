@@ -7401,11 +7401,16 @@ window.deleteAnnouncement = async function (announcementId) {
 window.saveAnnouncement = async function (event) {
     if (event) event.preventDefault();
     const id = document.getElementById('announcement-id').value;
+    const delay = document.getElementById('announcement-delay').value;
+    const scheduledTime = document.getElementById('announcement-scheduled-time').value;
+
     const body = {
         title: document.getElementById('announcement-title').value,
         content: document.getElementById('announcement-content').value,
         channel_id: document.getElementById('announcement-channel').value,
-        is_pinned: document.getElementById('announcement-pinned').checked
+        is_pinned: document.getElementById('announcement-pinned').checked,
+        delay_minutes: delay ? parseInt(delay) : undefined,
+        scheduled_for: scheduledTime ? new Date(scheduledTime).toISOString() : undefined
     };
     logCmsAction('save_announcement_start', { id, body });
     try {
@@ -7474,12 +7479,23 @@ window.sendEmbed = function (embedId) {
 
 window.confirmSendEmbed = async function (embedId) {
     const channelId = document.getElementById('send-embed-channel')?.value;
+    const delay = document.getElementById('send-embed-delay')?.value;
+    const scheduledTime = document.getElementById('send-embed-scheduled-time')?.value;
+
     if (!channelId) return showNotification('Select a channel', 'warning');
+
     logCmsAction('send_embed_start', { embed_id: embedId, channel_id: channelId });
+
+    const payload = {
+        channel_id: channelId,
+        delay_minutes: delay ? parseInt(delay) : undefined,
+        scheduled_for: scheduledTime ? new Date(scheduledTime).toISOString() : undefined
+    };
+
     try {
         await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
             method: 'POST',
-            body: JSON.stringify({ channel_id: channelId })
+            body: JSON.stringify(payload)
         });
         showNotification('Embed sent!', 'success');
         logCmsAction('send_embed_success', { embed_id: embedId });
