@@ -1382,11 +1382,17 @@ class TaskReviewView(discord.ui.View):
                             tasks_data['metadata']['total_expired'] = tasks_data.get('metadata', {}).get('total_expired', 0) + 1
                             changes_made = True
 
-                            # Update Discord message
+                            # Delete Discord message
                             try:
-                                await self.update_task_message(guild, guild_id, int(task_id), task)
+                                channel = guild.get_channel(int(task['channel_id']))
+                                if channel:
+                                    try:
+                                        message = await channel.fetch_message(int(task['message_id']))
+                                        await message.delete()
+                                    except discord.NotFound:
+                                        pass  # Message already deleted
                             except Exception as e:
-                                print(f"Error updating expired task message: {e}")
+                                print(f"Error deleting expired task message: {e}")
 
                 # Expire user tasks past deadline
                 for user_id, user_tasks in tasks_data.get('user_tasks', {}).items():
