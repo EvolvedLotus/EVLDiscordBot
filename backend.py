@@ -1562,12 +1562,15 @@ def create_announcement(server_id):
         if scheduled_for or delay_minutes:
             # Handle Scheduling
             try:
+                current_time = datetime.now(timezone.utc)
                 if scheduled_for:
                     schedule_time = datetime.fromisoformat(scheduled_for.replace('Z', '+00:00'))
+                    if schedule_time.tzinfo is None:
+                        schedule_time = schedule_time.replace(tzinfo=timezone.utc)
                 else:
-                    schedule_time = datetime.now() + timedelta(minutes=int(delay_minutes))
+                    schedule_time = current_time + timedelta(minutes=int(delay_minutes))
                 
-                if schedule_time <= datetime.now():
+                if schedule_time <= current_time:
                      return jsonify({'error': 'Scheduled time must be in the future'}), 400
                      
                 # Prepare schedule data
@@ -1799,12 +1802,15 @@ def send_embed_to_channel(server_id, embed_id):
         
         if scheduled_for or delay_minutes:
             try:
+                current_time = datetime.now(timezone.utc)
                 if scheduled_for:
                     schedule_time = datetime.fromisoformat(scheduled_for.replace('Z', '+00:00'))
+                    if schedule_time.tzinfo is None:
+                        schedule_time = schedule_time.replace(tzinfo=timezone.utc)
                 else:
-                    schedule_time = datetime.now() + timedelta(minutes=int(delay_minutes))
+                    schedule_time = current_time + timedelta(minutes=int(delay_minutes))
                 
-                if schedule_time <= datetime.now():
+                if schedule_time <= current_time:
                      return jsonify({'error': 'Scheduled time must be in the future'}), 400
 
                 # Construct embed_dict for discord.Embed.from_dict
