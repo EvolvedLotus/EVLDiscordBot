@@ -6612,7 +6612,12 @@ window.leaveServer = leaveServer;
         try {
             showNotification('Fetching message...', 'info');
 
-            const response = await apiCall(`/api/${window.currentServerId}/messages/${channelId}/${messageId}`);
+            const sId = window.currentServerId || currentServerId;
+            if (!sId) {
+                showNotification('No server selected', 'error');
+                return;
+            }
+            const response = await apiCall(`/api/${sId}/messages/${channelId}/${messageId}`);
 
             if (response.embeds && response.embeds.length > 0) {
                 const embed = response.embeds[0];
