@@ -213,13 +213,14 @@ sync_manager = None
 ad_claim_manager = None
 channel_lock_manager = None
 evolved_lotus_api = None
+AuditEventType = None
 
 def initialize_managers():
     """Initialize managers - called after Flask starts to not block healthcheck"""
     global data_manager, cache_manager, audit_manager, auth_manager, discord_oauth_manager
     global transaction_manager, task_manager, shop_manager, announcement_manager
     global embed_builder, embed_manager, sync_manager, ad_claim_manager, channel_lock_manager
-    global evolved_lotus_api
+    global evolved_lotus_api, AuditEventType
     
     try:
         logger.info("🔄 Initializing core managers...")
