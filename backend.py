@@ -1554,6 +1554,66 @@ def create_announcement(server_id):
         embed_color = data.get('embed_color', '#5865F2')
         auto_pin = data.get('pinned', False)
         
+        # Scheduling parameters
+        scheduled_for = data.get('scheduled_for') # ISO Format
+        delay_minutes = data.get('delay_minutes')
+        
+        if scheduled_for or delay_minutes:
+            # Handle Scheduling
+            try:
+                if scheduled_for:
+                    schedule_time = datetime.fromisoformat(scheduled_for.replace('Z', '+00:00'))
+                else:
+                    schedule_time = datetime.now() + timedelta(minutes=int(delay_minutes))
+                
+                if schedule_time <= datetime.now():
+                     return jsonify({'error': 'Scheduled time must be in the future'}), 400
+                     
+                # Prepare schedule data
+                # We'll stick to the "simple" announcement structure for now as the backend api 
+                # for rich embeds is separate or simpler. 
+                # If backend sends "embed" data we might need to handle it, but for now 
+                # let's support the standard announcement fields.
+                
+                schedule_data = {
+                    'id': f"scheduled_{int(datetime.now().timestamp() * 1000)}",
+                    'title': title,
+                    'content': content,
+                    'channel_id': str(channel_id),
+                    'scheduled_for': schedule_time.isoformat(),
+                    'delay_minutes': int(delay_minutes) if delay_minutes else 0,
+                    'author_id': str(author_id),
+                    'author_name': author_name,
+                    'mention_everyone': False, # Backend API might need a param for this
+                    'auto_pin': auto_pin,
+                    'status': 'scheduled',
+                    'type': 'announcement' # Explicitly mark as simple announcement
+                }
+                
+                # Load existing data
+                announcements_data = data_manager.load_guild_data(str(server_id), 'announcements') or {'scheduled': []}
+                
+                # Add to scheduled list
+                if 'scheduled' not in announcements_data or not isinstance(announcements_data['scheduled'], list):
+                    announcements_data['scheduled'] = []
+                announcements_data['scheduled'].append(schedule_data)
+                
+                # Save back
+                data_manager.save_guild_data(str(server_id), 'announcements', announcements_data)
+                
+                return jsonify({
+                    'success': True, 
+                    'message': 'Announcement scheduled', 
+                    'scheduled_for': schedule_time.isoformat(),
+                    'id': schedule_data['id']
+                }), 201
+                
+            except ValueError:
+                return jsonify({'error': 'Invalid date format'}), 400
+            except Exception as schedule_error:
+                logger.error(f"Scheduling error: {schedule_error}")
+                return safe_error_response(schedule_error)
+
         # Use bot loop for async operations
         if _bot_instance and _bot_instance.loop:
             future = asyncio.run_coroutine_threadsafe(
@@ -1719,9 +1779,10 @@ def send_embed_to_channel(server_id, embed_id):
         
         if not channel_id:
             return jsonify({'error': 'channel_id is required'}), 400
-        
-        if not _bot_instance or not _bot_instance.is_ready():
-            return jsonify({'error': 'Bot is not ready'}), 503
+            
+        # Check for scheduling
+        scheduled_for = data.get('scheduled_for')
+        delay_minutes = data.get('delay_minutes')
         
         # Get the embed data from database
         result = data_manager.admin_client.table('embeds') \
@@ -1734,6 +1795,91 @@ def send_embed_to_channel(server_id, embed_id):
             return jsonify({'error': 'Embed not found'}), 404
         
         embed_data = result.data[0]
+        
+        if scheduled_for or delay_minutes:
+            try:
+                if scheduled_for:
+                    schedule_time = datetime.fromisoformat(scheduled_for.replace('Z', '+00:00'))
+                else:
+                    schedule_time = datetime.now() + timedelta(minutes=int(delay_minutes))
+                
+                if schedule_time <= datetime.now():
+                     return jsonify({'error': 'Scheduled time must be in the future'}), 400
+
+                # Construct embed_dict for discord.Embed.from_dict
+                # We need to map database fields to Discord API dict format
+                # Database: title, description, color (hex string), fields (list), footer (text), thumbnail (text), image (text)
+                
+                color_val = embed_data.get('color', '#5865F2')
+                if isinstance(color_val, str) and color_val.startswith('#'):
+                    color_int = int(color_val.strip('#'), 16)
+                else:
+                    color_int = int(color_val) if color_val else 0x5865F2
+
+                embed_dict = {
+                    'title': embed_data.get('title'),
+                    'description': embed_data.get('description'),
+                    'color': color_int,
+                    'fields': [],
+                    'timestamp': datetime.now().isoformat()
+                }
+                
+                if embed_data.get('footer'):
+                    embed_dict['footer'] = {'text': embed_data['footer']}
+                
+                if embed_data.get('thumbnail'):
+                    embed_dict['thumbnail'] = {'url': embed_data['thumbnail']}
+                
+                if embed_data.get('image'):
+                    embed_dict['image'] = {'url': embed_data['image']}
+                
+                if embed_data.get('fields'):
+                    for field in embed_data['fields']:
+                        embed_dict['fields'].append({
+                            'name': field.get('name', 'Field'),
+                            'value': field.get('value', 'Value'),
+                            'inline': field.get('inline', False)
+                        })
+
+                # Prepare schedule data
+                schedule_data = {
+                    'id': f"scheduled_embed_{int(datetime.now().timestamp() * 1000)}",
+                    'type': 'embed',
+                    'embed_dict': embed_dict,
+                    'channel_id': str(channel_id),
+                    'scheduled_for': schedule_time.isoformat(),
+                    'delay_minutes': int(delay_minutes) if delay_minutes else 0,
+                    'author_id': str(request.user.get('id', 'admin')),
+                    'author_name': request.user.get('username', 'Admin'),
+                    'status': 'scheduled'
+                }
+                
+                # Load existing data
+                announcements_data = data_manager.load_guild_data(str(server_id), 'announcements') or {'scheduled': []}
+                
+                # Add to scheduled list
+                if 'scheduled' not in announcements_data or not isinstance(announcements_data['scheduled'], list):
+                    announcements_data['scheduled'] = []
+                announcements_data['scheduled'].append(schedule_data)
+                
+                # Save back
+                data_manager.save_guild_data(str(server_id), 'announcements', announcements_data)
+                
+                return jsonify({
+                    'success': True, 
+                    'message': 'Embed scheduled successfully',
+                    'scheduled_for': schedule_time.isoformat(),
+                    'id': schedule_data['id']
+                }), 201
+
+            except ValueError:
+                return jsonify({'error': 'Invalid date format'}), 400
+            except Exception as schedule_error:
+                logger.error(f"Scheduling error: {schedule_error}")
+                return safe_error_response(schedule_error)
+
+        if not _bot_instance or not _bot_instance.is_ready():
+            return jsonify({'error': 'Bot is not ready'}), 503
         
         # Get the channel
         guild = _bot_instance.get_guild(int(server_id))

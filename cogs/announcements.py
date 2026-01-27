@@ -592,3 +592,6 @@ class Announcements(commands.Cog):
 
             except Exception as e:
                 print(f"Error in check_scheduled_announcements for guild {guild.id}: {e}")
+
+async def setup(bot):
+    await bot.add_cog(Announcements(bot))
