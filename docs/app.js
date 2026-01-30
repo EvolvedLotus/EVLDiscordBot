@@ -7758,23 +7758,24 @@ function attachEditByMessageListener() {
 
             let channelId, messageId;
 
-            // Check if input is a link
-            if (input.includes('discord.com/channels/')) {
-                try {
-                    // unexpected format: .../channels/guild_id/channel_id/message_id
-                    const parts = input.split('/');
-                    messageId = parts.pop();
-                    channelId = parts.pop();
-                    // optional: check guildId (parts.pop()) against currentServerId
-                } catch (e) {
-                    showNotification('Invalid Link Format', 'error');
-                    return;
-                }
+            // Check if input is a link (supports standard, ptb, canary)
+            // Format: .../channels/guild_id/channel_id/message_id
+            const linkMatch = input.match(/channels\/\d+\/(\d+)\/(\d+)/);
+
+            if (linkMatch) {
+                channelId = linkMatch[1];
+                messageId = linkMatch[2];
+                showNotification('Link parsed successfully!', 'success');
             } else {
                 // Input is likely just Message ID
-                messageId = input;
-                channelId = prompt('Enter Channel ID:');
-                if (!channelId) return;
+                if (input.length > 15 && /^\d+$/.test(input)) {
+                    messageId = input;
+                    channelId = prompt('Enter Channel ID:');
+                    if (!channelId) return;
+                } else {
+                    showNotification('Invalid Link or ID format', 'error');
+                    return;
+                }
             }
 
             if (!messageId || !channelId) {
