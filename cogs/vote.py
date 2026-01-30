@@ -13,28 +13,52 @@ from datetime import datetime, timezone, timedelta
 logger = logging.getLogger(__name__)
 
 
+import jwt # Add to imports
+
 class VoteCog(commands.Cog):
     """Commands for voting and vote rewards"""
     
     def __init__(self, bot):
         self.bot = bot
         self.data_manager = bot.data_manager
-        # Server ID for vote link - REQUIRED for server voting
-        self.server_id = os.getenv('TOPGG_SERVER_ID')
+        # Bot logic removed as requested
+        self.bot_id = "1155751362764742676"  # EVLBot ID (fallback)
         
+        # Extract Server ID from TOPGG_TOKEN (JWT)
+        self.server_id = None
+        self.topgg_token = os.getenv('TOPGG_TOKEN')
+        
+        if self.topgg_token:
+            try:
+                # Decode JWT without verification to get payload (we trust our own env var)
+                decoded = jwt.decode(self.topgg_token, options={"verify_signature": False})
+                self.server_id = decoded.get('id') # Top.gg tokens usually have 'id' which is the entity ID
+                
+                if not self.server_id:
+                    logger.warning("Could not find 'id' in TOPGG_TOKEN payload")
+                else:
+                    logger.info(f"✅ Extracted Server ID from TOPGG_TOKEN: {self.server_id}")
+            except Exception as e:
+                logger.error(f"Failed to decode TOPGG_TOKEN: {e}")
+                # Fallback: maybe the token IS the ID? (unlikely but possible if user is confused)
+                if self.topgg_token.isdigit():
+                    self.server_id = self.topgg_token
+
     def cog_unload(self):
         """Clean up tasks when cog is unloaded"""
-        pass # No background tasks for server voting currently
+        pass
             
-    # Stats posting removed as requested ("No voting for the bot yet")
-        
+    # Stats posting completely removed/disabled to prevent errors
+    # as per "No voting for the bot yet" instruction.
+    # Logic is handled by topgg_webhook in backend.py
+            
     @app_commands.command(name="vote", description="🗳️ Vote for our server and earn coins!")
     async def vote(self, interaction: discord.Interaction):
         """Show server voting link and rewards info"""
         
         if not self.server_id:
             await interaction.response.send_message(
-                "❌ **Configuration Error**: `TOPGG_SERVER_ID` environment variable is missing!\nPlease ask an admin to set the Server ID.",
+                "❌ **Configuration Error**: Could not determine Server ID from `TOPGG_TOKEN`.\nPlease check if the token is valid.",
                 ephemeral=True
             )
             return
