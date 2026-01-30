@@ -591,6 +591,7 @@ def update_ad_client(client_id):
         return safe_error_response(e)
 
 @app.route('/api/admin/log_cms_action', methods=['POST'])
+@csrf.exempt
 @require_auth
 def log_cms_action():
     """Receive and store logs from the CMS UI"""
@@ -1852,6 +1853,7 @@ def get_embeds(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/embeds', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def create_embed(server_id):
     try:
@@ -1893,6 +1895,7 @@ def get_embed(server_id, embed_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/embeds/<embed_id>', methods=['PUT'])
+@csrf.exempt
 @require_guild_access
 def update_embed(server_id, embed_id):
     try:
@@ -1903,6 +1906,7 @@ def update_embed(server_id, embed_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/embeds/<embed_id>', methods=['DELETE'])
+@csrf.exempt
 @require_guild_access
 def delete_embed(server_id, embed_id):
     try:
@@ -1912,6 +1916,7 @@ def delete_embed(server_id, embed_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/embeds/<embed_id>/send', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def send_embed_to_channel(server_id, embed_id):
     """Send an embed to a specific channel"""
