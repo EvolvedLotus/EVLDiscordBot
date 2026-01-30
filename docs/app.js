@@ -7889,11 +7889,25 @@ window.saveEmbed = async function (event) {
         if (messageId && channelId) {
             // PATCH Discord Message
             // Discord expects integer color
+            // Backend expects flat fields (title, description, etc.)
             const discordEmbed = { ...embedData, color: colorInt };
+
+            // Flatten footer/image/thumbnail for backend if needed, but backend handles data.get('image_url') etc.
+            // Let's ensure keys match backend expectations:
+            // Backend looks for: title, description, color, footer (text), image_url, thumbnail_url
+
+            const backendPayload = {
+                title: embedData.title,
+                description: embedData.description,
+                color: colorInt,
+                footer: embedData.footer?.text,
+                image_url: embedData.image?.url,
+                thumbnail_url: embedData.thumbnail?.url
+            };
 
             await apiCall(`/api/${currentServerId}/messages/${channelId}/${messageId}`, {
                 method: 'PATCH',
-                body: JSON.stringify({ embeds: [discordEmbed] })
+                body: JSON.stringify(backendPayload)
             });
             showNotification('Discord message updated!', 'success');
 
