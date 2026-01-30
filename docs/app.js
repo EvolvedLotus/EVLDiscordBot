@@ -7752,10 +7752,35 @@ function attachEditByMessageListener() {
         editByMsgBtn.parentNode.replaceChild(newBtn, editByMsgBtn);
 
         newBtn.onclick = async () => {
-            const channelId = prompt('Enter Channel ID:');
-            if (!channelId) return;
-            const messageId = prompt('Enter Message ID:');
-            if (!messageId) return;
+            let input = prompt('Enter Discord Message Link\nOR\nMessage ID:');
+            if (!input) return;
+            input = input.trim();
+
+            let channelId, messageId;
+
+            // Check if input is a link
+            if (input.includes('discord.com/channels/')) {
+                try {
+                    // unexpected format: .../channels/guild_id/channel_id/message_id
+                    const parts = input.split('/');
+                    messageId = parts.pop();
+                    channelId = parts.pop();
+                    // optional: check guildId (parts.pop()) against currentServerId
+                } catch (e) {
+                    showNotification('Invalid Link Format', 'error');
+                    return;
+                }
+            } else {
+                // Input is likely just Message ID
+                messageId = input;
+                channelId = prompt('Enter Channel ID:');
+                if (!channelId) return;
+            }
+
+            if (!messageId || !channelId) {
+                showNotification('Missing ID(s)', 'error');
+                return;
+            }
 
             showNotification('Fetching message...', 'info');
 
