@@ -43,10 +43,11 @@ app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour
 csrf = CSRFProtect(app)
 
 # HTTPS Enforcement (Production Only)
+# Note: Railway handles TLS termination at the edge, so we don't force_https
+# (internal health checks use HTTP and would fail with 302 redirects)
 if os.getenv('RAILWAY_ENVIRONMENT') == 'production' or os.getenv('ENVIRONMENT') == 'production':
-    # Force HTTPS, sets HSTS, X-Content-Type-Options, etc.
-    # CSP is disabled for now to prevent aesthetic regressions with inline styles/scripts
-    Talisman(app, content_security_policy=None, force_https=True)
+    # Security headers without forcing HTTPS redirect (Railway does this at edge)
+    Talisman(app, content_security_policy=None, force_https=False)
 else:
     # Dev mode: permissive
     Talisman(app, content_security_policy=None, force_https=False, force_file_save=False)
