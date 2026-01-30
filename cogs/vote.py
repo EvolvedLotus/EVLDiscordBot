@@ -19,66 +19,31 @@ class VoteCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.data_manager = bot.data_manager
-        # Bot and server IDs for vote links
-        self.bot_id = "1155751362764742676"  # EVLBot ID
-        self.server_id = os.getenv('TOPGG_SERVER_ID') # Optional: Set this to vote for server
+        # Server ID for vote link - REQUIRED for server voting
+        self.server_id = os.getenv('TOPGG_SERVER_ID')
         
-        # Start stats loop if token exists AND stats are enabled (avoid spamming if bot not approved)
-        self.topgg_token = os.getenv('TOPGG_TOKEN')
-        if self.topgg_token and os.getenv('TOPGG_ENABLE_STATS', 'false').lower() == 'true':
-            self.post_stats.start()
-            
     def cog_unload(self):
         """Clean up tasks when cog is unloaded"""
-        if self.topgg_token:
-            self.post_stats.cancel()
+        pass # No background tasks for server voting currently
             
-    @tasks.loop(minutes=30)
-    async def post_stats(self):
-        """Post server count to Top.gg (Bot only)"""
-        if not self.topgg_token:
-            return
-            
-        try:
-            # Use bot.user.id if available, fallback to hardcoded
-            bot_id = self.bot.user.id if self.bot.user else self.bot_id
-            
-            async with aiohttp.ClientSession() as session:
-                url = f"https://top.gg/api/bots/{bot_id}/stats"
-                payload = {"server_count": len(self.bot.guilds)}
-                headers = {"Authorization": self.topgg_token}
-                
-                async with session.post(url, json=payload, headers=headers) as resp:
-                    if resp.status == 200:
-                        logger.info(f"✅ Posted server count ({len(self.bot.guilds)}) to Top.gg")
-                    else:
-                        resp_text = await resp.text()
-                        # Often fails if bot is not approved yet, which is expected
-                        logger.warning(f"⚠️ Failed to post Top.gg stats: {resp.status} - {resp_text}")
-        except Exception as e:
-            logger.error(f"Error posting Top.gg stats: {e}")
-
-    @post_stats.before_loop
-    async def before_post_stats(self):
-        await self.bot.wait_until_ready()
+    # Stats posting removed as requested ("No voting for the bot yet")
         
-    @app_commands.command(name="vote", description="🗳️ Vote and earn coins!")
+    @app_commands.command(name="vote", description="🗳️ Vote for our server and earn coins!")
     async def vote(self, interaction: discord.Interaction):
-        """Show voting links and rewards info"""
+        """Show server voting link and rewards info"""
         
-        # Determine voting target (Server or Bot)
-        if self.server_id:
-            title = "🗳️ Vote for our Server!"
-            vote_url = f"https://top.gg/servers/{self.server_id}/vote"
-            desc = "Vote for our server on Top.gg and earn **coins**!"
-        else:
-            title = "🗳️ Vote for EVLBot!"
-            vote_url = f"https://top.gg/bot/{self.bot_id}/vote"
-            desc = "Support us by voting and earn **coins** as a reward!"
+        if not self.server_id:
+            await interaction.response.send_message(
+                "❌ **Configuration Error**: `TOPGG_SERVER_ID` environment variable is missing!\nPlease ask an admin to set the Server ID.",
+                ephemeral=True
+            )
+            return
+
+        vote_url = f"https://top.gg/servers/{self.server_id}/vote"
 
         embed = discord.Embed(
-            title=title,
-            description=desc,
+            title="🗳️ Vote for our Server!",
+            description="Vote for our server on Top.gg and earn **coins**!",
             color=discord.Color.gold()
         )
         
@@ -132,7 +97,9 @@ class VoteCog(commands.Cog):
             logger.error(f"Error checking vote status: {e}")
         
         embed.set_footer(text="Thank you for your support! 💜")
-        if self.bot.user:
+        if interaction.guild and interaction.guild.icon:
+            embed.set_thumbnail(url=interaction.guild.icon.url)
+        elif self.bot.user:
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         
         # Create button view
