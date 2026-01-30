@@ -7688,3 +7688,222 @@ window.showCreateTaskModal = function () {
 };
 
 console.log('[CMS] All button handlers successfully overridden and fixed ✅');
+
+// ========== EMBED FIXES v4.1 ==========
+
+// 1. Missing updateEmbedPreview function
+window.updateEmbedPreview = function () {
+    console.log('Updating preview...');
+    const title = document.getElementById('embed-title').value;
+    const desc = document.getElementById('embed-description').value;
+    const color = document.getElementById('embed-color').value;
+    const footer = document.getElementById('embed-footer').value;
+    const image = document.getElementById('embed-image-url').value;
+    const thumbnail = document.getElementById('embed-thumbnail-url').value;
+
+    const previewTitle = document.getElementById('preview-embed-title');
+    const previewDesc = document.getElementById('preview-embed-description');
+    const previewEmbed = document.getElementById('preview-embed');
+    const previewFooter = document.getElementById('preview-embed-footer');
+    const previewFooterCont = document.getElementById('preview-embed-footer-container');
+    const previewImage = document.getElementById('preview-embed-image');
+    const previewThumb = document.getElementById('preview-embed-thumbnail');
+    const previewThumbCont = document.getElementById('preview-embed-thumbnail-container');
+
+    if (previewTitle) previewTitle.textContent = title || 'Embed Title';
+    if (previewDesc) previewDesc.textContent = desc || 'Embed description goes here...';
+    if (previewEmbed) previewEmbed.style.borderLeftColor = color || '#5865F2';
+
+    if (previewFooter && previewFooterCont) {
+        if (footer) {
+            previewFooter.textContent = footer;
+            previewFooterCont.style.display = 'flex';
+        } else {
+            previewFooterCont.style.display = 'none';
+        }
+    }
+
+    if (previewImage) {
+        if (image) {
+            previewImage.src = image;
+            previewImage.style.display = 'block';
+        } else {
+            previewImage.style.display = 'none';
+        }
+    }
+
+    if (previewThumb && previewThumbCont) {
+        if (thumbnail) {
+            previewThumb.src = thumbnail;
+            previewThumbCont.style.display = 'block';
+        } else {
+            previewThumbCont.style.display = 'none';
+        }
+    }
+};
+
+// 2. Edit by Message ID Handler
+// We use a function to attach it to handle potential race conditions with DOM load
+function attachEditByMessageListener() {
+    const editByMsgBtn = document.getElementById('edit-by-message-btn');
+    if (editByMsgBtn) {
+        // Remove old listeners by cloning (optional but safe)
+        const newBtn = editByMsgBtn.cloneNode(true);
+        editByMsgBtn.parentNode.replaceChild(newBtn, editByMsgBtn);
+
+        newBtn.onclick = async () => {
+            const channelId = prompt('Enter Channel ID:');
+            if (!channelId) return;
+            const messageId = prompt('Enter Message ID:');
+            if (!messageId) return;
+
+            showNotification('Fetching message...', 'info');
+
+            try {
+                // endpoint: /api/:guild_id/messages/:channel_id/:message_id
+                const response = await apiCall(`/api/${currentServerId}/messages/${channelId}/${messageId}`);
+
+                // Check structure based on logs: OPTIONS ... GET ...
+                // Response should be the message object or have embeds
+
+                let embed = null;
+                if (response.embeds && response.embeds.length > 0) {
+                    embed = response.embeds[0];
+                } else if (response.content && !response.embeds) {
+                    throw new Error('Message has no embeds.');
+                } else {
+                    // Maybe raw embed object?
+                    embed = response;
+                }
+
+                // Fallback check
+                if (!embed || (!embed.title && !embed.description)) {
+                    // Check if response is the embed list
+                    if (Array.isArray(response) && response.length > 0) embed = response[0];
+                }
+
+                if (!embed) throw new Error('Could not parse embed from response');
+
+                // Open Modal
+                document.getElementById('embed-modal-title').textContent = 'Edit Discord Message';
+                const idField = document.getElementById('embed-id');
+                idField.value = 'discord-message'; // Dummy value
+                idField.dataset.messageId = messageId;
+                idField.dataset.channelId = channelId;
+
+                document.getElementById('embed-title').value = embed.title || '';
+                document.getElementById('embed-description').value = embed.description || '';
+
+                // Handle Color
+                let colorHex = '#5865F2';
+                if (embed.color) {
+                    if (typeof embed.color === 'number') {
+                        colorHex = '#' + embed.color.toString(16).padStart(6, '0');
+                    } else if (typeof embed.color === 'string' && embed.color.startsWith('#')) {
+                        colorHex = embed.color;
+                    }
+                }
+                document.getElementById('embed-color').value = colorHex;
+
+                document.getElementById('embed-footer').value = embed.footer?.text || '';
+                document.getElementById('embed-image-url').value = embed.image?.url || '';
+                document.getElementById('embed-thumbnail-url').value = embed.thumbnail?.url || '';
+
+                document.getElementById('embed-modal').style.display = 'block';
+                updateEmbedPreview();
+                showNotification('Message loaded!', 'success');
+
+            } catch (e) {
+                console.error(e);
+                showNotification('Failed to load message: ' + e.message, 'error');
+            }
+        };
+    } else {
+        // Retry if button not found yet
+        setTimeout(attachEditByMessageListener, 1000);
+    }
+}
+
+// Start trying to attach
+attachEditByMessageListener();
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachEditByMessageListener);
+}
+
+// 3. Robust saveEmbed for both DB and Discord Patching
+window.saveEmbed = async function (event) {
+    if (event) event.preventDefault();
+    console.log('Saving embed...');
+
+    const embedIdField = document.getElementById('embed-id');
+    const embedId = embedIdField.value;
+    const messageId = embedIdField.dataset.messageId;
+    const channelId = embedIdField.dataset.channelId;
+
+    const embedData = {
+        title: document.getElementById('embed-title').value,
+        description: document.getElementById('embed-description').value,
+        color: document.getElementById('embed-color').value,
+        footer: { text: document.getElementById('embed-footer').value },
+        image: { url: document.getElementById('embed-image-url').value },
+        thumbnail: { url: document.getElementById('embed-thumbnail-url').value }
+    };
+
+    // Cleanup empty fields
+    if (!embedData.image.url) delete embedData.image;
+    if (!embedData.thumbnail.url) delete embedData.thumbnail;
+    if (!embedData.footer.text) delete embedData.footer;
+
+    // For Discord API color is integer
+    const colorInt = parseInt(embedData.color.replace('#', ''), 16);
+
+    logCmsAction('save_embed_start', { embedId, messageId });
+
+    try {
+        if (messageId && channelId) {
+            // PATCH Discord Message
+            // Discord expects integer color
+            const discordEmbed = { ...embedData, color: colorInt };
+
+            await apiCall(`/api/${currentServerId}/messages/${channelId}/${messageId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ embeds: [discordEmbed] })
+            });
+            showNotification('Discord message updated!', 'success');
+
+            // Clean up
+            delete embedIdField.dataset.messageId;
+            delete embedIdField.dataset.channelId;
+        } else {
+            // DB Save
+            // DB expects flat structure and hex color string usually
+            const dbPayload = {
+                title: embedData.title,
+                description: embedData.description,
+                color: embedData.color, // Keep as hex string
+                footer: embedData.footer?.text,
+                image_url: embedData.image?.url,
+                thumbnail_url: embedData.thumbnail?.url
+            };
+
+            // Clean undefined
+            Object.keys(dbPayload).forEach(key => dbPayload[key] === undefined && delete dbPayload[key]);
+
+            const method = (embedId && embedId !== 'discord-message') ? 'PUT' : 'POST';
+            const url = (embedId && embedId !== 'discord-message')
+                ? `/api/${currentServerId}/embeds/${embedId}`
+                : `/api/${currentServerId}/embeds`;
+
+            await apiCall(url, { method, body: JSON.stringify(dbPayload) });
+            showNotification('Embed saved to database!', 'success');
+            loadEmbeds();
+        }
+        closeEmbedModal();
+        logCmsAction('save_embed_success');
+    } catch (e) {
+        showNotification('Save failed: ' + e.message, 'error');
+        logCmsAction('save_embed_failed', { error: e.message }, false);
+    }
+};
+
+console.log('✅ Embed Fixes v4.1 Applied');
