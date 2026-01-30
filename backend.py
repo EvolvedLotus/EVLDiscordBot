@@ -1688,7 +1688,16 @@ def create_announcement(server_id):
         scheduled_for = data.get('scheduled_for') # ISO Format
         delay_minutes = data.get('delay_minutes')
         
+        # Enforce Premium Limits for Scheduling
         if scheduled_for or delay_minutes:
+            # Check subscription tier
+            config = data_manager.load_guild_data(server_id, 'config')
+            tier = config.get('subscription_tier', 'free')
+            
+            # Check if scheduling is allowed (channel_schedules controls all scheduling features)
+            if not TierManager.get_limits(tier).get('channel_schedules', False):
+                 return jsonify({'error': 'Scheduling is a Premium feature. Please upgrade to use this feature!'}), 403
+
             # Handle Scheduling
             try:
                 current_time = datetime.now(timezone.utc)
@@ -1916,6 +1925,17 @@ def send_embed_to_channel(server_id, embed_id):
         # Check for scheduling
         scheduled_for = data.get('scheduled_for')
         delay_minutes = data.get('delay_minutes')
+        
+        # Enforce Premium Limits for Scheduling
+        if scheduled_for or delay_minutes:
+            # Check subscription tier
+            config = data_manager.load_guild_data(server_id, 'config')
+            tier = config.get('subscription_tier', 'free')
+            
+            # Check if scheduling is allowed
+            if not TierManager.get_limits(tier).get('channel_schedules', False):
+                 return jsonify({'error': 'Scheduling is a Premium feature. Please upgrade to use this feature!'}), 403
+
         
         # Get the embed data from database
         result = data_manager.admin_client.table('embeds') \
