@@ -61,7 +61,7 @@ async def run_discord_bot():
 async def main():
     """Main function to run both bot and Flask concurrently"""
     logger.info("=" * 50)
-    logger.info("🤖 Discord Economy Bot - Railway Startup")
+    logger.info("🤖 EVL Discord Bot - Railway Startup")
     logger.info("=" * 50)
 
     try:

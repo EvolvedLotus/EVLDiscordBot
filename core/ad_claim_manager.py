@@ -36,6 +36,9 @@ class AdClaimManager:
             Dict with session_id and viewer_url
         """
         try:
+            # Enforce limits (rate limit, daily limit)
+            self._check_ad_limits(user_id)
+
             # Generate unique session ID
             session_id = self._generate_session_id(user_id, guild_id)
             
@@ -316,6 +319,65 @@ class AdClaimManager:
             logger.error(f"Error getting global tasks: {e}")
             return []
     
+    def _check_ad_limits(self, user_id: str):
+        """
+        Check daily limits and cooldowns for ad viewing
+        """
+        DAILY_LIMIT = 50
+        COOLDOWN_SECONDS = 60
+        
+        now = datetime.now(timezone.utc)
+        
+        try:
+            # 1. Check daily limit
+            start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+            
+            # Use count='exact' and head=True to get count without fetching data
+            result = self.data_manager.admin_client.table('ad_views') \
+                .select('ad_session_id', count='exact') \
+                .eq('user_id', user_id) \
+                .gte('created_at', start_of_day) \
+                .execute()
+                
+            # supabase-py v2 returns count in the result object
+            current_count = result.count if result.count is not None else len(result.data)
+            
+            if current_count >= DAILY_LIMIT:
+                logger.info(f"User {user_id} reached daily limit: {current_count}/{DAILY_LIMIT}")
+                raise Exception(f"Daily ad limit reached ({DAILY_LIMIT}). Please come back tomorrow!")
+
+            # 2. Check cooldown (time since last created session)
+            result = self.data_manager.admin_client.table('ad_views') \
+                .select('created_at') \
+                .eq('user_id', user_id) \
+                .order('created_at', desc=True) \
+                .limit(1) \
+                .execute()
+                
+            if result.data and len(result.data) > 0:
+                last_created_str = result.data[0]['created_at']
+                # Handle potentially missing timezone info or different formats
+                try:
+                    # Basic ISO parsing
+                    last_created = datetime.fromisoformat(last_created_str.replace('Z', '+00:00'))
+                except ValueError:
+                     # Fallback if format is weird
+                     last_created = now - timedelta(seconds=COOLDOWN_SECONDS + 1)
+
+                time_since = (now - last_created).total_seconds()
+                
+                if time_since < COOLDOWN_SECONDS:
+                    wait_time = int(COOLDOWN_SECONDS - time_since)
+                    raise Exception(f"Please wait {wait_time}s before watching another ad.")
+                    
+        except Exception as e:
+            # Re-raise explicit limit exceptions, log others
+            if "limit reached" in str(e) or "Please wait" in str(e):
+                raise
+            logger.error(f"Error checking ad limits: {e}")
+            # Fail open or closed? Closed for safety.
+            raise Exception("Service momentarily unavailable, please try again.")
+
     def _generate_session_id(self, user_id: str, guild_id: str) -> str:
         """
         Generate a unique session ID for an ad view

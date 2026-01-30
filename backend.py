@@ -7,6 +7,8 @@ from flask import Flask, request, jsonify, make_response, session, send_from_dir
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
+from flask_talisman import Talisman
 import os
 import sys
 import logging
@@ -31,6 +33,18 @@ logger = logging.getLogger(__name__)
 # Flask app
 app = Flask(__name__, static_folder='docs', static_url_path='')
 logger.info("🚀 Flask app created - starting initialization...")
+
+# CSRF Protection & HTTPS
+csrf = CSRFProtect(app)
+
+# HTTPS Enforcement (Production Only)
+if os.getenv('RAILWAY_ENVIRONMENT') == 'production' or os.getenv('ENVIRONMENT') == 'production':
+    # Force HTTPS, sets HSTS, X-Content-Type-Options, etc.
+    # CSP is disabled for now to prevent aesthetic regressions with inline styles/scripts
+    Talisman(app, content_security_policy=None, force_https=True)
+else:
+    # Dev mode: permissive
+    Talisman(app, content_security_policy=None, force_https=False, force_file_save=False)
 
 # Environment detection
 IS_PRODUCTION = (
@@ -733,6 +747,7 @@ def create_ad_session():
         return safe_error_response(e)
 
 @app.route('/api/webhooks/whop', methods=['POST'])
+@csrf.exempt
 def whop_webhook():
     """
     Handle incoming webhooks from Whop.

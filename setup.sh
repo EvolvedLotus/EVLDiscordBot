@@ -1,7 +1,7 @@
 #!/bin/bash
 # Save as setup.sh and run: chmod +x setup.sh && ./setup.sh
 
-echo "🚀 Setting up Discord Economy Bot..."
+echo "🚀 Setting up EVL Discord Bot..."
 
 # Create virtual environment
 python3 -m venv venv

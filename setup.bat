@@ -1,7 +1,7 @@
 @echo off
 REM Save as setup.bat and run by double-clicking
 
-echo Setting up Discord Economy Bot...
+echo Setting up EVL Discord Bot...
 
 REM Create virtual environment
 python -m venv venv

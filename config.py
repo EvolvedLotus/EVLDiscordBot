@@ -141,6 +141,17 @@ class Config:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
+        # Security Check: Ensure default secrets are not used in production
+        if self.is_production():
+            if self.jwt_secret_key == 'dev-secret-key-change-me':
+                error_msg = "Security Critical: JWT_SECRET_KEY is using the default development value. You MUST set a secure random string for JWT_SECRET_KEY in production."
+                logger.critical(error_msg)
+                raise ValueError(error_msg)
+                
+            if self.discord_token and ' ' in self.discord_token:
+                 # Basic check for copy-paste errors
+                 logger.warning("DISCORD_TOKEN contains spaces - this might be an error")
+
         logger.info("✅ Configuration validation passed")
 
     def get_database_config(self) -> Dict[str, Any]:

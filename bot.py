@@ -91,7 +91,7 @@ async def run_bot():
     """Async function to run the bot (called by start.py)"""
     try:
         logger.info("=" * 50)
-        logger.info("Discord Economy Bot Starting...")
+        logger.info("EVL Discord Bot Starting...")
         logger.info("=" * 50)
 
         # Create bot instance

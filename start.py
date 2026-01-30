@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Discord Economy Bot - Single Command Startup
+EVL Discord Bot - Single Command Startup
 Run with: python start.py
 Runs both Flask backend AND Discord bot concurrently
 """
@@ -111,7 +111,7 @@ async def run_discord_bot():
 async def main():
     """Main function to run both bot and Flask concurrently"""
     print("=" * 50)
-    print("🤖 Discord Economy Bot - Startup")
+    print("🤖 EVL Discord Bot - Startup")
     print("=" * 50)
     print()
 
