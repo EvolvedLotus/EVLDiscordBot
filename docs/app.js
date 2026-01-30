@@ -1,5 +1,5 @@
 // API Configuration
-console.log('EVL CMS v3.3 Loaded - Embed Edit Fix');
+console.log('EVL CMS v3.4 Loaded - Embed Fix Final');
 const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.protocol === 'file:')
     ? 'http://localhost:5000'
     : (window.API_BASE_URL || 'https://evldiscordbot-production.up.railway.app');
@@ -6610,7 +6610,11 @@ window.leaveServer = leaveServer;
     };
 
     window.fetchEmbedByMessage = async function (event) {
-        event.preventDefault();
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+        }
 
         const input = document.getElementById('edit-message-id').value.trim();
         let messageId = input;
@@ -6651,17 +6655,21 @@ window.leaveServer = leaveServer;
                 // Close this modal
                 closeEditByMessageModal();
 
-                // Open embed modal with data after a short delay to avoid click event bubbling
-                console.log('[DEBUG] Setting 300ms timeout to open embed modal...');
+                // Open embed modal with data after a delay to ensure previous events are cleared
+                console.log('[DEBUG] Setting 500ms timeout to open embed modal...');
                 setTimeout(() => {
                     console.log('[DEBUG] Inside setTimeout, opening embed modal now');
                     const embedModal = document.getElementById('embed-modal');
                     console.log('[DEBUG] embedModal found:', !!embedModal);
+
                     if (embedModal) {
                         // Store the message reference for updating
-                        document.getElementById('embed-id').value = '';
-                        document.getElementById('embed-id').dataset.messageId = messageId;
-                        document.getElementById('embed-id').dataset.channelId = channelId;
+                        const idField = document.getElementById('embed-id');
+                        if (idField) {
+                            idField.value = '';
+                            idField.dataset.messageId = messageId;
+                            idField.dataset.channelId = channelId;
+                        }
 
                         // Fill form with embed data
                         document.getElementById('embed-title').value = embed.title || '';
@@ -6672,8 +6680,10 @@ window.leaveServer = leaveServer;
                         document.getElementById('embed-thumbnail-url').value = embed.thumbnail?.url || '';
 
                         document.getElementById('embed-modal-title').textContent = 'Edit Embed (from Message)';
-                        embedModal.style.display = 'block';
-                        console.log('[DEBUG] Modal display set to block, current display:', embedModal.style.display);
+
+                        // Force display block with important to override any other styles
+                        embedModal.style.setProperty('display', 'block', 'important');
+                        console.log('[DEBUG] Modal display forced to block !important');
 
                         // Update preview
                         if (typeof updateEmbedPreview === 'function') {
@@ -6682,7 +6692,7 @@ window.leaveServer = leaveServer;
 
                         showNotification('Embed loaded! Edit and save to update.', 'success');
                     }
-                }, 300);
+                }, 500);
             } else {
                 showNotification('No embed found in this message', 'warning');
             }
