@@ -3,9 +3,11 @@ Vote Cog - Commands for voting on Top.gg and other bot lists
 """
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import logging
+import os
+import aiohttp
 from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger(__name__)
@@ -19,6 +21,44 @@ class VoteCog(commands.Cog):
         self.data_manager = bot.data_manager
         # Bot and server IDs for vote links
         self.bot_id = "1155751362764742676"  # EVLBot ID
+        
+        # Start stats loop if token exists
+        self.topgg_token = os.getenv('TOPGG_TOKEN')
+        if self.topgg_token:
+            self.post_stats.start()
+            
+    def cog_unload(self):
+        """Clean up tasks when cog is unloaded"""
+        if self.topgg_token:
+            self.post_stats.cancel()
+            
+    @tasks.loop(minutes=30)
+    async def post_stats(self):
+        """Post server count to Top.gg"""
+        if not self.topgg_token:
+            return
+            
+        try:
+            # Use bot.user.id if available, fallback to hardcoded
+            bot_id = self.bot.user.id if self.bot.user else self.bot_id
+            
+            async with aiohttp.ClientSession() as session:
+                url = f"https://top.gg/api/bots/{bot_id}/stats"
+                payload = {"server_count": len(self.bot.guilds)}
+                headers = {"Authorization": self.topgg_token}
+                
+                async with session.post(url, json=payload, headers=headers) as resp:
+                    if resp.status == 200:
+                        logger.info(f"✅ Posted server count ({len(self.bot.guilds)}) to Top.gg")
+                    else:
+                        resp_text = await resp.text()
+                        logger.warning(f"⚠️ Failed to post Top.gg stats: {resp.status} - {resp_text}")
+        except Exception as e:
+            logger.error(f"Error posting Top.gg stats: {e}")
+
+    @post_stats.before_loop
+    async def before_post_stats(self):
+        await self.bot.wait_until_ready()
         
     @app_commands.command(name="vote", description="🗳️ Vote for the bot and earn coins!")
     async def vote(self, interaction: discord.Interaction):

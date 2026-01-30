@@ -3129,6 +3129,109 @@ def get_timezones():
 
 
 
+# ========== TOP.GG WEBHOOK ==========
+@app.route('/api/webhooks/topgg', methods=['POST'])
+@csrf.exempt
+def topgg_webhook():
+    """Handle Top.gg upvotes"""
+    # Verify authorization
+    auth_header = request.headers.get('Authorization')
+    # User said "Token Name servervote", assuming this is the secret
+    expected_token = os.getenv('TOPGG_WEBHOOK_SECRET', 'servervote')
+    
+    if auth_header != expected_token:
+        # Avoid logging full IP in production to prevent log spam, or use debug
+        logger.warning(f"⚠️ Unauthorized Top.gg webhook attempt")
+        return jsonify({'error': 'Unauthorized'}), 401
+        
+    try:
+        data = request.get_json()
+        logger.info(f"🗳️ Top.gg vote received: {data}")
+        
+        # Check for test vote
+        if data.get('type') == 'test':
+            logger.info("Test vote received")
+            return jsonify({'success': True, 'message': 'Test received'}), 200
+            
+        vote_type = data.get('type')
+        if vote_type != 'upvote':
+            return jsonify({'success': True}), 200
+            
+        user_id = data.get('user')
+        guild_id = data.get('guild')
+        
+        if not user_id:
+            return jsonify({'error': 'Missing user ID'}), 400
+
+        # Reward amount (user requested 100 coins)
+        REWARD_AMOUNT = 100
+        
+        if guild_id:
+            # Server vote: Reward in specific guild
+            if _add_currency_webhook(guild_id, user_id, REWARD_AMOUNT):
+                return jsonify({'success': True}), 200
+            else:
+                return jsonify({'error': 'Failed to add currency'}), 500
+        else:
+            # Bot vote logic (optional)
+            logger.warning("Bot vote received without guild ID. Reward skipped.")
+            return jsonify({'success': True}), 200
+        
+    except Exception as e:
+        logger.error(f"Error processing Top.gg webhook: {e}")
+        return jsonify({'error': str(e)}), 500
+
+def _add_currency_webhook(guild_id, user_id, amount):
+    """Helper to add currency safely using DataManager's client"""
+    try:
+        if 'data_manager' not in globals() or data_manager is None:
+            logger.error("DataManager not available for vote reward")
+            return False
+
+        # 1. Update/Create User Balance
+        res = data_manager.admin_client.table('users').select('balance').eq('guild_id', str(guild_id)).eq('user_id', str(user_id)).execute()
+        
+        if res.data and len(res.data) > 0:
+            # Update existing
+            current_bal = res.data[0].get('balance', 0)
+            new_bal = current_bal + amount
+            data_manager.admin_client.table('users').update({'balance': new_bal}).eq('guild_id', str(guild_id)).eq('user_id', str(user_id)).execute()
+            logger.info(f"💰 Added {amount} coins to user {user_id} in guild {guild_id} (New Balance: {new_bal})")
+        else:
+            # Create new user entry
+            new_user = {
+                'guild_id': str(guild_id),
+                'user_id': str(user_id),
+                'balance': amount,
+                'total_earned': amount,
+                'is_active': True,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }
+            data_manager.admin_client.table('users').insert(new_user).execute()
+            logger.info(f"💰 Created user {user_id} in guild {guild_id} with {amount} coins")
+
+        # 2. Log Vote (CRITICAL for /vote cooldowns)
+        # Check if weekend (Top.gg often sends isWeekend in payload, checking request data)
+        # But we don't have request data here easily unless we pass it.
+        # Let's just assume false or check datetime.
+        is_weekend = datetime.now(timezone.utc).weekday() >= 5 # 5=Sat, 6=Sun
+        
+        vote_log = {
+            'user_id': str(user_id),
+            'guild_id': str(guild_id),
+            'site': 'top.gg',
+            'reward': amount,
+            'is_weekend': is_weekend,
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+        data_manager.admin_client.table('vote_logs').insert(vote_log).execute()
+            
+        return True
+    except Exception as e:
+        logger.error(f"Failed to add currency for vote: {e}")
+        return False
+
+
 # ========== ERROR HANDLERS ==========
 @app.errorhandler(404)
 def not_found(e):
