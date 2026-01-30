@@ -21,10 +21,11 @@ class VoteCog(commands.Cog):
         self.data_manager = bot.data_manager
         # Bot and server IDs for vote links
         self.bot_id = "1155751362764742676"  # EVLBot ID
+        self.server_id = os.getenv('TOPGG_SERVER_ID') # Optional: Set this to vote for server
         
-        # Start stats loop if token exists
+        # Start stats loop if token exists AND stats are enabled (avoid spamming if bot not approved)
         self.topgg_token = os.getenv('TOPGG_TOKEN')
-        if self.topgg_token:
+        if self.topgg_token and os.getenv('TOPGG_ENABLE_STATS', 'false').lower() == 'true':
             self.post_stats.start()
             
     def cog_unload(self):
@@ -34,7 +35,7 @@ class VoteCog(commands.Cog):
             
     @tasks.loop(minutes=30)
     async def post_stats(self):
-        """Post server count to Top.gg"""
+        """Post server count to Top.gg (Bot only)"""
         if not self.topgg_token:
             return
             
@@ -52,6 +53,7 @@ class VoteCog(commands.Cog):
                         logger.info(f"✅ Posted server count ({len(self.bot.guilds)}) to Top.gg")
                     else:
                         resp_text = await resp.text()
+                        # Often fails if bot is not approved yet, which is expected
                         logger.warning(f"⚠️ Failed to post Top.gg stats: {resp.status} - {resp_text}")
         except Exception as e:
             logger.error(f"Error posting Top.gg stats: {e}")
@@ -60,20 +62,30 @@ class VoteCog(commands.Cog):
     async def before_post_stats(self):
         await self.bot.wait_until_ready()
         
-    @app_commands.command(name="vote", description="🗳️ Vote for the bot and earn coins!")
+    @app_commands.command(name="vote", description="🗳️ Vote and earn coins!")
     async def vote(self, interaction: discord.Interaction):
         """Show voting links and rewards info"""
         
+        # Determine voting target (Server or Bot)
+        if self.server_id:
+            title = "🗳️ Vote for our Server!"
+            vote_url = f"https://top.gg/servers/{self.server_id}/vote"
+            desc = "Vote for our server on Top.gg and earn **coins**!"
+        else:
+            title = "🗳️ Vote for EVLBot!"
+            vote_url = f"https://top.gg/bot/{self.bot_id}/vote"
+            desc = "Support us by voting and earn **coins** as a reward!"
+
         embed = discord.Embed(
-            title="🗳️ Vote for EVLBot!",
-            description="Support us by voting and earn **coins** as a reward!",
+            title=title,
+            description=desc,
             color=discord.Color.gold()
         )
         
         # Vote links
         embed.add_field(
             name="📊 Top.gg",
-            value=f"[**Vote Now →**](https://top.gg/bot/{self.bot_id}/vote)",
+            value=f"[**Vote Now →**]({vote_url})",
             inline=True
         )
         
@@ -119,11 +131,12 @@ class VoteCog(commands.Cog):
         except Exception as e:
             logger.error(f"Error checking vote status: {e}")
         
-        embed.set_footer(text="Thank you for supporting EVLBot! 💜")
-        embed.set_thumbnail(url=self.bot.user.display_avatar.url if self.bot.user else None)
+        embed.set_footer(text="Thank you for your support! 💜")
+        if self.bot.user:
+            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         
         # Create button view
-        view = VoteView(self.bot_id)
+        view = VoteView(vote_url)
         
         await interaction.response.send_message(embed=embed, view=view)
     
@@ -277,15 +290,15 @@ class VoteCog(commands.Cog):
 class VoteView(discord.ui.View):
     """Button view for voting links"""
     
-    def __init__(self, bot_id: str):
+    def __init__(self, vote_url: str):
         super().__init__(timeout=None)
-        self.bot_id = bot_id
+        self.vote_url = vote_url
         
         # Add vote button (links to Top.gg)
         self.add_item(discord.ui.Button(
             label="Vote on Top.gg",
             style=discord.ButtonStyle.link,
-            url=f"https://top.gg/bot/{bot_id}/vote",
+            url=vote_url,
             emoji="🗳️"
         ))
 
