@@ -3,7 +3,7 @@ PRODUCTION-READY BACKEND.PY WITH CORS
 Complete backend with all functionality restored
 """
 
-from flask import Flask, request, jsonify, make_response, session, send_from_directory
+from flask import Flask, request, jsonify, make_response, session, send_from_directory, redirect
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -881,112 +881,7 @@ def whop_webhook():
         logger.error(f"Whop webhook processing error: {e}")
         return safe_error_response(e)
 
-# ========== TOP.GG WEBHOOK ==========
-@app.route('/api/webhooks/topgg', methods=['POST'])
-@csrf.exempt
-def topgg_webhook():
-    """
-    Handle incoming vote webhooks from Top.gg.
-    Rewards users with coins when they vote for the bot or server.
-    
-    Expected payload (Bot votes):
-    {
-        "user": "discord_user_id",
-        "type": "upvote" or "test",
-        "isWeekend": true/false,
-        "bot": "bot_id",
-        "query": "optional_query_string"
-    }
-    
-    Expected payload (Server votes):
-    {
-        "user": "discord_user_id",
-        "type": "upvote" or "test",
-        "guild": "server_id",
-        "query": "optional_query_string"
-    }
-    """
-    try:
-        # Verify Authorization header
-        topgg_auth = os.getenv('TOPGG_WEBHOOK_SECRET')
-        if topgg_auth:
-            auth_header = request.headers.get('Authorization')
-            if not auth_header or auth_header != topgg_auth:
-                logger.warning(f"Invalid Top.gg webhook authorization")
-                return jsonify({'error': 'Unauthorized'}), 401
-        
-        payload = request.json
-        if not payload:
-            return jsonify({'error': 'No payload received'}), 400
-        
-        user_id = payload.get('user')
-        vote_type = payload.get('type', 'upvote')
-        is_weekend = payload.get('isWeekend', False)
-        bot_id = payload.get('bot')
-        guild_id = payload.get('guild')
-        
-        if not user_id:
-            return jsonify({'error': 'Missing user ID'}), 400
-        
-        # Handle test votes
-        if vote_type == 'test':
-            logger.info(f"[Top.gg] Test vote received for user {user_id}")
-            return jsonify({'success': True, 'message': 'Test vote acknowledged'}), 200
-        
-        # Calculate reward (100 coins, 200 on weekends)
-        base_reward = 100
-        reward = base_reward * 2 if is_weekend else base_reward
-        
-        vote_target = f"bot {bot_id}" if bot_id else f"server {guild_id}"
-        logger.info(f"[Top.gg] Vote received: user={user_id}, target={vote_target}, weekend={is_weekend}, reward={reward}")
-        
-        # Reward the user in ALL their guilds where the bot is present
-        try:
-            # Get all guilds where this user exists
-            result = data_manager.admin_client.table('users').select('guild_id, balance').eq('user_id', str(user_id)).execute()
-            
-            if result.data:
-                updated_count = 0
-                for user_record in result.data:
-                    guild_id_str = user_record.get('guild_id')
-                    current_balance = user_record.get('balance', 0) or 0
-                    new_balance = current_balance + reward
-                    
-                    # Update user balance
-                    data_manager.admin_client.table('users').update({
-                        'balance': new_balance
-                    }).eq('user_id', str(user_id)).eq('guild_id', guild_id_str).execute()
-                    updated_count += 1
-                
-                logger.info(f"[Top.gg] Rewarded user {user_id} with {reward} coins in {updated_count} guild(s)")
-                
-                # Log the vote
-                data_manager.admin_client.table('vote_logs').insert({
-                    'user_id': str(user_id),
-                    'vote_type': 'bot' if bot_id else 'server',
-                    'target_id': str(bot_id or guild_id),
-                    'reward': reward,
-                    'is_weekend': is_weekend,
-                    'platform': 'topgg'
-                }).execute()
-                
-            else:
-                logger.warning(f"[Top.gg] User {user_id} not found in any guild")
-                
-        except Exception as db_error:
-            logger.error(f"[Top.gg] Database error rewarding user: {db_error}")
-            # Still return 200 to acknowledge the webhook
-        
-        return jsonify({
-            'success': True, 
-            'message': f'Vote processed, {reward} coins awarded',
-            'user_id': user_id,
-            'reward': reward
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"[Top.gg] Webhook processing error: {e}")
-        return safe_error_response(e)
+
 
 @app.route('/api/auth/login', methods=['POST'])
 @limiter.limit("5 per minute")
