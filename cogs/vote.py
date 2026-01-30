@@ -63,7 +63,7 @@ class VoteCog(commands.Cog):
             )
             return
 
-        vote_url = f"https://top.gg/servers/{self.server_id}/vote"
+        vote_url = f"https://top.gg/discord/servers/{self.server_id}/vote"
 
         embed = discord.Embed(
             title="🗳️ Vote for our Server!",
