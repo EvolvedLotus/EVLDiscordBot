@@ -6051,8 +6051,9 @@ window.showCreateTaskModal = function () {
 };
 
 // Implement Save Handlers for the new modals
+// Implement Save Handlers for the new modals
 window.saveShopItem = async function (event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
 
     // Get values from form
     const itemId = document.getElementById('shop-item-id').value;
@@ -6077,7 +6078,7 @@ window.saveShopItem = async function (event) {
 
         if (itemId) {
             url += `/${itemId}`;
-            method = 'PUT'; // Assuming API supports PUT for updates
+            method = 'PUT'; // API supports PUT for shop updates
         }
 
         const response = await apiCall(url, {
@@ -6085,12 +6086,15 @@ window.saveShopItem = async function (event) {
             body: JSON.stringify(payload)
         });
 
-        if (response && (response.success || response.item_id || response.message)) {
+        // Check for success (API might return {success: true} or the item object)
+        if (response && (response.success || response.item_id || response.item || response.id)) {
             showNotification(itemId ? "Item updated!" : "Item created!", "success");
             document.getElementById('shop-item-modal').style.display = 'none';
-            if (window.loadShop) window.loadShop();
+            if (typeof window.loadShop === 'function') window.loadShop();
         } else {
-            showNotification("Failed to save item.", "error");
+            // Some APIs return just the object, checks pass above if so.
+            // If we get here, it might be an unhandled failure case
+            if (!response) throw new Error("No response from server");
         }
     } catch (e) {
         console.error("Error saving item:", e);
@@ -6098,8 +6102,9 @@ window.saveShopItem = async function (event) {
     }
 };
 
+
 window.saveTask = async function (event) {
-    event.preventDefault();
+    if (event) event.preventDefault();
 
     const taskId = document.getElementById('task-id').value;
     const content = document.getElementById('task-content').value;
@@ -6118,16 +6123,7 @@ window.saveTask = async function (event) {
         let url = `/api/${currentServerId}/tasks`;
         let method = 'POST';
 
-        // NOTE: Tasks API usually deletes/recreates or might not support edit same way
-        // But for consistency let's assume standard REST if ID exists
         if (taskId) {
-            // Check if API supports task editing or if we should delete/create
-            // For now, let's treat as create (many simple task bots don't support edit)
-            // Or if we know the endpoint: method = 'PUT'; url += `/${taskId}`;
-            // Let's default to create logic for now unless we know better.
-            // If we really want to support edit, we'd need to verify the API endpoint.
-            // Assuming create for this specific snippet to be safe or add logic later.
-            // If ID exists, we warn or try PUT
             url += `/${taskId}`;
             method = 'PUT';
         }
@@ -6137,12 +6133,12 @@ window.saveTask = async function (event) {
             body: JSON.stringify(payload)
         });
 
-        if (response && (response.success || response.task_id)) {
+        if (response && (response.success || response.task_id || response.task || response.id)) {
             showNotification(taskId ? "Task updated!" : "Task created!", "success");
             document.getElementById('task-modal').style.display = 'none';
-            if (window.loadTasks) window.loadTasks();
+            if (typeof window.loadTasks === 'function') window.loadTasks();
         } else {
-            showNotification("Failed to save task.", "error");
+            if (!response) throw new Error("No response from server");
         }
     } catch (e) {
         console.error("Error saving task:", e);
