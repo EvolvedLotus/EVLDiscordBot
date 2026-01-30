@@ -1782,17 +1782,42 @@ async function editEmbed(embedId) {
 async function saveEmbed(event) {
     if (event) event.preventDefault();
 
-    const embedId = document.getElementById('embed-id').value;
+    const embedIdField = document.getElementById('embed-id');
+    const embedId = embedIdField.value;
+    
+    // Check if we're editing a Discord message directly (from "Edit by Message ID")
+    const messageId = embedIdField.dataset?.messageId;
+    const channelId = embedIdField.dataset?.channelId;
+    
     const embedData = {
         title: document.getElementById('embed-title').value,
         description: document.getElementById('embed-description').value,
         color: document.getElementById('embed-color').value,
+        footer: document.getElementById('embed-footer').value,
         footer_text: document.getElementById('embed-footer').value,
         image_url: document.getElementById('embed-image-url').value,
         thumbnail_url: document.getElementById('embed-thumbnail-url').value
     };
 
     try {
+        // If editing a Discord message directly, PATCH the message
+        if (messageId && channelId) {
+            showNotification('Updating Discord message...', 'info');
+            await apiCall(`/api/${currentServerId}/messages/${channelId}/${messageId}`, {
+                method: 'PATCH',
+                body: JSON.stringify(embedData)
+            });
+            showNotification('Discord message updated successfully!', 'success');
+            
+            // Clear the dataset
+            delete embedIdField.dataset.messageId;
+            delete embedIdField.dataset.channelId;
+            
+            closeEmbedModal();
+            return messageId;
+        }
+        
+        // Standard database save logic
         let savedId = embedId;
         if (embedId) {
             // Update existing embed

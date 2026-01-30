@@ -2228,6 +2228,7 @@ def get_discord_message(server_id, channel_id, message_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/messages/<channel_id>/<message_id>', methods=['PATCH', 'PUT'])
+@csrf.exempt  # CMS API calls
 @require_guild_access
 def edit_discord_message(server_id, channel_id, message_id):
     """Edit an existing message in Discord"""
