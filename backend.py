@@ -232,6 +232,7 @@ embed_manager = None
 sync_manager = None
 ad_claim_manager = None
 channel_lock_manager = None
+sse_manager = None  # Added global
 evolved_lotus_api = None
 AuditEventType = None
 
@@ -240,7 +241,7 @@ def initialize_managers():
     global data_manager, cache_manager, audit_manager, auth_manager, discord_oauth_manager
     global transaction_manager, task_manager, shop_manager, announcement_manager
     global embed_builder, embed_manager, sync_manager, ad_claim_manager, channel_lock_manager
-    global evolved_lotus_api, AuditEventType
+    global sse_manager, evolved_lotus_api, AuditEventType  # Added sse_manager
     
     try:
         logger.info("🔄 Initializing core managers...")
@@ -256,7 +257,7 @@ def initialize_managers():
         from core.auth_manager import AuthManager
         from core.audit_manager import AuditManager, AuditEventType
         from core.sync_manager import SyncManager
-        from core.sse_manager import sse_manager
+        from core.sse_manager import sse_manager as _sse_manager # Import as alias
         from core.discord_oauth import DiscordOAuthManager
         from core.ad_claim_manager import AdClaimManager
         from core.tier_manager import TierManager
@@ -275,6 +276,7 @@ def initialize_managers():
         announcement_manager = AnnouncementManager(data_manager)
         embed_builder = EmbedBuilder()
         embed_manager = EmbedManager(data_manager)
+        sse_manager = _sse_manager # Assign global
         sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
         ad_claim_manager = AdClaimManager(data_manager, transaction_manager)
         channel_lock_manager = ChannelLockManager(data_manager)
