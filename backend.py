@@ -34,6 +34,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__, static_folder='docs', static_url_path='')
 logger.info("🚀 Flask app created - starting initialization...")
 
+# Secret key configuration (required for CSRF and sessions)
+app.secret_key = os.getenv('JWT_SECRET_KEY', os.getenv('SECRET_KEY', secrets.token_hex(32)))
+app.config['WTF_CSRF_ENABLED'] = True
+app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour
+
 # CSRF Protection & HTTPS
 csrf = CSRFProtect(app)
 

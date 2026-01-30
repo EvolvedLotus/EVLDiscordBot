@@ -10,10 +10,11 @@ CREATE TABLE IF NOT EXISTS discord_oauth_logs (
 );
 
 -- ADMIN USERS (If not exists, though it's referenced)
+-- NOTE: password_hash is nullable for Discord OAuth logins
 CREATE TABLE IF NOT EXISTS admin_users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username TEXT UNIQUE,
-    password_hash TEXT,
+    password_hash TEXT,  -- Can be NULL for Discord OAuth users
     discord_id TEXT UNIQUE,
     discord_username TEXT,
     discord_avatar TEXT,
@@ -27,6 +28,9 @@ CREATE TABLE IF NOT EXISTS admin_users (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- If the table already exists with NOT NULL, alter it:
+ALTER TABLE admin_users ALTER COLUMN password_hash DROP NOT NULL;
 
 -- RPC: upsert_discord_user
 CREATE OR REPLACE FUNCTION upsert_discord_user(
