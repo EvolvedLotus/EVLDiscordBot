@@ -1784,11 +1784,11 @@ async function saveEmbed(event) {
 
     const embedIdField = document.getElementById('embed-id');
     const embedId = embedIdField.value;
-    
+
     // Check if we're editing a Discord message directly (from "Edit by Message ID")
     const messageId = embedIdField.dataset?.messageId;
     const channelId = embedIdField.dataset?.channelId;
-    
+
     const embedData = {
         title: document.getElementById('embed-title').value,
         description: document.getElementById('embed-description').value,
@@ -1808,15 +1808,15 @@ async function saveEmbed(event) {
                 body: JSON.stringify(embedData)
             });
             showNotification('Discord message updated successfully!', 'success');
-            
+
             // Clear the dataset
             delete embedIdField.dataset.messageId;
             delete embedIdField.dataset.channelId;
-            
+
             closeEmbedModal();
             return messageId;
         }
-        
+
         // Standard database save logic
         let savedId = embedId;
         if (embedId) {
@@ -6650,32 +6650,34 @@ window.leaveServer = leaveServer;
                 // Close this modal
                 closeEditByMessageModal();
 
-                // Open embed modal with data
-                const embedModal = document.getElementById('embed-modal');
-                if (embedModal) {
-                    // Store the message reference for updating
-                    document.getElementById('embed-id').value = '';
-                    document.getElementById('embed-id').dataset.messageId = messageId;
-                    document.getElementById('embed-id').dataset.channelId = channelId;
+                // Open embed modal with data after a short delay to avoid click event bubbling
+                setTimeout(() => {
+                    const embedModal = document.getElementById('embed-modal');
+                    if (embedModal) {
+                        // Store the message reference for updating
+                        document.getElementById('embed-id').value = '';
+                        document.getElementById('embed-id').dataset.messageId = messageId;
+                        document.getElementById('embed-id').dataset.channelId = channelId;
 
-                    // Fill form with embed data
-                    document.getElementById('embed-title').value = embed.title || '';
-                    document.getElementById('embed-description').value = embed.description || '';
-                    document.getElementById('embed-color').value = embed.color ? `#${embed.color.toString(16).padStart(6, '0')}` : '#5865F2';
-                    document.getElementById('embed-footer').value = embed.footer?.text || '';
-                    document.getElementById('embed-image-url').value = embed.image?.url || '';
-                    document.getElementById('embed-thumbnail-url').value = embed.thumbnail?.url || '';
+                        // Fill form with embed data
+                        document.getElementById('embed-title').value = embed.title || '';
+                        document.getElementById('embed-description').value = embed.description || '';
+                        document.getElementById('embed-color').value = embed.color ? `#${embed.color.toString(16).padStart(6, '0')}` : '#5865F2';
+                        document.getElementById('embed-footer').value = embed.footer?.text || '';
+                        document.getElementById('embed-image-url').value = embed.image?.url || '';
+                        document.getElementById('embed-thumbnail-url').value = embed.thumbnail?.url || '';
 
-                    document.getElementById('embed-modal-title').textContent = 'Edit Embed (from Message)';
-                    embedModal.style.display = 'block';
+                        document.getElementById('embed-modal-title').textContent = 'Edit Embed (from Message)';
+                        embedModal.style.display = 'block';
 
-                    // Update preview
-                    if (typeof updateEmbedPreview === 'function') {
-                        updateEmbedPreview();
+                        // Update preview
+                        if (typeof updateEmbedPreview === 'function') {
+                            updateEmbedPreview();
+                        }
+
+                        showNotification('Embed loaded! Edit and save to update.', 'success');
                     }
-
-                    showNotification('Embed loaded! Edit and save to update.', 'success');
-                }
+                }, 100);
             } else {
                 showNotification('No embed found in this message', 'warning');
             }
