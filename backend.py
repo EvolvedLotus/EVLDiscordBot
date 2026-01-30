@@ -1113,6 +1113,7 @@ def logout_alias():
 
 
 @app.route('/api/auth/discord/callback', methods=['POST'])
+@csrf.exempt  # OAuth callbacks are CSRF-protected via state parameter
 @limiter.limit("10 per minute")
 def discord_oauth_callback():
     """Handle Discord OAuth2 callback"""
