@@ -1,5 +1,5 @@
 // API Configuration
-console.log('EVL CMS v3.2 Loaded - Performance Optimized');
+console.log('EVL CMS v3.3 Loaded - Embed Edit Fix');
 const API_BASE_URL = (window.location.hostname === 'localhost' || window.location.protocol === 'file:')
     ? 'http://localhost:5000'
     : (window.API_BASE_URL || 'https://evldiscordbot-production.up.railway.app');
@@ -6646,13 +6646,17 @@ window.leaveServer = leaveServer;
 
             if (response.embeds && response.embeds.length > 0) {
                 const embed = response.embeds[0];
+                console.log('[DEBUG] Embed fetched, closing first modal...');
 
                 // Close this modal
                 closeEditByMessageModal();
 
                 // Open embed modal with data after a short delay to avoid click event bubbling
+                console.log('[DEBUG] Setting 300ms timeout to open embed modal...');
                 setTimeout(() => {
+                    console.log('[DEBUG] Inside setTimeout, opening embed modal now');
                     const embedModal = document.getElementById('embed-modal');
+                    console.log('[DEBUG] embedModal found:', !!embedModal);
                     if (embedModal) {
                         // Store the message reference for updating
                         document.getElementById('embed-id').value = '';
@@ -6669,6 +6673,7 @@ window.leaveServer = leaveServer;
 
                         document.getElementById('embed-modal-title').textContent = 'Edit Embed (from Message)';
                         embedModal.style.display = 'block';
+                        console.log('[DEBUG] Modal display set to block, current display:', embedModal.style.display);
 
                         // Update preview
                         if (typeof updateEmbedPreview === 'function') {
@@ -6677,7 +6682,7 @@ window.leaveServer = leaveServer;
 
                         showNotification('Embed loaded! Edit and save to update.', 'success');
                     }
-                }, 100);
+                }, 300);
             } else {
                 showNotification('No embed found in this message', 'warning');
             }
