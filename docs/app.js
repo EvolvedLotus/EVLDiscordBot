@@ -7883,3 +7883,9 @@ window.saveEmbed = async function (event) {
 };
 
 console.log('✅ Embed Fixes v4.1 Applied');
+
+// ========== PREMIUM UPGRADE ACTION ==========
+window.upgradeToPremium = function () {
+    logCmsAction('upgrade_click');
+    window.open('https://tools.evolvedlotus.com/premium', '_blank');
+};

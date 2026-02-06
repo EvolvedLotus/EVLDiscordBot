@@ -384,8 +384,8 @@
             </div>
 
             <div class="actions">
-                <a href="https://whop.com/evolvedlotus" class="btn btn-primary" id="whop-btn">
-                    Visit Whop Store
+                <a href="https://tools.evolvedlotus.com/premium" class="btn btn-primary" id="whop-btn" target="_blank">
+                    Get Premium
                 </a>
                 <a href="./index.html" class="btn btn-outline">
                     Back to Dashboard
@@ -401,8 +401,8 @@
         const whopBtn = document.getElementById('whop-btn');
 
         if (guildId && whopBtn) {
-            // Updated to use the general store URL with metadata as requested (not a specific product)
-            whopBtn.href = `https://whop.com/evolvedlotus?d2c=true&metadata[guild_id]=${guildId}`;
+            // Updated to use the premium page
+            whopBtn.href = `https://tools.evolvedlotus.com/premium`;
             whopBtn.innerHTML = "Get Premium for your Server";
         }
     </script>
