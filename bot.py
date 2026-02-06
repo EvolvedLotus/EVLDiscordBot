@@ -219,6 +219,12 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load vote cog: {e}")
 
+        try:
+            await bot.load_extension('cogs.premium_sync')
+            logger.info("✓ Premium Sync cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load premium sync cog: {e}")
+
 
         # Register persistent views BEFORE on_ready to handle button interactions after bot restarts
         logger.info("Registering persistent views...")

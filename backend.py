@@ -548,7 +548,7 @@ def get_ad_stats():
             'total_ads': len(ads),
             'total_impressions': 1240, # Placeholder until analytics table is ready
             'total_clicks': 86,       # Placeholder until analytics table is ready
-            'ctr': 6.9                # Placeholder until analytics table is ready
+                'ctr': 6.9                # Placeholder until analytics table is ready
         })
     except Exception as e:
         return safe_error_response(e)
@@ -3148,7 +3148,4 @@ def run_backend():
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
 
 # ========== STARTUP ==========
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    logger.info(f"Starting Flask on 0.0.0.0:{port}")
     app.run(host='0.0.0.0', port=port, debug=False)
