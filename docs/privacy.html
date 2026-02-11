@@ -7,14 +7,22 @@
     <title>Privacy Policy - EVL Discord Bot</title>
     <link rel="stylesheet" href="./styles.css">
     <style>
-        body { overflow-y: auto; }
-        .docs-container { min-height: 100vh; background-color: var(--bg-primary); }
+        body {
+            overflow-y: auto;
+        }
+
+        .docs-container {
+            min-height: 100vh;
+            background-color: var(--bg-primary);
+        }
+
         .docs-header {
             background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
             border-bottom: 1px solid var(--border-primary);
             padding: 40px 20px;
             text-align: center;
         }
+
         .docs-header h1 {
             font-size: 2.5rem;
             margin-bottom: 12px;
@@ -23,12 +31,39 @@
             -webkit-text-fill-color: transparent;
             background-clip: text;
         }
-        .docs-content { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
-        .docs-section { margin-bottom: 40px; }
-        h2 { border-bottom: 2px solid var(--discord-blurple); padding-bottom: 10px; margin-bottom: 20px; }
-        h3 { color: var(--text-primary); margin-top: 25px; margin-bottom: 10px; }
-        p, li { color: var(--text-secondary); line-height: 1.6; margin-bottom: 10px; }
-        ul { padding-left: 20px; }
+
+        .docs-content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .docs-section {
+            margin-bottom: 40px;
+        }
+
+        h2 {
+            border-bottom: 2px solid var(--discord-blurple);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            color: var(--text-primary);
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+
+        p,
+        li {
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
     </style>
 </head>
 
@@ -45,12 +80,17 @@
         <div class="docs-content">
             <section class="docs-section">
                 <h2>1. Data Collection</h2>
-                <p>We collect the minimum amount of data required to operate the EvolvedLotus (EVL) Bot. This includes:</p>
+                <p>We collect the minimum amount of data required to operate the EvolvedLotus (EVL) Bot. This includes:
+                </p>
                 <ul>
-                    <li><strong>Discord Information:</strong> User ID, Username, Avatar, and Guild membership details provided by the Discord API.</li>
-                    <li><strong>Economy Data:</strong> Virtual currency balances, transaction history, and inventory items.</li>
-                    <li><strong>Usage Data:</strong> Command usage logs to prevent abuse and improve service stability.</li>
-                    <li><strong>Ad Interaction Data:</strong> Limited metadata (IP hash, User Agent) when you interact with ads for fraud prevention purposes.</li>
+                    <li><strong>Discord Information:</strong> User ID, Username, Avatar, and Guild membership details
+                        provided by the Discord API.</li>
+                    <li><strong>Economy Data:</strong> Virtual currency balances, transaction history, and inventory
+                        items.</li>
+                    <li><strong>Usage Data:</strong> Command usage logs to prevent abuse and improve service stability.
+                    </li>
+                    <li><strong>Ad Interaction Data:</strong> Limited metadata (IP hash, User Agent) when you interact
+                        with ads for fraud prevention purposes.</li>
                 </ul>
             </section>
 
@@ -70,23 +110,28 @@
                 <ul>
                     <li><strong>Railway:</strong> Hosting provider for the application and database.</li>
                     <li><strong>Supabase:</strong> Database services for storing persistent data.</li>
-                    <li><strong>Monetag / EvolvedLotus Ads:</strong> Ad network partners for the optional ad-based economy.</li>
-                    <li><strong>Whop:</strong> Payment processor for premium subscriptions.</li>
-                    <li><strong>Google Gemini:</strong> AI processing for chat features (content is not stored by us).</li>
+                    <li><strong>Monetag / EvolvedLotus Ads:</strong> Ad network partners for the optional ad-based
+                        economy.</li>
+                    <li><strong>Stripe:</strong> Payment processor for premium subscriptions.</li>
+                    <li><strong>Google Gemini:</strong> AI processing for chat features (content is not stored by us).
+                    </li>
                 </ul>
             </section>
 
             <section class="docs-section">
                 <h2>4. Data Retention & Deletion</h2>
                 <p>We retain data for as long as you use the service. Automated logs are purged every 30 days.</p>
-                <p>You have the right to request deletion of your data. To do so, please join our Support Server and open a ticket, or use the <code>/data_request delete</code> command (if available).</p>
+                <p>You have the right to request deletion of your data. To do so, please join our Support Server and
+                    open a ticket, or use the <code>/data_request delete</code> command (if available).</p>
             </section>
 
             <section class="docs-section">
                 <h2>5. Contact Us</h2>
-                <p>If you have any questions about this Privacy Policy, please contact us via our official Discord Support Server.</p>
+                <p>If you have any questions about this Privacy Policy, please contact us via our official Discord
+                    Support Server.</p>
             </section>
         </div>
     </div>
 </body>
+
 </html>

@@ -187,7 +187,8 @@
                     <h2>📧 Embed Management</h2>
                     <div class="header-actions">
                         <button onclick="showCreateEmbedModal()" class="btn-success">➕ Create Embed</button>
-                        <button id="edit-by-message-btn" class="btn-secondary">✏️ Edit by Link/ID</button>
+                        <button id="edit-by-message-btn" class="btn-secondary"
+                            onclick="showEditEmbedByMessageModal()">✏️ Edit by Link/ID</button>
                         <button onclick="loadEmbeds()" class="btn-primary">🔄 Refresh</button>
                     </div>
                 </div>
@@ -717,7 +718,8 @@
                         <label for="tier-select">Select Tier</label>
                         <select id="tier-select" class="form-control">
                             <option value="free">Free</option>
-                            <option value="premium">Premium</option>
+                            <option value="supporter">Supporter</option>
+                            <option value="growth_insider">Growth Insider</option>
                         </select>
                     </div>
 

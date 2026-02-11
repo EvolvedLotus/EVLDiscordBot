@@ -5435,7 +5435,7 @@ async function loadServerManagement() {
 
         enhancedServers.forEach(server => {
             const serverName = escapeHtml(server.name);
-            const tierBadge = server.tier === 'premium' ? '🏆 Premium' : '🆓 Free';
+            const tierBadge = server.tier === 'growth_insider' ? '🏆 Growth Insider' : server.tier === 'supporter' ? '⭐ Supporter' : '🆓 Free';
 
             html += `
                 <div class="server-item" data-server-id="${server.id}">
@@ -5497,10 +5497,10 @@ async function loadServerManagement() {
 async function updateServerTier(serverId, serverName, currentTier) {
     logCmsAction('click_edit_tier', { server_id: serverId, server_name: serverName, current_tier: currentTier });
 
-    const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
+    const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free', 'supporter', or 'growth_insider':`, currentTier);
 
-    if (!newTier || (newTier !== 'free' && newTier !== 'premium')) {
-        if (newTier) alert("Invalid tier. Please enter 'free' or 'premium'.");
+    if (!newTier || !['free', 'supporter', 'growth_insider'].includes(newTier)) {
+        if (newTier) alert("Invalid tier. Please enter 'free', 'supporter', or 'growth_insider'.");
         logCmsAction('update_tier_cancelled', { server_id: serverId, input: newTier });
         return;
     }
@@ -6821,7 +6821,7 @@ async function loadChannelSchedules() {
                 <div class="premium-upgrade-prompt" style="text-align: center; padding: 30px;">
                     <h4>🔒 Premium Feature</h4>
                     <p style="color: var(--text-muted);">Scheduled channel locking is available exclusively for Premium subscribers.</p>
-                    <a href="${data.upgrade_url || 'https://whop.com/evl-task-bot/'}" target="_blank" class="btn-primary" style="display: inline-block; margin-top: 15px;">
+                    <a href="${data.upgrade_url || 'https://tools.evolvedlotus.com/premium'}" target="_blank" class="btn-primary" style="display: inline-block; margin-top: 15px;">
                         ✨ Upgrade to Premium
                     </a>
                 </div>
@@ -7260,7 +7260,7 @@ window.loadConfigTab = async function () {
         if (response.ok) {
             const config = await response.json();
             const isSuperAdmin = window.currentUser && (window.currentUser.role === 'superadmin' || window.currentUser.is_superadmin === true);
-            const isPremium = config.subscription_tier === 'premium' || isSuperAdmin;
+            const isPremium = config.subscription_tier === 'growth_insider' || config.subscription_tier === 'premium' || isSuperAdmin;
             showChannelSchedulesSection(isPremium);
 
             if (isPremium) {
@@ -7506,8 +7506,8 @@ window.updateServerTier = function (serverId, serverName, currentTier) {
     if (!modal) {
         console.error('Server tier modal not found in DOM');
         // Fallback to prompt if modal missing
-        const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free' or 'premium':`, currentTier);
-        if (!newTier || (newTier !== 'free' && newTier !== 'premium')) return;
+        const newTier = prompt(`Update Tier for "${serverName}"\nEnter 'free', 'supporter', or 'growth_insider':`, currentTier);
+        if (!newTier || !['free', 'supporter', 'growth_insider'].includes(newTier)) return;
         if (newTier === currentTier) return;
         window.saveServerTierDirect(serverId, serverName, newTier);
         return;

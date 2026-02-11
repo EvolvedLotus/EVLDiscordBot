@@ -124,7 +124,7 @@ class PremiumSync(commands.Cog):
                 data = response.data[0]
                 if data.get('is_premium') and data.get('premium_tier') == 'growth_insider':
                     is_premium = True
-                    tier = 'premium'
+                    tier = 'growth_insider'
 
             # 2. Find Guilds Owned by User
             # We need to query our LOCAL database (bot db) for guilds owned by this user
@@ -149,20 +149,20 @@ class PremiumSync(commands.Cog):
                     if res.data:
                         current_tier = res.data[0].get('subscription_tier', 'free')
 
-                    if is_premium and current_tier != 'premium':
+                    if is_premium and current_tier not in ('growth_insider', 'premium'):
                         # Upgrade
-                        self.bot.data_manager.supabase.table('guilds').update({'subscription_tier': 'premium'}).eq('guild_id', str(guild.id)).execute()
-                        logger.info(f"💎 Upgraded guild {guild.name} (Owner: {user_id}) to Premium")
+                        self.bot.data_manager.supabase.table('guilds').update({'subscription_tier': 'growth_insider'}).eq('guild_id', str(guild.id)).execute()
+                        logger.info(f"💎 Upgraded guild {guild.name} (Owner: {user_id}) to Growth Insider")
                         
                         # Optional: Send DM
                         try:
                             owner = guild.owner
                             if owner:
-                                await owner.send(f"🌟 Your server **{guild.name}** has been upgraded to **Premium** via your Growth Insider subscription!")
+                                await owner.send(f"🌟 Your server **{guild.name}** has been upgraded to **Growth Insider** via your subscription!")
                         except:
                             pass
 
-                    elif not is_premium and current_tier == 'premium':
+                    elif not is_premium and current_tier in ('growth_insider', 'premium'):
                         # Downgrade (expired)
                         self.bot.data_manager.supabase.table('guilds').update({'subscription_tier': 'free'}).eq('guild_id', str(guild.id)).execute()
                         logger.info(f"📉 Downgraded guild {guild.name} (Owner: {user_id}) to Free")

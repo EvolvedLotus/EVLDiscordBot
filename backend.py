@@ -755,132 +755,109 @@ def create_ad_session():
         logger.error(f"Error creating ad session: {e}")
         return safe_error_response(e)
 
-@app.route('/api/webhooks/whop', methods=['POST'])
+@app.route('/api/webhooks/stripe', methods=['POST'])
 @csrf.exempt
-def whop_webhook():
+def stripe_webhook():
     """
-    Handle incoming webhooks from Whop.
-    Used to upgrade servers to premium when a subscription is purchased.
+    Handle incoming webhooks from Stripe.
+    Used to upgrade/downgrade servers based on subscription status.
     """
     try:
-        # Verify Webhook Signature
-        webhook_secret = os.getenv('WHOP_WEBHOOK_SECRET')
-        if webhook_secret:
-            signature = request.headers.get('whop-signature')
-            if not signature:
-                logger.warning("Received Whop webhook without signature")
-                return jsonify({'error': 'Missing signature'}), 401
-                
-            # Compute expected signature
-            # Whop uses the raw request body for the signature
-            # Structure: key=value, separated by comma. usually t=timestamp,s=signature
-            # Or straight up signature? Whop docs say "header includes whop-signature".
-            # Let's assume standard HMAC SHA256 of the body for now.
-            try:
-                # Verify signature logic
-                # For now, we will log if it fails but not block, to avoid breaking if the format is slightly different 
-                # until confirmed. 
-                # But strictly, we should block.
-                # Let's try simple comparison first.
-                computed_sig = hmac.new(
-                    key=webhook_secret.encode(), 
-                    msg=request.get_data(), 
-                    digestmod=hashlib.sha256
-                ).hexdigest()
-                
-                # Check if the header matches directly or contains the signature
-                if not hmac.compare_digest(signature, computed_sig):
-                     logger.warning(f"Invalid Whop signature. Received: {signature}, Computed: {computed_sig}")
-                     # return jsonify({'error': 'Invalid signature'}), 401 # Uncomment to enforce after confirming production format
-            except Exception as sig_error:
-                logger.error(f"Error verifying signature: {sig_error}")
+        import stripe as stripe_lib
+        stripe_lib.api_key = os.getenv('STRIPE_SECRET_KEY')
+        STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+        
+        payload = request.get_data()
+        sig_header = request.headers.get('Stripe-Signature')
 
-        payload = request.json
-        if not payload:
-            return jsonify({'error': 'No payload received'}), 400
+        if not sig_header:
+            logger.warning("Received Stripe webhook without signature")
+            return jsonify({'error': 'Missing signature'}), 401
+
+        try:
+            event = stripe_lib.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        except stripe_lib.error.SignatureVerificationError as e:
+            logger.error(f"Stripe signature verification failed: {e}")
+            return jsonify({'error': 'Invalid signature'}), 400
+        except Exception as e:
+            logger.error(f"Stripe webhook construction error: {e}")
+            return jsonify({'error': str(e)}), 400
+
+        event_type = event['type']
+        data = event['data']['object']
+        
+        logger.info(f"[Stripe Webhook] Received: {event_type}")
+
+        # CHECKOUT COMPLETED
+        if event_type == 'checkout.session.completed':
+            metadata = data.get('metadata', {})
+            tier = metadata.get('tier', 'supporter')
+            guild_id = metadata.get('guild_id')
+            user_id = metadata.get('firebase_uid') or metadata.get('discord_user_id')
             
-        logger.info(f"Received Whop webhook: {json.dumps(payload)}")
-        
-        # Extract guild_id from metadata
-        # Whop payload structure for 'payment.succeeded' or 'membership.went_valid' usually contains
-        # data -> metadata -> guild_id (if we sent it during checkout)
-        
-        guild_id = None
-        action = payload.get('action', 'unknown')
-        
-        # Try different paths to find metadata
-        metadata = {}
-        if 'data' in payload and isinstance(payload['data'], dict):
-            metadata = payload['data'].get('metadata', {})
-        elif 'metadata' in payload:
-            metadata = payload['metadata']
+            if tier == 'growth_insider' and guild_id:
+                logger.info(f"💰 Growth Insider activated for Guild: {guild_id}")
+                try:
+                    guild_result = data_manager.admin_client.table('guilds').select('guild_id').eq('guild_id', str(guild_id)).execute()
+                    
+                    if guild_result.data and len(guild_result.data) > 0:
+                        data_manager.admin_client.table('guilds').update({
+                            'subscription_tier': 'growth_insider',
+                            'last_synced': datetime.now(timezone.utc).isoformat()
+                        }).eq('guild_id', str(guild_id)).execute()
+                        
+                        logger.info(f"✅ Successfully upgraded guild {guild_id} to Growth Insider via Stripe")
+                        
+                        try:
+                            sse_manager.broadcast_event('guild.upgraded', {
+                                'guild_id': str(guild_id),
+                                'tier': 'growth_insider'
+                            })
+                        except Exception as sse_error:
+                            logger.warning(f"Failed to broadcast upgrade event: {sse_error}")
+                    else:
+                        logger.warning(f"Guild {guild_id} not found in database for Stripe upgrade")
+                except Exception as db_error:
+                    logger.error(f"Database error upgrading guild: {db_error}")
+
+        # SUBSCRIPTION CREATED / UPDATED
+        elif event_type in ['customer.subscription.created', 'customer.subscription.updated']:
+            metadata = data.get('metadata', {})
+            tier = metadata.get('tier')
+            guild_id = metadata.get('guild_id')
+            status = data.get('status')
+            is_active = status in ['active', 'trialing']
             
-        guild_id = metadata.get('guild_id')
-        
-        if not guild_id:
-            logger.info("No guild_id found in Whop webhook metadata. Ignoring.")
-            return jsonify({'success': True, 'message': 'No guild_id found'}), 200
-            
-        logger.info(f"Processing Whop webhook for guild {guild_id}, action: {action}")
-        
-        # We process relevant actions (e.g., payment succeeded, membership valid)
-        # For simplicity, if we get a webhook with guild_id and it's a valid action, we upgrade.
-        # Ideally check for "membership.went_valid" or "payment.succeeded"
-        
-        # Updated to include both SDK (dot) and Dashboard (underscore) event formats
-        valid_actions = [
-            'payment.succeeded', 'membership.went_valid', 'membership.created', 
-            'payment_succeeded', 'membership_activated'
-        ]
-        
-        if action in valid_actions or action == 'unknown':
-            # Check if guild exists
-            try:
-                guild_result = data_manager.admin_client.table('guilds').select('guild_id').eq('guild_id', str(guild_id)).execute()
-                
-                if guild_result.data and len(guild_result.data) > 0:
-                    # Upgrade guild to premium
+            if tier == 'growth_insider' and guild_id:
+                new_tier = 'growth_insider' if is_active else 'free'
+                try:
                     data_manager.admin_client.table('guilds').update({
-                        'subscription_tier': 'premium',
+                        'subscription_tier': new_tier,
                         'last_synced': datetime.now(timezone.utc).isoformat()
                     }).eq('guild_id', str(guild_id)).execute()
-                    
-                    logger.info(f"✅ Successfully upgraded guild {guild_id} to PREMIUM via Whop webhook")
-                    
-                    # Try to broadcast event to bot/CMS
-                    try:
-                        sse_manager.broadcast_event('guild.upgraded', {
-                            'guild_id': str(guild_id),
-                            'tier': 'premium'
-                        })
-                    except Exception as sse_error:
-                        logger.warning(f"Failed to broadcast upgrade event: {sse_error}")
-                        
-                    return jsonify({'success': True, 'message': f'Guild {guild_id} upgraded to premium'}), 200
-                else:
-                    logger.warning(f"Guild {guild_id} not found in database")
-                    return jsonify({'error': 'Guild not found'}), 404
-            except Exception as db_error:
-                logger.error(f"Database error upgrading guild: {db_error}")
-                return jsonify({'error': 'Database error'}), 500
-                
-        # Handle cancellation/expiration if needed
-        # Added membership_deactivated per user list
-        elif action in ['membership.went_invalid', 'membership.cancelled', 'subscription.canceled', 'membership_deactivated']:
-            # Downgrade logic could go here
-            logger.info(f"Received cancellation for guild {guild_id}, action: {action}")
-             # Upgrade guild to free
-            data_manager.admin_client.table('guilds').update({
-                'subscription_tier': 'free',
-                'last_synced': datetime.now(timezone.utc).isoformat()
-            }).eq('guild_id', str(guild_id)).execute()
-            
-            return jsonify({'success': True, 'message': 'Guild downgraded'}), 200
+                    logger.info(f"{'✅ Upgraded' if is_active else '📉 Downgraded'} guild {guild_id} to {new_tier} via Stripe subscription update")
+                except Exception as db_error:
+                    logger.error(f"Database error updating guild subscription: {db_error}")
 
-        return jsonify({'success': True, 'message': f'Action {action} processed'}), 200
+        # SUBSCRIPTION CANCELLED / EXPIRED
+        elif event_type == 'customer.subscription.deleted':
+            metadata = data.get('metadata', {})
+            guild_id = metadata.get('guild_id')
+            
+            if guild_id:
+                logger.info(f"❌ Premium cancelled for Guild: {guild_id}")
+                try:
+                    data_manager.admin_client.table('guilds').update({
+                        'subscription_tier': 'free',
+                        'last_synced': datetime.now(timezone.utc).isoformat()
+                    }).eq('guild_id', str(guild_id)).execute()
+                except Exception as db_error:
+                    logger.error(f"Database error downgrading guild: {db_error}")
+
+        return jsonify({'success': True}), 200
 
     except Exception as e:
-        logger.error(f"Whop webhook processing error: {e}")
+        logger.error(f"Stripe webhook processing error: {e}")
         return safe_error_response(e)
 
 
@@ -2755,16 +2732,16 @@ def leave_server(server_id):
 # ========== CHANNEL LOCK SCHEDULES (Premium Feature) ==========
 
 def require_premium(f):
-    """Decorator to require premium subscription for an endpoint"""
+    """Decorator to require premium subscription (Growth Insider) for an endpoint"""
     @wraps(f)
     def decorated_function(server_id, *args, **kwargs):
         try:
             config = data_manager.load_guild_data(server_id, 'config')
             tier = config.get('subscription_tier', 'free')
-            if tier != 'premium':
+            if not TierManager.is_premium(tier):
                 return jsonify({
-                    'error': 'This feature requires a Premium subscription',
-                    'upgrade_url': 'https://whop.com/evl-task-bot/'
+                    'error': 'This feature requires a Growth Insider subscription',
+                    'upgrade_url': 'https://tools.evolvedlotus.com/premium'
                 }), 403
             return f(server_id, *args, **kwargs)
         except Exception as e:

@@ -8,10 +8,18 @@ class TierManager:
             "max_shop_items": 10,
             "show_ads": True,
             "can_use_global": False,
-            "channel_schedules": False  # Premium feature
+            "channel_schedules": False
         },
-        "premium": {
-            "name": "Premium Tier",
+        "supporter": {
+            "name": "Supporter",
+            "max_tasks": 10,
+            "max_shop_items": 20,
+            "show_ads": True,
+            "can_use_global": False,
+            "channel_schedules": False
+        },
+        "growth_insider": {
+            "name": "Growth Insider",
             "max_tasks": float('inf'),
             "max_shop_items": float('inf'),
             "show_ads": False,
@@ -19,6 +27,9 @@ class TierManager:
             "channel_schedules": True  # Premium feature - scheduled channel locks
         }
     }
+
+    # Legacy alias for backward compatibility
+    TIERS["premium"] = TIERS["growth_insider"]
 
     @staticmethod
     def get_limits(tier: str) -> Dict[str, Any]:
@@ -32,4 +43,10 @@ class TierManager:
 
     @staticmethod
     def is_premium(tier: str) -> bool:
-        return tier == "premium"
+        """Check if a tier has full premium (Growth Insider) access"""
+        return tier in ("growth_insider", "premium")
+
+    @staticmethod
+    def is_paid(tier: str) -> bool:
+        """Check if a tier is any paid tier (Supporter or Growth Insider)"""
+        return tier in ("supporter", "growth_insider", "premium")

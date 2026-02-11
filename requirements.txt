@@ -45,3 +45,6 @@ pytest-asyncio>=0.21.0
 # Security
 Flask-WTF>=1.2.1
 Flask-Talisman>=1.1.0
+
+# Payments
+stripe>=7.0.0
