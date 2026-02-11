@@ -131,6 +131,40 @@ async function updateBotStatus() {
 }
 
 
+// ========== SIDEBAR BOT STATUS LIVE CHECK ==========
+let _sidebarStatusInterval = null;
+
+async function updateSidebarBotStatus() {
+    const dot = document.getElementById('sidebar-status-dot');
+    const text = document.getElementById('sidebar-status-text');
+    if (!dot || !text) return;
+
+    try {
+        const res = await fetch(apiUrl('/api/status'), { credentials: 'include' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        if (data.bot_status === 'online') {
+            dot.classList.remove('offline');
+            text.textContent = `Online · ${data.uptime}`;
+        } else {
+            dot.classList.add('offline');
+            text.textContent = 'Offline';
+        }
+    } catch (e) {
+        dot.classList.add('offline');
+        text.textContent = 'Unreachable';
+    }
+}
+
+// Start polling on load, refresh every 60s
+function startSidebarStatusPolling() {
+    updateSidebarBotStatus(); // immediate check
+    if (_sidebarStatusInterval) clearInterval(_sidebarStatusInterval);
+    _sidebarStatusInterval = setInterval(updateSidebarBotStatus, 60000);
+}
+
+
 // Helper function to build API URLs
 function apiUrl(endpoint) {
     return `${API_BASE_URL}${endpoint}`;
@@ -4115,6 +4149,7 @@ function showLoginScreen() {
 function showDashboard() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('main-dashboard').style.display = 'flex';
+    startSidebarStatusPolling();
 }
 
 // Handle login
