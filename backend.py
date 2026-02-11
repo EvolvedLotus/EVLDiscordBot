@@ -886,6 +886,7 @@ def whop_webhook():
 
 
 @app.route('/api/auth/login', methods=['POST'])
+@csrf.exempt
 @limiter.limit("5 per minute")
 def login():
     """Login with username/password"""
@@ -954,6 +955,7 @@ def login():
         return jsonify({'error': 'An internal server error occurred'}), 500
 
 @app.route('/api/auth/logout', methods=['POST'])
+@csrf.exempt
 def logout():
     session.clear()
     return jsonify({'success': True}), 200
@@ -996,12 +998,14 @@ def get_me():
 
 
 @app.route('/api/login', methods=['POST'])
+@csrf.exempt
 @limiter.limit("5 per minute")
 def login_alias():
     """Alias for /api/auth/login for CMS compatibility"""
     return login()
 
 @app.route('/api/logout', methods=['POST'])
+@csrf.exempt
 def logout_alias():
     """Alias for /api/auth/logout for CMS compatibility"""
     return logout()
@@ -1194,6 +1198,7 @@ def get_server_config(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/config', methods=['PUT'])
+@csrf.exempt
 @require_guild_access
 def update_server_config(server_id):
     try:
@@ -1307,6 +1312,7 @@ def get_user(server_id, user_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/users/<user_id>/balance', methods=['PUT'])
+@csrf.exempt
 @require_guild_access
 def update_balance(server_id, user_id):
     try:
@@ -1342,6 +1348,7 @@ def get_user_roles(server_id, user_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/users/<user_id>/roles', methods=['PUT'])
+@csrf.exempt
 @require_guild_access
 def update_user_roles(server_id, user_id):
     """Update roles for a specific user in a guild"""
@@ -1389,6 +1396,7 @@ def get_tasks(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/tasks', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def create_task(server_id):
     try:
@@ -1435,6 +1443,7 @@ def create_task(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/tasks/<task_id>', methods=['PUT'])
+@csrf.exempt
 @require_guild_access
 def update_task(server_id, task_id):
     try:
@@ -1460,6 +1469,7 @@ def update_task(server_id, task_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/tasks/<task_id>', methods=['DELETE'])
+@csrf.exempt
 @require_guild_access
 def delete_task(server_id, task_id):
     try:
@@ -1494,6 +1504,7 @@ def get_shop(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/shop', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def create_shop_item(server_id):
     try:
@@ -1517,6 +1528,7 @@ def create_shop_item(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/shop/<item_id>', methods=['PUT'])
+@csrf.exempt
 @require_guild_access
 def update_shop_item(server_id, item_id):
     try:
@@ -1527,6 +1539,7 @@ def update_shop_item(server_id, item_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/shop/<item_id>', methods=['DELETE'])
+@csrf.exempt
 @require_guild_access
 def delete_shop_item(server_id, item_id):
     try:
@@ -1562,6 +1575,7 @@ def get_announcements(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/announcements', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def create_announcement(server_id):
     try:
@@ -1696,6 +1710,7 @@ def get_announcement(server_id, announcement_id):
         return safe_error_response(e)
 
 @app.route('/api/\u003cserver_id\u003e/announcements/\u003cannouncement_id\u003e', methods=['PUT'])
+@csrf.exempt
 @require_guild_access
 def update_announcement(server_id, announcement_id):
     try:
@@ -1726,6 +1741,7 @@ def update_announcement(server_id, announcement_id):
         return safe_error_response(e)
 
 @app.route('/api/\u003cserver_id\u003e/announcements/\u003cannouncement_id\u003e', methods=['DELETE'])
+@csrf.exempt
 @require_guild_access
 def delete_announcement(server_id, announcement_id):
     try:
@@ -2014,6 +2030,7 @@ def get_logs(server_id):
 
 
 @app.route('/api/<server_id>/bot_status', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def update_bot_status(server_id):
     """Update global bot status (Master Login Only)"""
@@ -2215,6 +2232,7 @@ def edit_discord_message(server_id, channel_id, message_id):
 
 # ========== MODERATION ENDPOINTS ==========
 @app.route('/api/<server_id>/admin/cache/clear', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def clear_cache(server_id):
     """Clear all caches for the guild"""
@@ -2232,6 +2250,7 @@ def clear_cache(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/admin/sync', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def sync_data(server_id):
     """Sync guild data with Discord"""
@@ -2255,6 +2274,7 @@ def sync_data(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/admin/validate', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def validate_integrity(server_id):
     """Validate guild data integrity"""
@@ -2380,6 +2400,7 @@ def get_scheduled_jobs(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/admin/permissions/channels', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def configure_channel_permissions(server_id):
     """Configure bot permissions for specific channels"""
@@ -2551,6 +2572,7 @@ def stream():
     return response
 
 @app.route('/api/stream/test', methods=['POST'])
+@csrf.exempt
 def test_stream():
     """Test SSE functionality"""
     if not session.get('authenticated'):
@@ -2570,6 +2592,7 @@ def test_stream():
 
 # ========== AD CLAIM SYSTEM (PERMANENT GLOBAL TASK) ==========
 @app.route('/api/<server_id>/ad-claim/create-session', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 def create_guild_ad_session(server_id):
     """Create a new ad viewing session for a user"""
@@ -2673,6 +2696,7 @@ def serve_favicon():
 
 # ========== ADMIN SERVER MANAGEMENT ==========
 @app.route('/api/admin/servers/<server_id>/leave', methods=['POST'])
+@csrf.exempt
 @require_auth
 def leave_server(server_id):
     """Allow super admins to make the bot leave a server"""
@@ -2760,6 +2784,7 @@ def get_channel_schedules(server_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/channel-schedules', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 @require_premium
 def create_channel_schedule(server_id):
@@ -2844,6 +2869,7 @@ def get_channel_schedule(server_id, schedule_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['PUT'])
+@csrf.exempt
 @require_guild_access
 @require_premium
 def update_channel_schedule(server_id, schedule_id):
@@ -2878,6 +2904,7 @@ def update_channel_schedule(server_id, schedule_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['DELETE'])
+@csrf.exempt
 @require_guild_access
 @require_premium
 def delete_channel_schedule(server_id, schedule_id):
@@ -2909,6 +2936,7 @@ def delete_channel_schedule(server_id, schedule_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/channel-schedules/<schedule_id>/toggle', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 @require_premium
 def toggle_channel_schedule(server_id, schedule_id):
@@ -2941,6 +2969,7 @@ def toggle_channel_schedule(server_id, schedule_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/channel-schedules/<schedule_id>/lock', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 @require_premium
 def manual_lock_channel(server_id, schedule_id):
@@ -2968,6 +2997,7 @@ def manual_lock_channel(server_id, schedule_id):
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/channel-schedules/<schedule_id>/unlock', methods=['POST'])
+@csrf.exempt
 @require_guild_access
 @require_premium
 def manual_unlock_channel(server_id, schedule_id):
