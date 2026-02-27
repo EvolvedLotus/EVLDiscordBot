@@ -97,8 +97,7 @@ class AnnouncementManager:
                     "mentions": mentions or {"everyone": False, "roles": [], "users": []},
                     "embed": {
                         "color": embed_color,
-                        "thumbnail": thumbnail,
-                        "footer": f"Posted by {author_name}"
+                        "thumbnail": thumbnail
                     }
                 }
 
@@ -388,8 +387,6 @@ class AnnouncementManager:
         if announcement["embed"].get("thumbnail"):
             embed.set_thumbnail(url=announcement["embed"]["thumbnail"])
 
-        embed.set_footer(text=announcement["embed"]["footer"])
-
         return embed
 
     def _build_mention_string(self, guild: discord.Guild, mentions: Dict[str, Any]) -> str:
@@ -424,8 +421,6 @@ class AnnouncementManager:
 
         if announcement_data["embed"].get("thumbnail"):
             embed.set_thumbnail(url=announcement_data["embed"]["thumbnail"])
-
-        embed.set_footer(text=announcement_data["embed"]["footer"])
         return embed
 
     async def _post_announcement(self, guild, channel_id: str, embed_data: discord.Embed) -> str:

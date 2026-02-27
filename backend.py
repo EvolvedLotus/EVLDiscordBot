@@ -241,7 +241,7 @@ def initialize_managers():
     global data_manager, cache_manager, audit_manager, auth_manager, discord_oauth_manager
     global transaction_manager, task_manager, shop_manager, announcement_manager
     global embed_builder, embed_manager, sync_manager, ad_claim_manager, channel_lock_manager
-    global sse_manager, evolved_lotus_api, AuditEventType  # Added sse_manager
+    global sse_manager, evolved_lotus_api, AuditEventType, TierManager
     
     try:
         logger.info("🔄 Initializing core managers...")
