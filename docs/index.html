@@ -315,24 +315,9 @@
                     <div class="loading">Loading logs...</div>
                 </div>
             </div>
-            <!-- EvolvedLotus Ad Banner (Redesigned) -->
-            <div id="ad-container" class="evl-ad-banner-dc" style="display: none;">
-                <!-- Disclosure Header -->
-                <div class="evl-ad-dc-header">
-                    <div class="evl-ad-dc-disclosure">
-                        <span class="evl-ad-dc-icon">E</span>
-                        EvolvedLotus Ad
-                    </div>
-                    <button class="evl-ad-dc-dismiss" onclick="this.closest('.evl-ad-banner-dc').style.display='none'" aria-label="Dismiss">×</button>
-                </div>
-                <!-- Slide Container -->
-                <div id="evl-ad-dc-slides" class="evl-ad-dc-slides"></div>
-                <!-- Footer -->
-                <div class="evl-ad-dc-footer">
-                    <span class="evl-ad-dc-brand">evolvedlotus.com</span>
-                    <div id="evl-ad-dc-dots" class="evl-ad-dc-dots"></div>
-                </div>
-                <div id="evl-ad-dc-progress" class="evl-ad-dc-progress"></div>
+            <!-- EvolvedLotus Ad — Content Tile -->
+            <div id="ad-container" class="evl-tile-container" style="display: none;">
+                <div id="evl-tile-wrap"></div>
             </div>
             <!-- Dashboard Footer -->
             <footer class="site-footer site-footer--dashboard">
@@ -541,90 +526,110 @@
         </div>
     </div>
 
-    <!-- EVL Ad Banner Init Script -->
+    <!-- EVL Ad — Content Tile Init -->
     <script>
     (function() {
         const EVL_API = 'https://cooperative-renewal-production-41ce.up.railway.app';
-        const ROTATION_MS = 8000;
-        const BUILT_IN = [
-            { id:'builtin_discord_bot', type:'discord', title:'EVL Discord Bot', headline:'Free Economy & Task Bot for Discord', description:'Add a full economy system, shops, tasks, and rewards to any Discord server — completely free.', cta:'Add to Discord', url:'https://evolvedlotus.github.io/EVLDiscordBot/', image:'https://evolvedlotus.github.io/EVLDiscordBot/favicon.ico', color:'#5865F2' },
-            { id:'builtin_monetifygram', type:'monetifygram', title:'MonetifyGram', headline:'Monetize Your Telegram Channel', description:'Turn your Telegram audience into revenue with our all-in-one monetization platform.', cta:'Start Earning', url:'https://monetifygram.biz/', image:'https://monetifygram.biz/static/images/logo.png', color:'#3b82f6' },
-            { id:'builtin_tools', type:'tool', title:'EvolvedLotus Tools', headline:'AI-Powered Content Creation', description:'Boost your efficiency with smart AI tools built for creators and businesses.', cta:'Explore Tools', url:'https://tools.evolvedlotus.com/', image:'https://tools.evolvedlotus.com/twitterreplybot/favicon.ico', color:'#1DA1F2' }
+
+        const HOOKS = [
+            'Most creators get this wrong',
+            'This might be why it\'s not working',
+            'You\'re probably skipping this step',
+            'The part nobody talks about',
+            'Worth reading before your next post',
+            'This changes how you think about growth'
         ];
-        const LABELS = { tool:'Tool', blog:'Blog', rotating_blog:'Blog', discord:'Discord Bot', monetifygram:'MonetifyGram', static:'Product' };
-        const EMOJI = { tool:'🛠️', blog:'📝', rotating_blog:'📝', discord:'🤖', monetifygram:'💰', static:'✨' };
+        function genHook(t) { return HOOKS[(t||'').length % HOOKS.length]; }
+        function genHeadline(t) {
+            if (!t || t.length <= 50) return t || '';
+            const l = t.toLowerCase();
+            if (l.includes('youtube')) return 'Your YouTube strategy needs this update';
+            if (l.includes('tiktok')) return 'TikTok growth isn\'t what you think it is';
+            if (l.includes('caption')) return 'Your captions aren\'t the problem — this is';
+            if (l.includes('seo')) return 'SEO basics most people still get wrong';
+            if (l.includes('ai')) return 'How creators are actually using AI right now';
+            if (l.includes('grow')) return 'The growth lever most people ignore';
+            if (l.includes('monetiz')) return 'The monetization mistake you\'re probably making';
+            if (l.includes('content')) return 'This content approach changes everything';
+            return t.length > 55 ? t.slice(0, 52) + '...' : t;
+        }
 
-        function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+        // Discord dashboard context: prioritize monetifygram + tools
+        const BUILT_IN = [
+            { format:'utility', main:'Turn your Telegram channel into income', sub:'All-in-one monetization — no setup hassle', cta:'Start now', proof:'Built for creators', url:'https://monetifygram.biz/', color:'#3b82f6' },
+            { format:'insight', hook:'Spending hours on replies?', headline:'AI tools that actually save you time', action:'See tools', proof:'Used by content creators daily', url:'https://tools.evolvedlotus.com/', color:'#1DA1F2' },
+            { format:'insight', hook:'The part nobody talks about', headline:'This content approach changes everything', action:'Read this', proof:'Updated recently', url:'https://blog.evolvedlotus.com/', color:'#33bdef' }
+        ];
 
-        function slideHTML(ad){
-            const lbl=LABELS[ad.type]||'Product', em=EMOJI[ad.type]||'✨', c=ad.color||'#33bdef';
-            const img=ad.image?`<img src="${ad.image}" alt="${ad.title}" style="width:100%;height:100%;object-fit:cover">`:
-                `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px;background:linear-gradient(135deg,rgba(51,189,239,.1),rgba(99,102,241,.1))">${em}</div>`;
-            return `<div class="evl-dc-slide" style="opacity:0;transform:translateY(6px);position:absolute;top:0;left:0;right:0;pointer-events:none">
-                <div style="flex-shrink:0;width:72px;height:72px;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06)">${img}</div>
-                <div style="flex:1;min-width:0">
-                    <span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;border-radius:4px;margin-bottom:6px;background:rgba(255,255,255,.06);color:${c};border:1px solid rgba(255,255,255,.06)">${lbl}</span>
-                    <h4 style="margin:0 0 4px;font-size:15px;font-weight:600;color:rgba(255,255,255,.92);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ad.headline||ad.title}</h4>
-                    <p style="margin:0 0 10px;font-size:13px;color:rgba(255,255,255,.5);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${ad.description}</p>
-                    <span style="display:inline-flex;align-items:center;gap:4px;padding:6px 14px;background:${c};color:#fff;font-size:12px;font-weight:600;border-radius:6px">${ad.cta||'Learn More'} →</span>
-                </div></div>`;
+        function buildTile(ad) {
+            const c = ad.color || '#33bdef';
+            let inner = '';
+            if (ad.format === 'insight') {
+                inner = `<div style="font-size:11px;font-weight:500;color:rgba(255,255,255,.35);margin-bottom:6px;letter-spacing:.2px">${ad.hook}</div>
+                    <h4 style="margin:0 0 6px;font-size:14px;font-weight:600;color:rgba(255,255,255,.88);line-height:1.35">${ad.headline}</h4>
+                    <span style="font-size:12px;font-weight:500;color:${c};display:inline-flex;align-items:center;gap:4px">${ad.action||'Read this'} <span style="font-size:11px">→</span></span>`;
+            } else {
+                inner = `<h4 style="margin:0 0 4px;font-size:14px;font-weight:600;color:rgba(255,255,255,.88);line-height:1.35">${ad.main}</h4>
+                    <div style="font-size:12px;color:rgba(255,255,255,.4);margin-bottom:8px;line-height:1.4">${ad.sub}</div>
+                    <span style="font-size:11px;font-weight:600;color:${c};display:inline-flex;align-items:center;gap:4px">${ad.cta} <span style="font-size:11px">→</span></span>`;
+            }
+            return `<div class="evl-tile-dc" style="--evl-accent:${c}" data-url="${ad.url}" data-id="${ad.id||''}">
+                ${inner}
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.04)">
+                    <span style="font-size:10px;color:rgba(255,255,255,.2);font-weight:500;letter-spacing:.3px">EvolvedLotus Ad</span>
+                    ${ad.proof ? `<span style="font-size:10px;color:rgba(255,255,255,.2);font-style:italic">${ad.proof}</span>` : ''}
+                </div>
+            </div>`;
         }
 
         window.initEvlAdBanner = function() {
             const wrap = document.getElementById('ad-container');
-            if (!wrap) return;
-            const slidesEl = document.getElementById('evl-ad-dc-slides');
-            const dotsEl = document.getElementById('evl-ad-dc-dots');
-            const progEl = document.getElementById('evl-ad-dc-progress');
+            const tileWrap = document.getElementById('evl-tile-wrap');
+            if (!wrap || !tileWrap) return;
 
-            Promise.all([
-                fetch(`${EVL_API}/api/ad?client_id=discord-bot&include_blogs=true`).then(r=>r.json()).catch(()=>null),
-                fetch(`${EVL_API}/api/ad?client_id=discord-bot&include_blogs=true`).then(r=>r.json()).catch(()=>null)
-            ]).then(res => {
-                const api = res.filter(r=>r&&!r.error);
-                const seen = new Set(BUILT_IN.map(a=>a.id));
-                const all = [...BUILT_IN];
-                api.forEach(a=>{const k=a.id||a.url;if(!seen.has(k)){seen.add(k);all.push(a)}});
-                shuffle(all);
-
-                slidesEl.innerHTML = all.map(a=>slideHTML(a)).join('');
-                const slides = slidesEl.querySelectorAll('.evl-dc-slide');
-                dotsEl.innerHTML = all.map((_,i)=>`<span class="evl-dc-dot" data-i="${i}"></span>`).join('');
-                const dots = dotsEl.querySelectorAll('.evl-dc-dot');
-
-                let cur=0, timer, pTimer;
-                function show(idx){
-                    slides.forEach((s,i)=>{
-                        if(i===idx){s.style.opacity='1';s.style.transform='translateY(0)';s.style.position='relative';s.style.pointerEvents='auto'}
-                        else{s.style.opacity='0';s.style.transform='translateY(6px)';s.style.position='absolute';s.style.pointerEvents='none'}
-                    });
-                    dots.forEach((d,i)=>{
-                        d.style.width=i===idx?'18px':'6px';
-                        d.style.borderRadius=i===idx?'3px':'50%';
-                        d.style.background=i===idx?(all[idx].color||'#33bdef'):'rgba(255,255,255,.12)';
-                    });
-                    if(progEl) progEl.style.background=all[idx].color||'#33bdef';
-                    cur=idx;
-                }
-                function start(){
-                    clearTimeout(timer);clearInterval(pTimer);
-                    if(progEl) progEl.style.width='0%';
-                    const t0=Date.now();
-                    pTimer=setInterval(()=>{if(progEl) progEl.style.width=Math.min(((Date.now()-t0)/ROTATION_MS)*100,100)+'%'},50);
-                    timer=setTimeout(()=>{show((cur+1)%all.length);start()},ROTATION_MS);
-                }
-                dots.forEach(d=>d.addEventListener('click',e=>{e.stopPropagation();show(parseInt(d.dataset.i));start()}));
-                slidesEl.addEventListener('click',()=>{
-                    const ad=all[cur]; const u=typeof ad.id==='number'?`${EVL_API}/api/click/${ad.id}`:ad.url;
-                    window.open(u,'_blank');
+            // Try API first for a blog ad
+            fetch(`${EVL_API}/api/ad?client_id=discord-bot&include_blogs=true`)
+                .then(r => r.json())
+                .then(data => {
+                    let ad;
+                    if (data && !data.error && (data.type === 'rotating_blog' || data.type === 'blog') && Math.random() < 0.4) {
+                        ad = {
+                            format: 'insight',
+                            hook: genHook(data.title || data.headline),
+                            headline: genHeadline(data.headline || data.title),
+                            action: 'Read this',
+                            proof: 'Updated recently',
+                            url: data.url,
+                            color: data.color || '#33bdef',
+                            id: data.id
+                        };
+                    } else {
+                        ad = BUILT_IN[Math.floor(Math.random() * BUILT_IN.length)];
+                    }
+                    tileWrap.innerHTML = buildTile(ad);
+                    attachTileEvents(tileWrap, wrap);
+                    wrap.style.display = 'block';
+                })
+                .catch(() => {
+                    const ad = BUILT_IN[Math.floor(Math.random() * BUILT_IN.length)];
+                    tileWrap.innerHTML = buildTile(ad);
+                    attachTileEvents(tileWrap, wrap);
+                    wrap.style.display = 'block';
                 });
-                show(0);
-                if(all.length>1) start();
-                wrap.style.display='block';
-            });
         };
-        // Auto-init if DOM ready
-        if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', window.initEvlAdBanner);
+
+        function attachTileEvents(tileWrap, container) {
+            const tile = tileWrap.querySelector('.evl-tile-dc');
+            if (!tile) return;
+            tile.addEventListener('click', function() {
+                const id = this.dataset.id;
+                const url = this.dataset.url;
+                if (id && !isNaN(id)) window.open(`${EVL_API}/api/click/${id}`, '_blank');
+                else window.open(url, '_blank');
+            });
+        }
+
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', window.initEvlAdBanner);
         else window.initEvlAdBanner();
     })();
     </script>

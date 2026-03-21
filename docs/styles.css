@@ -1569,133 +1569,50 @@ button,
 /* ============================================
    EvolvedLotus Ad Banner — Discord Dashboard
    ============================================ */
-.evl-ad-banner-dc {
-    position: relative;
+.evl-tile-container {
     margin: 20px 0;
-    border-radius: 14px;
-    background: linear-gradient(135deg, #0f1117 0%, #151820 50%, #111520 100%);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    overflow: hidden;
-    font-family: 'Inter', -apple-system, sans-serif;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.evl-ad-banner-dc:hover {
-    border-color: rgba(255, 255, 255, 0.12);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-}
-
-.evl-ad-dc-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.03);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.evl-ad-dc-disclosure {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.4);
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-}
-
-.evl-ad-dc-icon {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    background: linear-gradient(135deg, #33bdef, #6366f1);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 8px;
-    color: white;
-    font-weight: 700;
-}
-
-.evl-ad-dc-dismiss {
-    width: 26px;
-    height: 26px;
-    border: none;
-    background: rgba(255, 255, 255, 0.05);
-    color: rgba(255, 255, 255, 0.35);
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.evl-ad-dc-dismiss:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.evl-ad-dc-slides {
+.evl-tile-dc {
     position: relative;
-    min-height: 100px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: #111318;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    font-family: 'Inter', -apple-system, sans-serif;
     cursor: pointer;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    opacity: 0;
+    transform: translateY(4px);
+    animation: evlTileFadeIn 0.4s ease 0.1s forwards;
+    overflow: hidden;
 }
 
-.evl-dc-slide {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    padding: 16px;
-    transition: opacity 0.4s ease, transform 0.4s ease;
+@keyframes evlTileFadeIn {
+    to { opacity: 1; transform: translateY(0); }
 }
 
-.evl-ad-dc-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 16px 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+.evl-tile-dc:hover {
+    border-color: var(--evl-accent, rgba(255, 255, 255, 0.1));
+    box-shadow: 0 0 20px -4px var(--evl-glow, rgba(255, 255, 255, 0.04));
 }
 
-.evl-ad-dc-brand {
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.25);
-    font-weight: 500;
-    letter-spacing: 0.3px;
-}
-
-.evl-ad-dc-dots {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.evl-dc-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.12);
-    transition: all 0.3s ease;
-    cursor: pointer;
-    display: inline-block;
-}
-
-.evl-ad-dc-progress {
+.evl-tile-dc::before {
+    content: '';
     position: absolute;
-    bottom: 0;
+    top: 12px;
+    bottom: 12px;
     left: 0;
-    height: 2px;
-    background: #33bdef;
-    opacity: 0.4;
-    width: 0%;
-    transition: width 50ms linear;
-    border-radius: 0 2px 0 0;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--evl-accent, #33bdef);
+    opacity: 0.5;
+    transition: opacity 0.25s;
 }
 
+.evl-tile-dc:hover::before {
+    opacity: 0.9;
+}
 /* Tier Badges */
 .tier-badge {
     padding: 4px 12px;
