@@ -775,14 +775,8 @@ tbody tr:hover {
 }
 
 /* Ad Banner Footer Position */
-.ad-banner {
-    margin-top: auto !important;
-    /* Push to bottom */
-    border-radius: 0 !important;
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
-    background: rgba(15, 16, 20, 0.95) !important;
+.evl-ad-banner-dc {
+    margin-top: auto;
 }
 
 /* ========== MODAL UI IMPROVEMENTS ========== */
@@ -1572,47 +1566,134 @@ button,
     font-size: 14px;
 }
 
-/* Ad Banner Styles */
-.ad-banner {
-    background: rgba(47, 49, 54, 0.6);
-    backdrop-filter: blur(8px);
-    color: #dcddde;
-    padding: 30px;
-    text-align: center;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+/* ============================================
+   EvolvedLotus Ad Banner — Discord Dashboard
+   ============================================ */
+.evl-ad-banner-dc {
+    position: relative;
     margin: 20px 0;
-    border-radius: 8px;
-    font-size: 14px;
-    display: none;
-    /* Hidden by default */
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0f1117 0%, #151820 50%, #111520 100%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, sans-serif;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.ad-banner-content {
+.evl-ad-banner-dc:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.evl-ad-dc-header {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.ad-banner .ad-text {
-    font-weight: 500;
-}
-
-.ad-upgrade-btn {
-    background: linear-gradient(90deg, #FFD700, #FFA500);
-    color: black;
-    border: none;
-    padding: 8px 20px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
+.evl-ad-dc-disclosure {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+    letter-spacing: 0.5px;
     text-transform: uppercase;
-    font-size: 12px;
-    margin-top: 5px;
 }
 
-.ad-upgrade-btn:hover {
-    filter: brightness(1.1);
+.evl-ad-dc-icon {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, #33bdef, #6366f1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: white;
+    font-weight: 700;
+}
+
+.evl-ad-dc-dismiss {
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.evl-ad-dc-dismiss:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.evl-ad-dc-slides {
+    position: relative;
+    min-height: 100px;
+    cursor: pointer;
+}
+
+.evl-dc-slide {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 16px;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.evl-ad-dc-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.evl-ad-dc-brand {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.25);
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
+
+.evl-ad-dc-dots {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.evl-dc-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    display: inline-block;
+}
+
+.evl-ad-dc-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: #33bdef;
+    opacity: 0.4;
+    width: 0%;
+    transition: width 50ms linear;
+    border-radius: 0 2px 0 0;
 }
 
 /* Tier Badges */
