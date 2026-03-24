@@ -97,30 +97,30 @@
             <nav class="nav-menu">
                 <button class="tab-button active" onclick="showTab('dashboard')" data-tab="dashboard" data-icon="📊"
                     title="Dashboard">
-                    Dashboard
+                    📊
                 </button>
                 <button class="tab-button" onclick="showTab('users')" data-tab="users" data-icon="👥" title="Users">
-                    Users
+                    👥
                 </button>
                 <button class="tab-button" onclick="showTab('shop')" data-tab="shop" data-icon="🛒" title="Shop">
-                    Shop
+                    🛒
                 </button>
                 <button class="tab-button" onclick="showTab('tasks')" data-tab="tasks" data-icon="📋" title="Tasks">
-                    Tasks
+                    📋
                 </button>
                 <button class="tab-button" onclick="showTab('announcements')" data-tab="announcements" data-icon="📢"
                     title="Announce">
-                    Announce
+                    📢
                 </button>
                 <button class="tab-button" onclick="showTab('embeds')" data-tab="embeds" data-icon="📧" title="Embeds">
-                    Embeds
+                    📧
                 </button>
                 <button class="tab-button" onclick="showTab('config')" data-tab="config" data-icon="⚙️"
                     title="Settings">
-                    Settings
+                    ⚙️
                 </button>
                 <button class="tab-button" onclick="showTab('logs')" data-tab="logs" data-icon="📝" title="Logs">
-                    Logs
+                    📝
                 </button>
             </nav>
 
@@ -168,10 +168,14 @@
                 <div class="section-header">
                     <h2>🛒 Shop Management</h2>
                     <div class="header-actions">
-                        <button onclick="showCreateShopItemModal()" class="btn-success">➕ Add Item</button>
-                        <button onclick="viewShopStatistics()" class="btn-secondary">📊 Statistics</button>
-                        <button onclick="validateShopIntegrity()" class="btn-secondary">🔍 Validate</button>
-                        <button onclick="loadShop()" class="btn-primary">🔄 Refresh</button>
+                        <div class="action-group-left">
+                            <button onclick="showCreateShopItemModal()" class="btn-success">➕ Add Item</button>
+                            <button onclick="loadShop()" class="btn-primary">🔄 Refresh</button>
+                        </div>
+                        <div class="action-group-right">
+                            <button onclick="viewShopStatistics()" class="btn-secondary">📊 Statistics</button>
+                            <button onclick="validateShopIntegrity()" class="btn-secondary">🔍 Validate</button>
+                        </div>
                     </div>
                 </div>
 
@@ -214,10 +218,12 @@
                 <div class="section-header">
                     <h2>📧 Embed Management</h2>
                     <div class="header-actions">
-                        <button onclick="showCreateEmbedModal()" class="btn-success">➕ Create Embed</button>
-                        <button id="edit-by-message-btn" class="btn-secondary"
-                            onclick="showEditEmbedByMessageModal()">✏️ Edit by Link/ID</button>
-                        <button onclick="loadEmbeds()" class="btn-primary">🔄 Refresh</button>
+                        <div class="action-group-left">
+                            <button onclick="showCreateEmbedModal()" class="btn-success">➕ Create Embed</button>
+                            <button id="edit-by-message-btn" class="btn-secondary"
+                                onclick="showEditEmbedByMessageModal()">✏️ Edit by Link/ID</button>
+                        </div>
+                        <button onclick="loadEmbeds()" class="btn-secondary btn-outline">🔄 Refresh</button>
                     </div>
                 </div>
                 <div id="embeds-list" class="content-area">
@@ -300,15 +306,17 @@
             <div id="logs" class="tab-content">
                 <div class="section-header">
                     <h2>📝 System Logs</h2>
-                    <div class="header-actions">
+                    <div class="header-actions logs-header-actions">
                         <select id="log-level" onchange="loadLogs()" class="form-control" style="width: 150px;">
                             <option value="all">All Levels</option>
                             <option value="error">Errors Only</option>
                             <option value="warning">Warnings</option>
                             <option value="info">Info</option>
                         </select>
-                        <button onclick="clearLogs()" class="btn-danger">🗑️ Clear Logs</button>
-                        <button onclick="loadLogs()" class="btn-primary">🔄 Refresh</button>
+                        <div class="action-group-right">
+                            <button onclick="clearLogs()" class="btn-danger">🗑️ Clear Logs</button>
+                            <button onclick="loadLogs()" class="btn-primary">🔄 Refresh</button>
+                        </div>
                     </div>
                 </div>
                 <div id="logs-content" class="content-area">
@@ -739,8 +747,8 @@
 
                     <div class="form-group">
                         <label>
-                            <input type="checkbox" id="schedule-enabled" checked>
                             Enable this schedule
+                            <input type="checkbox" id="schedule-enabled" checked>
                         </label>
                     </div>
 

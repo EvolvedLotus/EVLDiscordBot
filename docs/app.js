@@ -390,14 +390,16 @@ async function loadConfigTab() {
             <div class="settings-grid">
                 <!-- Channel Settings -->
                 <div class="section-card">
-                    <h3>📢 Channel Configuration</h3>
+                    <h3>📢 Channel Configuration</h3><hr class="config-divider">
                     
-                    <div class="form-group">
-                        <label for="welcome-channel">Welcome Channel:</label>
-                        <select id="welcome-channel" class="form-control">
-                            <option value="">None</option>
-                            ${channelOptions}
-                        </select>
+                    <div class="form-group config-inline-group">
+                        <div class="input-wrapper">
+                            <label for="welcome-channel">Welcome Channel:</label>
+                            <select id="welcome-channel" class="form-control">
+                                <option value="">None</option>
+                                ${channelOptions}
+                            </select>
+                        </div>
                         <button onclick="saveChannelSetting('welcome')" class="btn-primary btn-small">Save</button>
                         <span id="welcome-channel-status" class="status-text"></span>
                     </div>
@@ -435,7 +437,7 @@ async function loadConfigTab() {
 
                 <!-- Permission Roles -->
                 <div class="section-card">
-                    <h3>🔐 Permission Roles</h3>
+                    <h3>🔐 Permission Roles</h3><hr class="config-divider">
                     
                     <div class="form-group">
                         <label for="admin-roles">Admin Roles:</label>
@@ -464,7 +466,7 @@ async function loadConfigTab() {
 
                 <!-- Currency Settings -->
                 <div class="section-card">
-                    <h3>💰 Currency Settings</h3>
+                    <h3>💰 Currency Settings</h3><hr class="config-divider">
                     
                     <div class="form-group">
                         <label for="currency-name">Currency Name:</label>
@@ -482,7 +484,7 @@ async function loadConfigTab() {
 
                 <!-- Bot Behavior -->
                 <div class="section-card">
-                    <h3>🤖 Bot Behavior</h3>
+                    <h3>🤖 Bot Behavior</h3><hr class="config-divider">
                     
                     <div class="form-group">
                         <label for="inactivity-days">Inactivity Days:</label>
@@ -511,7 +513,7 @@ async function loadConfigTab() {
                 <!-- Feature Toggles (ONLY for Super Admins) -->
                 ${(currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin === true)) ? `
                 <div class="section-card">
-                    <h3>⚡ Feature Toggles</h3>
+                    <h3>⚡ Feature Toggles</h3><hr class="config-divider">
                     
                     <div class="form-group">
                         <label>
@@ -821,19 +823,21 @@ async function loadDashboard() {
         }
 
         content.innerHTML = `
-            <div class="dashboard-grid">
+            <div class="stats-grid">
                 <div class="stat-card">
-                    <h3>Bot Status</h3>
+                    <i style="font-size:24px; margin-bottom:8px; display:block;">🤖</i>
                     <div class="stat-value ${statusData.bot_status}">${statusData.bot_status.toUpperCase()}</div>
-                    <div class="stat-sub">Uptime: ${statusData.uptime}</div>
+                    <div class="stat-label">Bot Status (Uptime: ${statusData.uptime})</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Server Name</h3>
-                    <div class="stat-value">${serverName}</div>
+                    <i style="font-size:24px; margin-bottom:8px; display:block;">🌐</i>
+                    <div class="stat-value" style="font-size:24px !important;">${serverName}</div>
+                    <div class="stat-label">Server Name</div>
                 </div>
                 <div class="stat-card">
-                    <h3>Currency</h3>
-                    <div class="stat-value">${serverConfig.currency_symbol || '💰'} ${serverConfig.currency_name || 'Coins'}</div>
+                    <i style="font-size:24px; margin-bottom:8px; display:block;">${serverConfig.currency_symbol || '💰'}</i>
+                    <div class="stat-value" style="font-size:24px !important;">${serverConfig.currency_name || 'Coins'}</div>
+                    <div class="stat-label">Currency</div>
                 </div>
             </div>
         `;
@@ -860,21 +864,24 @@ async function loadUsers(page = 1) {
             const totalUsers = data.total || data.users.length;
             const totalPages = Math.ceil(totalUsers / USERS_PER_PAGE);
 
-            let html = '<div class="table-container"><table class="data-table"><thead><tr><th>User</th><th>Balance</th><th>Level</th><th>XP</th><th>Actions</th></tr></thead><tbody>';
+            let html = '<div class="users-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">';
             data.users.forEach(user => {
                 html += `
-                    <tr>
-                        <td>${user.username || user.user_id}</td>
-                        <td>${user.balance}</td>
-                        <td>${user.level}</td>
-                        <td>${user.xp}</td>
-                        <td>
-                            <button onclick="manageUser('${user.user_id}')" class="btn-small btn-primary">Manage</button>
-                        </td>
-                    </tr>
+                    <div class="card user-card" onclick="manageUser('${user.user_id}')" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; padding: 16px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div class="avatar-placeholder" style="width: 40px; height: 40px; border-radius: 50%; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center;">👤</div>
+                            <div>
+                                <h4 style="margin: 0; font-size: 15px;">${user.username || user.user_id}</h4>
+                                <div style="font-size: 12px; color: var(--text-muted);">Lvl ${user.level} • ${user.xp} XP</div>
+                            </div>
+                        </div>
+                        <div class="coin-value" style="font-size: 16px; font-weight: bold; color: var(--discord-yellow); text-align: right;">
+                            ${user.balance} 💰
+                        </div>
+                    </div>
                 `;
             });
-            html += '</tbody></table></div>';
+            html += '</div>';
 
             // Add pagination controls
             html += '<div class="pagination-controls">';
