@@ -7998,7 +7998,7 @@ window.showCreateGiveawayModal = async function() {
         const sSelect = document.getElementById('ga-shop-item');
         if (shopRes && shopRes.items && shopRes.items.length > 0) {
             sSelect.innerHTML = '<option value="">Select a shop item...</option>' + 
-                shopRes.items.map(i => `<option value="${i.id}">${i.name} (Price: ${i.price})</option>`).join('');
+                shopRes.items.map(i => `<option value="${i.item_id}">${i.name} (Price: ${i.price})</option>`).join('');
         } else {
             sSelect.innerHTML = '<option value="">No shop items available</option>';
         }
