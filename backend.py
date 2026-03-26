@@ -1294,7 +1294,7 @@ def get_servers():
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/config', methods=['GET'])
+@app.route('/api/servers/<server_id>/config', methods=['GET'])
 @require_guild_access
 def get_server_config(server_id):
     try:
@@ -1315,7 +1315,7 @@ def get_server_config(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/config', methods=['PUT'])
+@app.route('/api/servers/<server_id>/config', methods=['PUT'])
 @csrf.exempt
 @require_guild_access
 def update_server_config(server_id):
@@ -1369,7 +1369,7 @@ def update_server_config(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/channels', methods=['GET'])
+@app.route('/api/servers/<server_id>/channels', methods=['GET'])
 @require_guild_access
 def get_channels(server_id):
     try:
@@ -1389,7 +1389,7 @@ def get_channels(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/roles', methods=['GET'])
+@app.route('/api/servers/<server_id>/roles', methods=['GET'])
 @require_guild_access
 def get_roles(server_id):
     try:
@@ -1409,7 +1409,7 @@ def get_roles(server_id):
         return safe_error_response(e)
 
 # ========== USER MANAGEMENT ==========
-@app.route('/api/<server_id>/users', methods=['GET'])
+@app.route('/api/servers/<server_id>/users', methods=['GET'])
 @require_guild_access
 def get_users(server_id):
     try:
@@ -1513,7 +1513,7 @@ def get_tasks(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/tasks', methods=['POST'])
+@app.route('/api/servers/<server_id>/tasks', methods=['POST'])
 @csrf.exempt
 @require_guild_access
 def create_task(server_id):
@@ -1560,7 +1560,7 @@ def create_task(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/tasks/<task_id>', methods=['PUT'])
+@app.route('/api/servers/<server_id>/tasks/<task_id>', methods=['PUT'])
 @csrf.exempt
 @require_guild_access
 def update_task(server_id, task_id):
@@ -1586,7 +1586,7 @@ def update_task(server_id, task_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/tasks/<task_id>', methods=['DELETE'])
+@app.route('/api/servers/<server_id>/tasks/<task_id>', methods=['DELETE'])
 @csrf.exempt
 @require_guild_access
 def delete_task(server_id, task_id):
@@ -1612,7 +1612,7 @@ def delete_task(server_id, task_id):
         return safe_error_response(e)
 
 # ========== SHOP MANAGEMENT ==========
-@app.route('/api/<server_id>/shop', methods=['GET'])
+@app.route('/api/servers/<server_id>/shop', methods=['GET'])
 @require_guild_access
 def get_shop(server_id):
     try:
@@ -1621,7 +1621,7 @@ def get_shop(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/shop', methods=['POST'])
+@app.route('/api/servers/<server_id>/shop', methods=['POST'])
 @csrf.exempt
 @require_guild_access
 def create_shop_item(server_id):
@@ -1645,7 +1645,7 @@ def create_shop_item(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/shop/<item_id>', methods=['PUT'])
+@app.route('/api/servers/<server_id>/shop/<item_id>', methods=['PUT'])
 @csrf.exempt
 @require_guild_access
 def update_shop_item(server_id, item_id):
@@ -1656,7 +1656,7 @@ def update_shop_item(server_id, item_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/shop/<item_id>', methods=['DELETE'])
+@app.route('/api/servers/<server_id>/shop/<item_id>', methods=['DELETE'])
 @csrf.exempt
 @require_guild_access
 def delete_shop_item(server_id, item_id):
@@ -1670,7 +1670,7 @@ def delete_shop_item(server_id, item_id):
         return safe_error_response(e)
 
 # ========== TRANSACTIONS ==========
-@app.route('/api/<server_id>/transactions', methods=['GET'])
+@app.route('/api/servers/<server_id>/transactions', methods=['GET'])
 @require_guild_access
 def get_transactions(server_id):
     try:
@@ -1683,7 +1683,7 @@ def get_transactions(server_id):
         return safe_error_response(e)
 
 # ========== ANNOUNCEMENTS ==========
-@app.route('/api/<server_id>/announcements', methods=['GET'])
+@app.route('/api/servers/<server_id>/announcements', methods=['GET'])
 @require_guild_access
 def get_announcements(server_id):
     try:
@@ -1692,7 +1692,7 @@ def get_announcements(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/announcements', methods=['POST'])
+@app.route('/api/servers/<server_id>/announcements', methods=['POST'])
 @csrf.exempt
 @require_guild_access
 def create_announcement(server_id):
@@ -1874,7 +1874,7 @@ def delete_announcement(server_id, announcement_id):
         return safe_error_response(e)
 
 # ========== EMBEDS ==========
-@app.route('/api/<server_id>/embeds', methods=['GET'])
+@app.route('/api/servers/<server_id>/embeds', methods=['GET'])
 @require_guild_access
 def get_embeds(server_id):
     try:
@@ -1883,7 +1883,7 @@ def get_embeds(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/embeds', methods=['POST'])
+@app.route('/api/servers/<server_id>/embeds', methods=['POST'])
 @csrf.exempt
 @require_guild_access
 def create_embed(server_id):
@@ -1916,7 +1916,7 @@ def create_embed(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/embeds/<embed_id>', methods=['GET'])
+@app.route('/api/servers/<server_id>/embeds/<embed_id>', methods=['GET'])
 @require_guild_access
 def get_embed(server_id, embed_id):
     try:
@@ -1936,7 +1936,7 @@ def update_embed(server_id, embed_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/embeds/<embed_id>', methods=['DELETE'])
+@app.route('/api/servers/<server_id>/embeds/<embed_id>', methods=['DELETE'])
 @csrf.exempt
 @require_guild_access
 def delete_embed(server_id, embed_id):
@@ -1946,7 +1946,7 @@ def delete_embed(server_id, embed_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/embeds/<embed_id>/send', methods=['POST'])
+@app.route('/api/servers/<server_id>/embeds/<embed_id>/send', methods=['POST'])
 @csrf.exempt
 @require_guild_access
 def send_embed_to_channel(server_id, embed_id):
@@ -2224,7 +2224,7 @@ def update_bot_status(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/messages/<channel_id>/<message_id>', methods=['GET'])
+@app.route('/api/servers/<server_id>/messages/<channel_id>/<message_id>', methods=['GET'])
 @require_guild_access
 def get_discord_message(server_id, channel_id, message_id):
     """Fetch a message from Discord to extract its content/embeds"""
@@ -2284,7 +2284,7 @@ def get_discord_message(server_id, channel_id, message_id):
         logger.error(f"Error in get_discord_message: {e}")
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/messages/<channel_id>/<message_id>', methods=['PATCH', 'PUT'])
+@app.route('/api/servers/<server_id>/messages/<channel_id>/<message_id>', methods=['PATCH', 'PUT'])
 @csrf.exempt  # CMS API calls
 @require_guild_access
 def edit_discord_message(server_id, channel_id, message_id):
@@ -2890,7 +2890,7 @@ def require_premium(f):
             return safe_error_response(e)
     return decorated_function
 
-@app.route('/api/<server_id>/channel-schedules', methods=['GET'])
+@app.route('/api/servers/<server_id>/channel-schedules', methods=['GET'])
 @require_guild_access
 @require_premium
 def get_channel_schedules(server_id):
@@ -2901,7 +2901,7 @@ def get_channel_schedules(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/channel-schedules', methods=['POST'])
+@app.route('/api/servers/<server_id>/channel-schedules', methods=['POST'])
 @csrf.exempt
 @require_guild_access
 @require_premium
@@ -2973,7 +2973,7 @@ def create_channel_schedule(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['GET'])
+@app.route('/api/servers/<server_id>/channel-schedules/<schedule_id>', methods=['GET'])
 @require_guild_access
 @require_premium
 def get_channel_schedule(server_id, schedule_id):

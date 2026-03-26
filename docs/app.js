@@ -61,9 +61,9 @@ window.fetchDiscordData = async function (serverId, forceRefresh = false) {
         try {
             // Fetch in parallel for speed
             const [usersData, channelsData, rolesData] = await Promise.all([
-                apiCall(`/api/${serverId}/users`),
-                apiCall(`/api/${serverId}/channels`),
-                apiCall(`/api/${serverId}/roles`)
+                apiCall(`/api/servers/${serverId}/users`),
+                apiCall(`/api/servers/${serverId}/channels`),
+                apiCall(`/api/servers/${serverId}/roles`)
             ]);
 
             if (usersData && usersData.users) {
@@ -115,7 +115,7 @@ async function updateBotStatus() {
     logCmsAction('update_bot_status_start', { type: statusType.value, message: statusMessage.value });
 
     try {
-        await apiCall(`/api/${currentServerId}/bot_status`, {
+        await apiCall(`/api/servers/${currentServerId}/bot_status`, {
             method: 'POST',
             body: JSON.stringify({
                 type: statusType.value,
@@ -380,7 +380,7 @@ async function loadConfigTab() {
     try {
         // Fetch Discord data and config
         await fetchDiscordData(currentServerId);
-        const config = await apiCall(`/api/${currentServerId}/config`);
+        const config = await apiCall(`/api/servers/${currentServerId}/config`);
 
         // Populate channel dropdowns
         const channels = Object.values(discordDataCache.channels);
@@ -672,8 +672,8 @@ async function manageUser(userId) {
 
     try {
         const [userRoles, allRoles] = await Promise.all([
-            apiCall(`/api/${currentServerId}/users/${userId}/roles`),
-            apiCall(`/api/${currentServerId}/roles`)
+            apiCall(`/api/servers/${currentServerId}/users/${userId}/roles`),
+            apiCall(`/api/servers/${currentServerId}/roles`)
         ]);
 
         if (allRoles && allRoles.roles) {
@@ -708,7 +708,7 @@ async function addBalance() {
     logCmsAction('add_balance_start', { user_id: currentManagingUserId, amount, reason });
 
     try {
-        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance`, {
+        await apiCall(`/api/servers/${currentServerId}/users/${currentManagingUserId}/balance`, {
             method: 'PUT',
             body: JSON.stringify({ amount: parseInt(amount) })
         });
@@ -729,7 +729,7 @@ async function removeBalance() {
     logCmsAction('remove_balance_start', { user_id: currentManagingUserId, amount, reason });
 
     try {
-        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/balance`, {
+        await apiCall(`/api/servers/${currentServerId}/users/${currentManagingUserId}/balance`, {
             method: 'PUT',
             body: JSON.stringify({ amount: -parseInt(amount) })
         });
@@ -748,7 +748,7 @@ async function saveUserRoles() {
     const roleIds = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
 
     try {
-        await apiCall(`/api/${currentServerId}/users/${currentManagingUserId}/roles`, {
+        await apiCall(`/api/servers/${currentServerId}/users/${currentManagingUserId}/roles`, {
             method: 'PUT',
             body: JSON.stringify({ roles: roleIds })
         });
@@ -761,7 +761,7 @@ async function saveUserRoles() {
 async function kickUserFromModal() {
     if (!currentManagingUserId || !confirm('Kick this user?')) return;
     try {
-        await apiCall(`/api/${currentServerId}/moderation/kick`, {
+        await apiCall(`/api/servers/${currentServerId}/moderation/kick`, {
             method: 'POST',
             body: JSON.stringify({ user_id: currentManagingUserId })
         });
@@ -776,7 +776,7 @@ async function kickUserFromModal() {
 async function banUserFromModal() {
     if (!currentManagingUserId || !confirm('Ban this user?')) return;
     try {
-        await apiCall(`/api/${currentServerId}/moderation/ban`, {
+        await apiCall(`/api/servers/${currentServerId}/moderation/ban`, {
             method: 'POST',
             body: JSON.stringify({ user_id: currentManagingUserId })
         });
@@ -794,7 +794,7 @@ async function timeoutUserFromModal() {
     if (!duration) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/moderation/timeout`, {
+        await apiCall(`/api/servers/${currentServerId}/moderation/timeout`, {
             method: 'POST',
             body: JSON.stringify({ user_id: currentManagingUserId, duration: parseInt(duration) })
         });
@@ -813,7 +813,7 @@ async function loadDashboard() {
         // Fetch status and config in parallel, use cache for config
         const [statusData, serverConfig] = await Promise.all([
             cachedApiCall('/api/status', 30000),  // 30s cache for status
-            cachedApiCall(`/api/${currentServerId}/config`)  // 1 min cache for config
+            cachedApiCall(`/api/servers/${currentServerId}/config`)  // 1 min cache for config
         ]);
 
         // Get server name from select dropdown if config doesn't have it
@@ -860,7 +860,7 @@ async function loadUsers(page = 1) {
 
     try {
         // Pass page and limit to API for server-side pagination
-        const data = await apiCall(`/api/${currentServerId}/users?page=${page}&limit=${USERS_PER_PAGE}`);
+        const data = await apiCall(`/api/servers/${currentServerId}/users?page=${page}&limit=${USERS_PER_PAGE}`);
 
         if (data.users && data.users.length > 0) {
             // Use total from API response
@@ -907,7 +907,7 @@ async function loadShop() {
     const list = document.getElementById('shop-list');
     list.innerHTML = '<div class="loading">Loading shop...</div>';
     try {
-        const data = await apiCall(`/api/${currentServerId}/shop`);
+        const data = await apiCall(`/api/servers/${currentServerId}/shop`);
         if (data.items && data.items.length > 0) {
             let html = '<div class="shop-grid">';
             data.items.forEach(item => {
@@ -940,7 +940,7 @@ async function deleteShopItem(itemId) {
     logCmsAction('delete_shop_item_start', { item_id: itemId });
 
     try {
-        await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+        await apiCall(`/api/servers/${currentServerId}/shop/${itemId}`, {
             method: 'DELETE'
         });
         showNotification('Item deleted successfully', 'success');
@@ -957,7 +957,7 @@ async function editShopItem(itemId) {
 
     try {
         // Fetch all items to find the one we want
-        const data = await apiCall(`/api/${currentServerId}/shop`);
+        const data = await apiCall(`/api/servers/${currentServerId}/shop`);
         const item = data.items.find(i => i.item_id === itemId);
 
         if (!item) {
@@ -1009,7 +1009,7 @@ async function editShopItem(itemId) {
 async function viewShopStatistics() {
     if (!currentServerId) return;
     try {
-        const data = await apiCall(`/api/${currentServerId}/shop`);
+        const data = await apiCall(`/api/servers/${currentServerId}/shop`);
         if (!data.items || data.items.length === 0) {
             showNotification('No shop items to analyze', 'info');
             return;
@@ -1038,7 +1038,7 @@ async function viewShopStatistics() {
 async function validateShopIntegrity() {
     if (!currentServerId) return;
     try {
-        const data = await apiCall(`/api/${currentServerId}/shop`);
+        const data = await apiCall(`/api/servers/${currentServerId}/shop`);
         if (!data.items || data.items.length === 0) {
             showNotification('No shop items to validate', 'info');
             return;
@@ -1074,7 +1074,7 @@ async function loadTasks() {
     list.innerHTML = '<div class="loading">Loading tasks...</div>';
 
     try {
-        const data = await apiCall(`/api/${currentServerId}/tasks`);
+        const data = await apiCall(`/api/servers/${currentServerId}/tasks`);
         console.log('Tasks API response:', data);
 
         // Handle both array and object responses
@@ -1131,7 +1131,7 @@ async function deleteTask(taskId) {
     logCmsAction('delete_task_start', { task_id: taskId });
 
     try {
-        await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+        await apiCall(`/api/servers/${currentServerId}/tasks/${taskId}`, {
             method: 'DELETE'
         });
         showNotification('Task deleted successfully', 'success');
@@ -1148,7 +1148,7 @@ async function editTask(taskId) {
 
     try {
         // Fetch all tasks
-        const data = await apiCall(`/api/${currentServerId}/tasks`);
+        const data = await apiCall(`/api/servers/${currentServerId}/tasks`);
 
         let task = null;
         if (data.tasks) {
@@ -1190,7 +1190,7 @@ async function loadServerSettings() {
     if (!currentServerId) return;
     // Implement loading of server config for the Config tab
     try {
-        const config = await apiCall(`/api/${currentServerId}/config`);
+        const config = await apiCall(`/api/servers/${currentServerId}/config`);
         // Populate form fields
         if (document.getElementById('bot-status-message')) {
             document.getElementById('bot-status-message').value = config.bot_status_message || '';
@@ -1203,9 +1203,9 @@ async function loadServerSettings() {
     }
     try {
         const [users, channels, roles] = await Promise.all([
-            apiCall(`/api/${serverId}/users`),
-            apiCall(`/api/${serverId}/channels`),
-            apiCall(`/api/${serverId}/roles`)
+            apiCall(`/api/servers/${serverId}/users`),
+            apiCall(`/api/servers/${serverId}/channels`),
+            apiCall(`/api/servers/${serverId}/roles`)
         ]);
 
         if (users && users.users) {
@@ -1267,7 +1267,7 @@ async function loadAnnouncements() {
 
     try {
         await fetchDiscordData(currentServerId);
-        const data = await apiCall(`/api/${currentServerId}/announcements`);
+        const data = await apiCall(`/api/servers/${currentServerId}/announcements`);
 
         if (data && data.announcements && data.announcements.length > 0) {
             let html = '<div class="announcements-grid">';
@@ -1325,7 +1325,7 @@ async function loadEmbeds() {
 
     try {
         await fetchDiscordData(currentServerId);
-        const data = await apiCall(`/api/${currentServerId}/embeds`);
+        const data = await apiCall(`/api/servers/${currentServerId}/embeds`);
 
         if (data && data.embeds && data.embeds.length > 0) {
             let html = '<div class="embeds-list-container"><div class="embeds-grid">';
@@ -1375,7 +1375,7 @@ async function loadTransactions(page = 1) {
 
     try {
         await fetchDiscordData(currentServerId);
-        const data = await apiCall(`/api/${currentServerId}/transactions`);
+        const data = await apiCall(`/api/servers/${currentServerId}/transactions`);
 
         if (data && data.transactions && data.transactions.length > 0) {
             // Calculate statistics
@@ -1513,7 +1513,7 @@ async function loadServerSettingsTab() {
         });
 
         // Load current settings
-        const config = await apiCall(`/api/${currentServerId}/config`);
+        const config = await apiCall(`/api/servers/${currentServerId}/config`);
 
         if (config) {
             if (config.welcome_channel) document.getElementById('welcome-channel').value = config.welcome_channel;
@@ -1546,7 +1546,7 @@ async function loadLogs() {
 
     try {
         await fetchDiscordData(currentServerId);
-        const data = await apiCall(`/api/${currentServerId}/logs`);
+        const data = await apiCall(`/api/servers/${currentServerId}/logs`);
 
         if (data && data.logs && data.logs.length > 0) {
             let html = '<div class="logs-list">';
@@ -1585,7 +1585,7 @@ async function loadLogs() {
 async function loadRolesTab() {
     console.log('Loading roles...');
     try {
-        const data = await apiCall(`/api/${currentServerId}/roles`);
+        const data = await apiCall(`/api/servers/${currentServerId}/roles`);
         const rolesList = document.getElementById('server-roles-list');
 
         if (!rolesList) return;
@@ -1638,7 +1638,7 @@ async function loadModerationTab() {
 
     try {
         // Load channels for moderation options
-        const channels = await apiCall(`/api/${currentServerId}/channels`);
+        const channels = await apiCall(`/api/servers/${currentServerId}/channels`);
 
         let html = '<div class="moderation-grid">';
 
@@ -1684,8 +1684,8 @@ async function loadPermissionsTab() {
     try {
         // Load roles and channels for permissions setup
         const [roles, channels] = await Promise.all([
-            apiCall(`/api/${currentServerId}/roles`),
-            apiCall(`/api/${currentServerId}/channels`)
+            apiCall(`/api/servers/${currentServerId}/roles`),
+            apiCall(`/api/servers/${currentServerId}/channels`)
         ]);
 
         let html = '<div class="permissions-setup">';
@@ -1801,7 +1801,7 @@ async function showCreateEmbedModal() {
 
 async function editEmbed(embedId) {
     try {
-        const data = await apiCall(`/api/${currentServerId}/embeds`);
+        const data = await apiCall(`/api/servers/${currentServerId}/embeds`);
         const embed = data.embeds.find(e => e.id === embedId);
 
         if (!embed) {
@@ -1847,7 +1847,7 @@ async function saveEmbed(event) {
         // If editing a Discord message directly, PATCH the message
         if (messageId && channelId) {
             showNotification('Updating Discord message...', 'info');
-            await apiCall(`/api/${currentServerId}/messages/${channelId}/${messageId}`, {
+            await apiCall(`/api/servers/${currentServerId}/messages/${channelId}/${messageId}`, {
                 method: 'PATCH',
                 body: JSON.stringify(embedData)
             });
@@ -1865,14 +1865,14 @@ async function saveEmbed(event) {
         let savedId = embedId;
         if (embedId) {
             // Update existing embed
-            await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+            await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`, {
                 method: 'PUT',
                 body: JSON.stringify(embedData)
             });
             showNotification('Embed updated successfully', 'success');
         } else {
             // Create new embed
-            const response = await apiCall(`/api/${currentServerId}/embeds`, {
+            const response = await apiCall(`/api/servers/${currentServerId}/embeds`, {
                 method: 'POST',
                 body: JSON.stringify(embedData)
             });
@@ -1912,7 +1912,7 @@ async function deleteEmbed(embedId) {
     if (!confirm('Are you sure you want to delete this embed?')) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`, {
             method: 'DELETE'
         });
         showNotification('Embed deleted successfully', 'success');
@@ -1938,7 +1938,7 @@ async function sendEmbedToChannel(event) {
     const channelId = document.getElementById('send-embed-channel').value;
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}/send`, {
             method: 'POST',
             body: JSON.stringify({ channel_id: channelId })
         });
@@ -1965,7 +1965,7 @@ async function saveChannelSetting(settingType) {
     const channelId = document.getElementById(selectId).value;
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 [`${settingType}_channel_id`]: channelId
@@ -1982,7 +1982,7 @@ async function saveCurrencySettings() {
     const currencySymbol = document.getElementById('currency-symbol').value;
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 currency_name: currencyName,
@@ -2001,7 +2001,7 @@ async function saveBotBehavior() {
     const requireTaskProof = document.getElementById('require-task-proof').checked;
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 inactivity_days: parseInt(inactivityDays),
@@ -2019,7 +2019,7 @@ async function saveFeatureToggle(feature) {
     const isEnabled = document.getElementById(`enable-${feature}`).checked;
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 [`enable_${feature}`]: isEnabled
@@ -2038,7 +2038,7 @@ async function saveRolePermissions(type) {
     const fieldName = type === 'admin' ? 'admin_roles' : 'moderator_roles';
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 [fieldName]: selectedRoles
@@ -2068,7 +2068,7 @@ async function saveBotStatus() {
     const statusType = document.getElementById('bot-status-type').value;
 
     try {
-        await apiCall(`/api/${currentServerId}/bot_status`, {
+        await apiCall(`/api/servers/${currentServerId}/bot_status`, {
             method: 'POST',
             body: JSON.stringify({
                 status_message: statusMessage,
@@ -2119,13 +2119,13 @@ async function saveShopItem(event) {
 
     try {
         if (itemId) {
-            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+            await apiCall(`/api/servers/${currentServerId}/shop/${itemId}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload)
             });
             showNotification('Item updated', 'success');
         } else {
-            await apiCall(`/api/${currentServerId}/shop`, {
+            await apiCall(`/api/servers/${currentServerId}/shop`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
@@ -2142,7 +2142,7 @@ async function deleteShopItem(itemId) {
     if (!confirm('Are you sure you want to delete this item?')) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+        await apiCall(`/api/servers/${currentServerId}/shop/${itemId}`, {
             method: 'DELETE'
         });
         showNotification('Item deleted', 'success');
@@ -2181,13 +2181,13 @@ async function saveShopItem(event) {
 
     try {
         if (itemId) {
-            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+            await apiCall(`/api/servers/${currentServerId}/shop/${itemId}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload)
             });
             showNotification('Shop item updated', 'success');
         } else {
-            await apiCall(`/api/${currentServerId}/shop`, {
+            await apiCall(`/api/servers/${currentServerId}/shop`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
@@ -2224,7 +2224,7 @@ async function saveChannelSetting(type) {
             [fieldMap[type]]: channelId
         };
 
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify(payload)
         });
@@ -2258,7 +2258,7 @@ async function saveCurrencySettings() {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 currency_name: currencyName,
@@ -2291,7 +2291,7 @@ async function saveBotBehavior() {
     const statusSpan = document.getElementById('bot-behavior-status');
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 inactivity_days: parseInt(inactivityDays),
@@ -2325,7 +2325,7 @@ async function saveFeatureToggle(feature) {
     if (!checkbox) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 [`feature_${feature}`]: checkbox.checked
@@ -2360,7 +2360,7 @@ async function saveBotStatus() {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/bot_status`, {
+        await apiCall(`/api/servers/${currentServerId}/bot_status`, {
             method: 'POST',
             body: JSON.stringify({
                 type: statusType,
@@ -2418,7 +2418,7 @@ async function saveAnnouncement(event) {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/announcements`, {
+        await apiCall(`/api/servers/${currentServerId}/announcements`, {
             method: 'POST',
             body: JSON.stringify({
                 title,
@@ -2441,7 +2441,7 @@ async function deleteAnnouncement(announcementId) {
     if (!confirm('Are you sure you want to delete this announcement?')) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
+        await apiCall(`/api/servers/${currentServerId}/announcements/${announcementId}`, {
             method: 'DELETE'
         });
 
@@ -2488,7 +2488,7 @@ async function confirmSendEmbed(embedId) {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}/send`, {
             method: 'POST',
             body: JSON.stringify({ channel_id: channelId })
         });
@@ -2504,7 +2504,7 @@ async function deleteEmbed(embedId) {
     if (!confirm('Are you sure you want to delete this embed?')) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`, {
             method: 'DELETE'
         });
         showNotification('Embed deleted', 'success');
@@ -2523,7 +2523,7 @@ async function editEmbed(embedId) {
 
 async function loadChannelsForSelect(selectId) {
     try {
-        const data = await apiCall(`/api/${currentServerId}/channels`);
+        const data = await apiCall(`/api/servers/${currentServerId}/channels`);
         const select = document.getElementById(selectId);
         select.innerHTML = '<option value="">Select a channel...</option>';
 
@@ -2967,14 +2967,14 @@ async function saveShopItem(event) {
     try {
         if (itemId) {
             // Update existing item
-            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+            await apiCall(`/api/servers/${currentServerId}/shop/${itemId}`, {
                 method: 'PUT',
                 body: JSON.stringify(itemData)
             });
             showNotification('Shop item updated successfully', 'success');
         } else {
             // Create new item
-            await apiCall(`/api/${currentServerId}/shop`, {
+            await apiCall(`/api/servers/${currentServerId}/shop`, {
                 method: 'POST',
                 body: JSON.stringify(itemData)
             });
@@ -3059,14 +3059,14 @@ async function saveAnnouncement(event) {
     try {
         if (announcementId) {
             // Update existing announcement
-            await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
+            await apiCall(`/api/servers/${currentServerId}/announcements/${announcementId}`, {
                 method: 'PUT',
                 body: JSON.stringify(announcementData)
             });
             showNotification('Announcement updated successfully', 'success');
         } else {
             // Create new announcement
-            await apiCall(`/api/${currentServerId}/announcements`, {
+            await apiCall(`/api/servers/${currentServerId}/announcements`, {
                 method: 'POST',
                 body: JSON.stringify(announcementData)
             });
@@ -3084,7 +3084,7 @@ async function deleteAnnouncement(announcementId) {
     if (!confirm('Are you sure you want to delete this announcement?')) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, {
+        await apiCall(`/api/servers/${currentServerId}/announcements/${announcementId}`, {
             method: 'DELETE'
         });
         showNotification('Announcement deleted successfully', 'success');
@@ -3096,7 +3096,7 @@ async function deleteAnnouncement(announcementId) {
 
 async function editAnnouncement(announcementId) {
     try {
-        const data = await apiCall(`/api/${currentServerId}/announcements/${announcementId}`);
+        const data = await apiCall(`/api/servers/${currentServerId}/announcements/${announcementId}`);
         if (data && data.announcement) {
             const announcement = data.announcement;
 
@@ -3163,14 +3163,14 @@ async function saveEmbed(event) {
     try {
         if (embedId) {
             // Update existing embed
-            await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+            await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`, {
                 method: 'PUT',
                 body: JSON.stringify(embedData)
             });
             showNotification('Embed updated successfully', 'success');
         } else {
             // Create new embed
-            await apiCall(`/api/${currentServerId}/embeds`, {
+            await apiCall(`/api/servers/${currentServerId}/embeds`, {
                 method: 'POST',
                 body: JSON.stringify(embedData)
             });
@@ -3245,7 +3245,7 @@ async function sendEmbedToChannel(event) {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}/send`, {
             method: 'POST',
             body: JSON.stringify({ channel_id: channelId })
         });
@@ -3262,7 +3262,7 @@ async function sendEmbed(embedId) {
 
 async function editEmbed(embedId) {
     try {
-        const data = await apiCall(`/api/${currentServerId}/embeds/${embedId}`);
+        const data = await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`);
         if (data && data.embed) {
             const embed = data.embed;
 
@@ -3288,7 +3288,7 @@ async function deleteEmbed(embedId) {
     if (!confirm('Are you sure you want to delete this embed?')) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`, {
             method: 'DELETE'
         });
         showNotification('Embed deleted successfully', 'success');
@@ -3320,7 +3320,7 @@ async function saveChannelSetting(type) {
     if (!fieldName) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({ [fieldName]: channelId })
         });
@@ -3353,7 +3353,7 @@ async function saveCurrencySettings() {
     const statusSpan = document.getElementById('currency-settings-status');
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 currency_name: currencyName,
@@ -3385,7 +3385,7 @@ async function saveBotBehavior() {
     const statusSpan = document.getElementById('bot-behavior-status');
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 inactivity_days: parseInt(inactivityDays),
@@ -3428,7 +3428,7 @@ async function saveFeatureToggle(feature) {
     if (!fieldName) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({ [fieldName]: checkbox.checked })
         });
@@ -3619,14 +3619,14 @@ async function saveShopItem(event) {
     try {
         if (itemId) {
             // Update existing item
-            await apiCall(`/api/${currentServerId}/shop/${itemId}`, {
+            await apiCall(`/api/servers/${currentServerId}/shop/${itemId}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload)
             });
             showNotification('Shop item updated', 'success');
         } else {
             // Create new item
-            await apiCall(`/api/${currentServerId}/shop`, {
+            await apiCall(`/api/servers/${currentServerId}/shop`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
@@ -3787,13 +3787,13 @@ async function saveTask(event) {
 
     try {
         if (taskId) {
-            await apiCall(`/api/${currentServerId}/tasks/${taskId}`, {
+            await apiCall(`/api/servers/${currentServerId}/tasks/${taskId}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload)
             });
             showNotification('Task updated', 'success');
         } else {
-            await apiCall(`/api/${currentServerId}/tasks`, {
+            await apiCall(`/api/servers/${currentServerId}/tasks`, {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
@@ -3830,7 +3830,7 @@ async function saveChannelSetting(type) {
             [fieldMap[type]]: channelId
         };
 
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify(payload)
         });
@@ -3864,7 +3864,7 @@ async function saveCurrencySettings() {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 currency_name: currencyName,
@@ -3897,7 +3897,7 @@ async function saveBotBehavior() {
     const statusSpan = document.getElementById('bot-behavior-status');
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 inactivity_days: parseInt(inactivityDays),
@@ -3931,7 +3931,7 @@ async function saveFeatureToggle(feature) {
     if (!checkbox) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 [`feature_${feature}`]: checkbox.checked
@@ -3968,7 +3968,7 @@ async function saveBotStatus() {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/bot_status`, {
+        await apiCall(`/api/servers/${currentServerId}/bot_status`, {
             method: 'POST',
             body: JSON.stringify({
                 type: statusType,
@@ -4014,7 +4014,7 @@ async function confirmSendEmbed(embedId) {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}/send`, {
             method: 'POST',
             body: JSON.stringify({ channel_id: channelId })
         });
@@ -4030,7 +4030,7 @@ async function deleteEmbed(embedId) {
     if (!confirm('Are you sure you want to delete this embed?')) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`, {
             method: 'DELETE'
         });
         showNotification('Embed deleted', 'success');
@@ -4417,7 +4417,7 @@ window.saveAnnouncement = async function (event) {
 
     try {
         // Create and send announcement
-        await apiCall(`/api/${currentServerId}/announcements`, {
+        await apiCall(`/api/servers/${currentServerId}/announcements`, {
             method: 'POST',
             body: JSON.stringify({
                 title,
@@ -4503,7 +4503,7 @@ window.saveChannelSetting = async function (type) {
     }
 
     try {
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({ [fieldName]: channelId })
         });
@@ -4723,8 +4723,8 @@ async function loadModerationConfigUI() {
     // Load data
     try {
         const [rolesData, configData] = await Promise.all([
-            apiCall(`/api/${currentServerId}/roles`),
-            apiCall(`/api/${currentServerId}/config`)
+            apiCall(`/api/servers/${currentServerId}/roles`),
+            apiCall(`/api/servers/${currentServerId}/config`)
         ]);
 
         const roles = rolesData.roles || [];
@@ -4790,7 +4790,7 @@ window.saveModerationConfig = async function () {
 
     try {
         // First get current config to merge
-        const currentConfig = await apiCall(`/api/${currentServerId}/config`);
+        const currentConfig = await apiCall(`/api/servers/${currentServerId}/config`);
         const modConfig = currentConfig.moderation || {};
         const autoActions = modConfig.auto_actions || {};
 
@@ -4813,7 +4813,7 @@ window.saveModerationConfig = async function () {
         }
         modConfig.auto_actions = autoActions;
 
-        await apiCall(`/api/${currentServerId}/config`, {
+        await apiCall(`/api/servers/${currentServerId}/config`, {
             method: 'PUT',
             body: JSON.stringify({
                 moderation: modConfig
@@ -4862,7 +4862,7 @@ window.addEventListener('load', function () {
 async function updateTierUI() {
     if (!currentServerId) return;
     try {
-        const config = await apiCall(`/api/${currentServerId}/config`);
+        const config = await apiCall(`/api/servers/${currentServerId}/config`);
         const tier = config.subscription_tier || 'free';
 
         // Update Badge
@@ -5008,7 +5008,7 @@ window.showCreateChannelScheduleModal = async function () {
             // Direct API fallback if global fetch failed
             if (currentServerId) {
                 console.log('[CMS] Direct API fetch fallback');
-                const data = await apiCall(`/api/${currentServerId}/channels`);
+                const data = await apiCall(`/api/servers/${currentServerId}/channels`);
                 if (data && data.channels) {
                     // Normalize array to object if needed, or handle array directly
                     let channelsObj = {};
@@ -5064,8 +5064,8 @@ window.saveChannelSchedule = async function (event) {
     try {
         const method = id ? 'PUT' : 'POST';
         const url = id
-            ? `/api/${currentServerId}/channel-schedules/${id}`
-            : `/api/${currentServerId}/channel-schedules`;
+            ? `/api/servers/${currentServerId}/channel-schedules/${id}`
+            : `/api/servers/${currentServerId}/channel-schedules`;
 
         await apiCall(url, {
             method,
@@ -5445,7 +5445,7 @@ async function loadServerManagement() {
         // We need to fetch config for each server to get the tier
         const enhancedServers = await Promise.all(response.servers.map(async (server) => {
             try {
-                const config = await apiCall(`/api/${server.id}/config`);
+                const config = await apiCall(`/api/servers/${server.id}/config`);
                 return { ...server, tier: config.subscription_tier || 'free' };
             } catch (e) {
                 return { ...server, tier: 'unknown' };
@@ -5527,7 +5527,7 @@ async function updateServerTier(serverId, serverName, currentTier) {
     if (newTier === currentTier) return;
 
     try {
-        const response = await apiCall(`/api/${serverId}/config`, {
+        const response = await apiCall(`/api/servers/${serverId}/config`, {
             method: 'PUT',
             body: JSON.stringify({ subscription_tier: newTier })
         });
@@ -5597,7 +5597,7 @@ async function loadChannelSchedulesAdmin() {
             return;
         }
 
-        const response = await apiCall(`/api/${serverId}/channel-schedules`);
+        const response = await apiCall(`/api/servers/${serverId}/channel-schedules`);
 
         if (!response || !response.schedules || response.schedules.length === 0) {
             container.innerHTML = `
@@ -5650,7 +5650,7 @@ async function toggleSchedule(scheduleId, enabled) {
     logCmsAction('toggle_channel_schedule', { schedule_id: scheduleId, enabled });
 
     try {
-        await apiCall(`/api/${window.currentServerId}/channel-schedules/${scheduleId}`, {
+        await apiCall(`/api/servers/${window.currentServerId}/channel-schedules/${scheduleId}`, {
             method: 'PATCH',
             body: JSON.stringify({ is_enabled: enabled })
         });
@@ -5943,7 +5943,7 @@ window.loadChannelSchedules = async function () {
     console.log("[CMS] Loading channel schedules for", currentServerId);
 
     try {
-        const data = await apiCall(`/api/${currentServerId}/channel-schedules`);
+        const data = await apiCall(`/api/servers/${currentServerId}/channel-schedules`);
 
         if (data && data.schedules && data.schedules.length > 0) {
             let html = '<div class="schedules-grid" style="display: grid; gap: 15px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">';
@@ -5998,7 +5998,7 @@ window.deleteChannelSchedule = async function (scheduleId) {
     if (!confirm('Are you sure you want to delete this schedule? The channel will be unlocked.')) return;
 
     try {
-        await apiCall(`/api/${currentServerId}/channel-schedules/${scheduleId}`, { method: 'DELETE' });
+        await apiCall(`/api/servers/${currentServerId}/channel-schedules/${scheduleId}`, { method: 'DELETE' });
         showNotification('Schedule deleted', 'success');
         loadChannelSchedules();
     } catch (error) {
@@ -6092,7 +6092,7 @@ window.saveShopItem = async function (event) {
     };
 
     try {
-        let url = `/api/${currentServerId}/shop`;
+        let url = `/api/servers/${currentServerId}/shop`;
         let method = 'POST';
 
         if (itemId) {
@@ -6139,7 +6139,7 @@ window.saveTask = async function (event) {
     };
 
     try {
-        let url = `/api/${currentServerId}/tasks`;
+        let url = `/api/servers/${currentServerId}/tasks`;
         let method = 'POST';
 
         if (taskId) {
@@ -6661,7 +6661,7 @@ window.leaveServer = leaveServer;
                 showNotification('No server selected', 'error');
                 return;
             }
-            const response = await apiCall(`/api/${sId}/messages/${channelId}/${messageId}`);
+            const response = await apiCall(`/api/servers/${sId}/messages/${channelId}/${messageId}`);
 
             if (response.embeds && response.embeds.length > 0) {
                 const embed = response.embeds[0];
@@ -7341,7 +7341,7 @@ window.deleteShopItem = async function (itemId) {
     if (!confirm('Are you sure you want to delete this shop item?')) return;
     logCmsAction('delete_shop_item_start', { item_id: itemId });
     try {
-        await apiCall(`/api/${currentServerId}/shop/${itemId}`, { method: 'DELETE' });
+        await apiCall(`/api/servers/${currentServerId}/shop/${itemId}`, { method: 'DELETE' });
         showNotification('Item deleted', 'success');
         logCmsAction('delete_shop_item_success', { item_id: itemId });
         loadShop();
@@ -7356,7 +7356,7 @@ window.deleteTask = async function (taskId) {
     if (!confirm('Are you sure you want to delete this task?')) return;
     logCmsAction('delete_task_start', { task_id: taskId });
     try {
-        await apiCall(`/api/${currentServerId}/tasks/${taskId}`, { method: 'DELETE' });
+        await apiCall(`/api/servers/${currentServerId}/tasks/${taskId}`, { method: 'DELETE' });
         showNotification('Task deleted', 'success');
         logCmsAction('delete_task_success', { task_id: taskId });
         loadTasks();
@@ -7370,7 +7370,7 @@ window.deleteTask = async function (taskId) {
 window.editAnnouncement = async function (announcementId) {
     logCmsAction('edit_announcement_click', { announcement_id: announcementId });
     try {
-        const data = await apiCall(`/api/${currentServerId}/announcements`);
+        const data = await apiCall(`/api/servers/${currentServerId}/announcements`);
         const item = data.announcements.find(a => a.announcement_id === announcementId);
         if (!item) return showNotification('Announcement not found', 'error');
 
@@ -7390,7 +7390,7 @@ window.deleteAnnouncement = async function (announcementId) {
     if (!confirm('Are you sure you want to delete this announcement?')) return;
     logCmsAction('delete_announcement_start', { announcement_id: announcementId });
     try {
-        await apiCall(`/api/${currentServerId}/announcements/${announcementId}`, { method: 'DELETE' });
+        await apiCall(`/api/servers/${currentServerId}/announcements/${announcementId}`, { method: 'DELETE' });
         showNotification('Announcement deleted', 'success');
         logCmsAction('delete_announcement_success', { announcement_id: announcementId });
         loadAnnouncements();
@@ -7417,7 +7417,7 @@ window.saveAnnouncement = async function (event) {
     logCmsAction('save_announcement_start', { id, body });
     try {
         const method = id ? 'PUT' : 'POST';
-        const url = id ? `/api/${currentServerId}/announcements/${id}` : `/api/${currentServerId}/announcements`;
+        const url = id ? `/api/servers/${currentServerId}/announcements/${id}` : `/api/servers/${currentServerId}/announcements`;
         await apiCall(url, { method, body: JSON.stringify(body) });
         showNotification(id ? 'Announcement updated' : 'Announcement created', 'success');
         logCmsAction('save_announcement_success', { id });
@@ -7433,7 +7433,7 @@ window.saveAnnouncement = async function (event) {
 window.editEmbed = async function (embedId) {
     logCmsAction('edit_embed_click', { embed_id: embedId });
     try {
-        const data = await apiCall(`/api/${currentServerId}/embeds`);
+        const data = await apiCall(`/api/servers/${currentServerId}/embeds`);
         const item = data.embeds.find(e => e.embed_id === embedId);
         if (!item) return showNotification('Embed not found', 'error');
 
@@ -7456,7 +7456,7 @@ window.deleteEmbed = async function (embedId) {
     if (!confirm('Are you sure you want to delete this embed?')) return;
     logCmsAction('delete_embed_start', { embed_id: embedId });
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}`, { method: 'DELETE' });
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`, { method: 'DELETE' });
         showNotification('Embed deleted', 'success');
         logCmsAction('delete_embed_success', { embed_id: embedId });
         loadEmbeds();
@@ -7495,7 +7495,7 @@ window.confirmSendEmbed = async function (embedId) {
     };
 
     try {
-        await apiCall(`/api/${currentServerId}/embeds/${embedId}/send`, {
+        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}/send`, {
             method: 'POST',
             body: JSON.stringify(payload)
         });
@@ -7541,7 +7541,7 @@ window.updateServerTier = function (serverId, serverName, currentTier) {
 
 window.saveServerTierDirect = async function (serverId, serverName, newTier) {
     try {
-        await apiCall(`/api/${serverId}/config`, {
+        await apiCall(`/api/servers/${serverId}/config`, {
             method: 'PUT',
             body: JSON.stringify({ subscription_tier: newTier })
         });
@@ -7742,7 +7742,7 @@ function attachEditByMessageListener() {
 
             try {
                 // endpoint: /api/:guild_id/messages/:channel_id/:message_id
-                const response = await apiCall(`/api/${currentServerId}/messages/${channelId}/${messageId}`);
+                const response = await apiCall(`/api/servers/${currentServerId}/messages/${channelId}/${messageId}`);
 
                 // Check structure based on logs: OPTIONS ... GET ...
                 // Response should be the message object or have embeds
@@ -7860,7 +7860,7 @@ window.saveEmbed = async function (event) {
                 thumbnail_url: embedData.thumbnail?.url
             };
 
-            await apiCall(`/api/${currentServerId}/messages/${channelId}/${messageId}`, {
+            await apiCall(`/api/servers/${currentServerId}/messages/${channelId}/${messageId}`, {
                 method: 'PATCH',
                 body: JSON.stringify(backendPayload)
             });
@@ -7886,8 +7886,8 @@ window.saveEmbed = async function (event) {
 
             const method = (embedId && embedId !== 'discord-message') ? 'PUT' : 'POST';
             const url = (embedId && embedId !== 'discord-message')
-                ? `/api/${currentServerId}/embeds/${embedId}`
-                : `/api/${currentServerId}/embeds`;
+                ? `/api/servers/${currentServerId}/embeds/${embedId}`
+                : `/api/servers/${currentServerId}/embeds`;
 
             await apiCall(url, { method, body: JSON.stringify(dbPayload) });
             showNotification('Embed saved to database!', 'success');
