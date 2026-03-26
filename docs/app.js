@@ -7966,6 +7966,10 @@ window.loadGiveaways = async function() {
 };
 
 window.showCreateGiveawayModal = async function() {
+    if (typeof fetchDiscordData === 'function' && currentServerId) {
+        await fetchDiscordData(currentServerId);
+    }
+
     document.getElementById('giveaway-form').reset();
     document.getElementById('ga-raffle-fields').style.display = 'none';
     document.getElementById('ga-role-fields').style.display = 'none';
@@ -7974,17 +7978,18 @@ window.showCreateGiveawayModal = async function() {
     
     // Populate channels from cache
     const chSelect = document.getElementById('ga-channel');
-    if (chSelect && window.discordDataCache.channels) {
-        chSelect.innerHTML = Object.values(window.discordDataCache.channels)
-            .filter(c => c.type === 0 || c.type === 5)
+    if (chSelect && window.discordDataCache && window.discordDataCache.channels) {
+        const channelsHtml = Object.values(window.discordDataCache.channels)
+            .filter(c => c.type === 0 || c.type === 5 || c.type === 'text' || c.type === 'news')
             .map(c => `<option value="${c.id}">#${c.name}</option>`).join('');
+        chSelect.innerHTML = channelsHtml || '<option value="">No text channels found</option>';
     }
 
     // Populate roles from cache
     const rSelect = document.getElementById('ga-required-role');
-    if (rSelect && window.discordDataCache.roles) {
-        rSelect.innerHTML = '<option value="">Select a role...</option>' + 
-            Object.values(window.discordDataCache.roles).map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+    if (rSelect && window.discordDataCache && window.discordDataCache.roles) {
+        const rolesHtml = Object.values(window.discordDataCache.roles).map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+        rSelect.innerHTML = '<option value="">Select a role...</option>' + rolesHtml;
     }
 
     // Populate shop items
