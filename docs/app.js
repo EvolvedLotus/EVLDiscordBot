@@ -7969,20 +7969,37 @@ window.showCreateGiveawayModal = async function() {
     document.getElementById('giveaway-form').reset();
     document.getElementById('ga-raffle-fields').style.display = 'none';
     document.getElementById('ga-role-fields').style.display = 'none';
+    document.getElementById('ga-shop-fields').style.display = 'none';
+    document.getElementById('ga-custom-fields').style.display = 'block';
     
-    try {
-        const channels = await apiCall(`/api/servers/${currentServerId}/channels`);
-        const select = document.getElementById('ga-channel');
-        select.innerHTML = channels.filter(c => c.type === 0 || c.type === 5)
+    // Populate channels from cache
+    const chSelect = document.getElementById('ga-channel');
+    if (chSelect && window.discordDataCache.channels) {
+        chSelect.innerHTML = Object.values(window.discordDataCache.channels)
+            .filter(c => c.type === 0 || c.type === 5)
             .map(c => `<option value="${c.id}">#${c.name}</option>`).join('');
-    } catch (e) {}
+    }
 
-    try {
-        const roles = await apiCall(`/api/servers/${currentServerId}/roles`);
-        const rSelect = document.getElementById('ga-required-role');
+    // Populate roles from cache
+    const rSelect = document.getElementById('ga-required-role');
+    if (rSelect && window.discordDataCache.roles) {
         rSelect.innerHTML = '<option value="">Select a role...</option>' + 
-            roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-    } catch (e) {}
+            Object.values(window.discordDataCache.roles).map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+    }
+
+    // Populate shop items
+    try {
+        const shopRes = await apiCall(`/api/servers/${currentServerId}/shop`);
+        const sSelect = document.getElementById('ga-shop-item');
+        if (shopRes && shopRes.items && shopRes.items.length > 0) {
+            sSelect.innerHTML = '<option value="">Select a shop item...</option>' + 
+                shopRes.items.map(i => `<option value="${i.id}">${i.name} (Price: ${i.price})</option>`).join('');
+        } else {
+            sSelect.innerHTML = '<option value="">No shop items available</option>';
+        }
+    } catch (e) {
+        document.getElementById('ga-shop-item').innerHTML = '<option value="">Failed to load shop items</option>';
+    }
     
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -7998,20 +8015,39 @@ window.toggleGiveawayModeFields = function() {
     document.getElementById('ga-role-fields').style.display = mode === 'role_restricted' ? 'block' : 'none';
 };
 
+window.toggleGiveawaySourceFields = function() {
+    const source = document.getElementById('ga-prize-source').value;
+    document.getElementById('ga-shop-fields').style.display = source === 'shop_item' ? 'block' : 'none';
+    document.getElementById('ga-custom-fields').style.display = source === 'custom' ? 'block' : 'none';
+    document.getElementById('ga-prize-name').required = source === 'custom';
+};
+
 window.saveGiveaway = async function(e) {
     if(e) e.preventDefault();
     const mode = document.getElementById('ga-entry-mode').value;
+    const source = document.getElementById('ga-prize-source').value;
     const endsAtLocal = document.getElementById('ga-ends-at').value;
     const endsAtUTC = new Date(endsAtLocal).toISOString();
 
-    const data = {
-        prize_name: document.getElementById('ga-prize-name').value,
-        prize_description: document.getElementById('ga-prize-desc').value,
+    let data = {
         channel_id: document.getElementById('ga-channel').value,
         winner_count: parseInt(document.getElementById('ga-winner-count').value),
         entry_mode: mode,
+        prize_source: source,
         ends_at: endsAtUTC
     };
+
+    if (source === 'shop_item') {
+        data.shop_item_id = document.getElementById('ga-shop-item').value;
+        if (!data.shop_item_id) {
+            showNotification('Please select a shop item', 'error');
+            return;
+        }
+    } else {
+        data.prize_name = document.getElementById('ga-prize-name').value;
+        data.prize_description = document.getElementById('ga-prize-desc').value;
+        data.prize_image_url = document.getElementById('ga-prize-image').value;
+    }
 
     if (mode === 'raffle') {
         data.raffle_cost = parseInt(document.getElementById('ga-raffle-cost').value);

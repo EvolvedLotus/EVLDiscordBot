@@ -905,12 +905,33 @@
             <div class="modal-body">
                 <form id="giveaway-form" onsubmit="window.saveGiveaway(event)">
                     <div class="form-group">
-                        <label for="ga-prize-name">Prize Name *</label>
-                        <input type="text" id="ga-prize-name" class="form-control" required placeholder="1 Year Nitro">
+                        <label for="ga-prize-source">Prize Source</label>
+                        <select id="ga-prize-source" class="form-control" onchange="window.toggleGiveawaySourceFields()">
+                            <option value="custom" selected>Custom Prize</option>
+                            <option value="shop_item">Existing Shop Item</option>
+                        </select>
                     </div>
-                    <div class="form-group">
-                        <label for="ga-prize-desc">Prize Description</label>
-                        <textarea id="ga-prize-desc" class="form-control" rows="2" placeholder="Optional details..."></textarea>
+                    <div id="ga-shop-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="ga-shop-item">Select Shop Item *</label>
+                            <select id="ga-shop-item" class="form-control">
+                                <option value="">Loading shop items...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="ga-custom-fields">
+                        <div class="form-group">
+                            <label for="ga-prize-name">Prize Name *</label>
+                            <input type="text" id="ga-prize-name" class="form-control" placeholder="1 Year Nitro">
+                        </div>
+                        <div class="form-group">
+                            <label for="ga-prize-desc">Prize Description</label>
+                            <textarea id="ga-prize-desc" class="form-control" rows="2" placeholder="Optional details..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="ga-prize-image">Prize Image URL</label>
+                            <input type="url" id="ga-prize-image" class="form-control" placeholder="https://example.com/image.png">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="ga-channel">Channel *</label>
