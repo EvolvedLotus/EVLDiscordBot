@@ -232,6 +232,7 @@ embed_manager = None
 sync_manager = None
 ad_claim_manager = None
 channel_lock_manager = None
+giveaway_manager = None
 sse_manager = None  # Added global
 evolved_lotus_api = None
 AuditEventType = None
@@ -241,7 +242,7 @@ def initialize_managers():
     global data_manager, cache_manager, audit_manager, auth_manager, discord_oauth_manager
     global transaction_manager, task_manager, shop_manager, announcement_manager
     global embed_builder, embed_manager, sync_manager, ad_claim_manager, channel_lock_manager
-    global sse_manager, evolved_lotus_api, AuditEventType, TierManager
+    global sse_manager, evolved_lotus_api, AuditEventType, TierManager, giveaway_manager
     
     try:
         logger.info("🔄 Initializing core managers...")
@@ -263,6 +264,7 @@ def initialize_managers():
         from core.tier_manager import TierManager
         from core.evolved_lotus_api import evolved_lotus_api
         from core.channel_lock_manager import ChannelLockManager
+        from core.giveaway_manager import GiveawayManager
 
         # Initialize managers
         data_manager = DataManager()
@@ -280,6 +282,9 @@ def initialize_managers():
         sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
         ad_claim_manager = AdClaimManager(data_manager, transaction_manager)
         channel_lock_manager = ChannelLockManager(data_manager)
+        giveaway_manager = GiveawayManager(data_manager, transaction_manager, shop_manager)
+        giveaway_manager.set_cache_manager(cache_manager)
+        giveaway_manager.set_sse_manager(sse_manager)
 
         logger.info("✅ All managers initialized successfully")
         return True
@@ -319,6 +324,10 @@ def set_bot_instance(bot):
     if 'channel_lock_manager' in globals() and channel_lock_manager:
         channel_lock_manager.set_bot_instance(bot)
         logger.info("✓ Bot instance linked to channel lock manager")
+        
+    if 'giveaway_manager' in globals() and giveaway_manager:
+        giveaway_manager.set_bot(bot)
+        logger.info("✓ Bot instance linked to giveaway manager")
 
 def set_data_manager(dm):
     """Set the global data manager reference"""
@@ -617,6 +626,138 @@ def log_cms_action():
     except Exception as e:
         logger.error(f"Failed to log CMS action: {e}")
         return jsonify({'error': str(e)}), 500
+
+# ========== GIVEAWAY ROUTES ==========
+@app.route('/api/servers/<server_id>/giveaways', methods=['GET'])
+@require_auth
+@require_guild_access
+def api_get_giveaways(server_id):
+    try:
+        status = request.args.get('status')
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+        if not giveaway_manager:
+            return jsonify({'error': 'Giveaway manager not available'}), 503
+        
+        giveaways = giveaway_manager.get_giveaways(server_id, status=status, limit=limit, offset=offset)
+        return jsonify({'giveaways': giveaways}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/servers/<server_id>/giveaways', methods=['POST'])
+@csrf.exempt
+@require_auth
+@require_guild_access
+def api_create_giveaway(server_id):
+    try:
+        if not giveaway_manager:
+            return jsonify({'error': 'Giveaway manager not available'}), 503
+        data = request.get_json()
+        creator_id = request.user.get('id')
+        giveaway = giveaway_manager.create_giveaway(server_id, creator_id, data)
+        # Check if active and needs embed posting
+        if giveaway['status'] == 'active' and getattr(_bot_instance, 'loop', None):
+            # Run coroutine to post embed
+            asyncio.run_coroutine_threadsafe(giveaway_manager.post_giveaway_embed(giveaway['id']), _bot_instance.loop)
+        return jsonify({'giveaway': giveaway}), 201
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/servers/<server_id>/giveaways/<giveaway_id>', methods=['GET'])
+@require_auth
+@require_guild_access
+def api_get_giveaway(server_id, giveaway_id):
+    try:
+        if not giveaway_manager:
+            return jsonify({'error': 'Giveaway manager not available'}), 503
+        giveaway = giveaway_manager.get_giveaway(giveaway_id, server_id)
+        if not giveaway:
+            return jsonify({'error': 'Not found'}), 404
+        return jsonify({'giveaway': giveaway}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/servers/<server_id>/giveaways/<giveaway_id>', methods=['PATCH'])
+@csrf.exempt
+@require_auth
+@require_guild_access
+def api_update_giveaway(server_id, giveaway_id):
+    try:
+        if not giveaway_manager:
+            return jsonify({'error': 'Giveaway manager not available'}), 503
+        data = request.get_json()
+        giveaway = giveaway_manager.update_giveaway(giveaway_id, server_id, data)
+        if not giveaway:
+            return jsonify({'error': 'Not found or unchanged'}), 404
+        return jsonify({'giveaway': giveaway}), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/servers/<server_id>/giveaways/<giveaway_id>/end', methods=['POST'])
+@csrf.exempt
+@require_auth
+@require_guild_access
+def api_end_giveaway(server_id, giveaway_id):
+    try:
+        if not giveaway_manager:
+            return jsonify({'error': 'Giveaway manager not available'}), 503
+        if getattr(_bot_instance, 'loop', None):
+            future = asyncio.run_coroutine_threadsafe(giveaway_manager.end_giveaway(giveaway_id), _bot_instance.loop)
+            winners = future.result(timeout=10)
+            return jsonify({'success': True, 'winners': winners}), 200
+        else:
+            return jsonify({'error': 'Bot loop not available'}), 503
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/servers/<server_id>/giveaways/<giveaway_id>/cancel', methods=['POST'])
+@csrf.exempt
+@require_auth
+@require_guild_access
+def api_cancel_giveaway(server_id, giveaway_id):
+    try:
+        if not giveaway_manager:
+            return jsonify({'error': 'Giveaway manager not available'}), 503
+        cancelled_by = request.user.get('id')
+        res = giveaway_manager.cancel_giveaway(giveaway_id, server_id, cancelled_by)
+        return jsonify(res), 200
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/servers/<server_id>/giveaways/<giveaway_id>/reroll', methods=['POST'])
+@csrf.exempt
+@require_auth
+@require_guild_access
+def api_reroll_giveaway(server_id, giveaway_id):
+    try:
+        if not giveaway_manager:
+            return jsonify({'error': 'Giveaway manager not available'}), 503
+        if getattr(_bot_instance, 'loop', None):
+            future = asyncio.run_coroutine_threadsafe(giveaway_manager.reroll_giveaway(giveaway_id, server_id), _bot_instance.loop)
+            winners = future.result(timeout=10)
+            return jsonify({'success': True, 'winners': winners}), 200
+        else:
+            return jsonify({'error': 'Bot loop not available'}), 503
+    except Exception as e:
+        return safe_error_response(e)
+
+@app.route('/api/servers/<server_id>/giveaways/<giveaway_id>/entries', methods=['GET'])
+@require_auth
+@require_guild_access
+def api_get_giveaway_entries(server_id, giveaway_id):
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+        user_id = request.args.get('user_id')
+        
+        q = data_manager.admin_client.table('giveaway_entries').select('*').eq('giveaway_id', giveaway_id).eq('guild_id', server_id)
+        if user_id:
+            q = q.eq('user_id', str(user_id))
+            
+        res = q.order('entered_at', desc=True).range(offset, offset + limit - 1).execute()
+        return jsonify({'entries': res.data}), 200
+    except Exception as e:
+        return safe_error_response(e)
 
 # ========== AD CLAIM ENDPOINTS (For ad-viewer.html) ==========
 @app.route('/api/ad-claim/session/<session_id>', methods=['GET'])

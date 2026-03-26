@@ -328,6 +328,9 @@ function showTab(tabName) {
             case 'announcements':
                 loadAnnouncementsTab();
                 break;
+            case 'giveaways':
+                loadGiveaways();
+                break;
             case 'embeds':
                 loadEmbedsTab();
                 break;
@@ -7905,3 +7908,162 @@ window.upgradeToPremium = function () {
     logCmsAction('upgrade_click');
     window.open('https://tools.evolvedlotus.com/premium', '_blank');
 };
+
+// ========== GIVEAWAYS LOGIC ==========
+window.loadGiveaways = async function() {
+    try {
+        const data = await apiCall(`/api/servers/${currentServerId}/giveaways`);
+        const list = document.getElementById('giveaways-list');
+        if (!data.giveaways || data.giveaways.length === 0) {
+            list.innerHTML = '<div class="empty-state">No giveaways found for this server. Create one!</div>';
+            return;
+        }
+
+        let html = '<div class="cards-grid">';
+        data.giveaways.forEach(g => {
+            const statusColor = g.status === 'active' ? '#57F287' : (g.status === 'scheduled' ? '#FEE75C' : '#95A5A6');
+            let actions = '';
+            if (g.status === 'active' || g.status === 'scheduled') {
+                actions = `
+                    <button class="btn-danger btn-small" onclick="cancelGiveaway('${g.id}')">Cancel</button>
+                    ${g.status === 'active' ? `<button class="btn-warning btn-small" onclick="endGiveaway('${g.id}')">End Early</button>` : ''}
+                `;
+            } else if (g.status === 'ended') {
+                actions = `<button class="btn-primary btn-small" onclick="rerollGiveaway('${g.id}')">Reroll Winners</button>`;
+            }
+
+            html += `
+                <div class="card" style="border-left: 4px solid ${statusColor}" id="ga-card-${g.id}">
+                    <h3>${g.prize_name}</h3>
+                    <p style="color: var(--text-muted); font-size: 13px;">${g.prize_description || ''}</p>
+                    <div class="card-stats">
+                        <div class="stat"><span class="stat-label">Mode:</span> ${g.entry_mode}</div>
+                        <div class="stat"><span class="stat-label">Status:</span> ${g.status}</div>
+                        <div class="stat"><span class="stat-label">Entries:</span> <span id="ga-entries-${g.id}">${g.total_entries || 0}</span></div>
+                        <div class="stat"><span class="stat-label">Winners:</span> ${g.winner_count}</div>
+                    </div>
+                    ${g.winner_user_ids && g.winner_user_ids.length > 0 ? `<p class="winner-info" style="font-size: 12px; margin-top: 10px;">🏆 Winners: ${g.winner_user_ids.join(', ')}</p>` : ''}
+                    <div class="card-actions" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                        ${actions}
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        list.innerHTML = html;
+        
+        // Basic SSE hooking for live counts
+        if (!window._sseGiveawayHooked && typeof window.sse !== 'undefined') {
+            window.sse.on('giveaway_entry', (e) => {
+                const counter = document.getElementById(`ga-entries-${e.giveaway_id}`);
+                if (counter) counter.innerText = e.total_entries;
+            });
+            window._sseGiveawayHooked = true;
+        }
+    } catch (e) {
+        document.getElementById('giveaways-list').innerHTML = `<div class="error-state">Failed to load giveaways: ${e.message}</div>`;
+    }
+};
+
+window.showCreateGiveawayModal = async function() {
+    document.getElementById('giveaway-form').reset();
+    document.getElementById('ga-raffle-fields').style.display = 'none';
+    document.getElementById('ga-role-fields').style.display = 'none';
+    
+    try {
+        const channels = await apiCall(`/api/servers/${currentServerId}/channels`);
+        const select = document.getElementById('ga-channel');
+        select.innerHTML = channels.filter(c => c.type === 0 || c.type === 5)
+            .map(c => `<option value="${c.id}">#${c.name}</option>`).join('');
+    } catch (e) {}
+
+    try {
+        const roles = await apiCall(`/api/servers/${currentServerId}/roles`);
+        const rSelect = document.getElementById('ga-required-role');
+        rSelect.innerHTML = '<option value="">Select a role...</option>' + 
+            roles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
+    } catch (e) {}
+    
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setMinutes(tomorrow.getMinutes() - tomorrow.getTimezoneOffset());
+    document.getElementById('ga-ends-at').value = tomorrow.toISOString().slice(0, 16);
+
+    document.getElementById('giveaway-modal').style.display = 'block';
+};
+
+window.toggleGiveawayModeFields = function() {
+    const mode = document.getElementById('ga-entry-mode').value;
+    document.getElementById('ga-raffle-fields').style.display = mode === 'raffle' ? 'block' : 'none';
+    document.getElementById('ga-role-fields').style.display = mode === 'role_restricted' ? 'block' : 'none';
+};
+
+window.saveGiveaway = async function(e) {
+    if(e) e.preventDefault();
+    const mode = document.getElementById('ga-entry-mode').value;
+    const endsAtLocal = document.getElementById('ga-ends-at').value;
+    const endsAtUTC = new Date(endsAtLocal).toISOString();
+
+    const data = {
+        prize_name: document.getElementById('ga-prize-name').value,
+        prize_description: document.getElementById('ga-prize-desc').value,
+        channel_id: document.getElementById('ga-channel').value,
+        winner_count: parseInt(document.getElementById('ga-winner-count').value),
+        entry_mode: mode,
+        ends_at: endsAtUTC
+    };
+
+    if (mode === 'raffle') {
+        data.raffle_cost = parseInt(document.getElementById('ga-raffle-cost').value);
+        data.raffle_max_tickets_per_user = parseInt(document.getElementById('ga-raffle-max').value);
+    } else if (mode === 'role_restricted') {
+        const rId = document.getElementById('ga-required-role').value;
+        if(rId) data.required_role_ids = [rId];
+    }
+
+    try {
+        await apiCall(`/api/servers/${currentServerId}/giveaways`, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        showNotification('Giveaway created successfully!', 'success');
+        document.getElementById('giveaway-modal').style.display = 'none';
+        loadGiveaways();
+    } catch (err) {
+        showNotification('Failed to create giveaway: ' + err.message, 'error');
+    }
+};
+
+window.endGiveaway = async function(id) {
+    if(!confirm("Are you sure you want to end this giveaway early and draw winners?")) return;
+    try {
+        const res = await apiCall(`/api/servers/${currentServerId}/giveaways/${id}/end`, { method: 'POST' });
+        showNotification('Giveaway ended! Winners: ' + (res.winners && res.winners.length ? res.winners.join(', ') : 'None'), 'success');
+        loadGiveaways();
+    } catch (e) {
+        showNotification('Failed to end giveaway: ' + e.message, 'error');
+    }
+};
+
+window.cancelGiveaway = async function(id) {
+    if(!confirm("Are you sure you want to cancel this giveaway? Raffle entries will be refunded.")) return;
+    try {
+        const res = await apiCall(`/api/servers/${currentServerId}/giveaways/${id}/cancel`, { method: 'POST' });
+        showNotification(`Giveaway cancelled. Refunded ${res.refund_count || 0} entries.`, 'success');
+        loadGiveaways();
+    } catch (e) {
+        showNotification('Failed to cancel giveaway: ' + e.message, 'error');
+    }
+};
+
+window.rerollGiveaway = async function(id) {
+    if(!confirm("Reroll winners for this giveaway?")) return;
+    try {
+        const res = await apiCall(`/api/servers/${currentServerId}/giveaways/${id}/reroll`, { method: 'POST' });
+        showNotification('Winners rerolled! New winners: ' + (res.winners && res.winners.length ? res.winners.join(', ') : 'None'), 'success');
+        loadGiveaways();
+    } catch (e) {
+        showNotification('Failed to reroll giveaway: ' + e.message, 'error');
+    }
+};
+

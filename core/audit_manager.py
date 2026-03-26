@@ -70,6 +70,12 @@ class AuditEventType(Enum):
     # CMS events
     CMS_ACTION = "cms.action"
 
+    # Giveaway events
+    GIVEAWAY_CREATED = "giveaway.created"
+    GIVEAWAY_ENDED = "giveaway.ended"
+    GIVEAWAY_CANCELLED = "giveaway.cancelled"
+    GIVEAWAY_ERROR = "giveaway.error"
+
 class AuditManager:
     """Comprehensive audit logging system"""
 

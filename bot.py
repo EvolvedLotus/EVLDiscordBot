@@ -17,6 +17,7 @@ from core.transaction_manager import TransactionManager
 from core.task_manager import TaskManager
 from core.shop_manager import ShopManager
 from core.cache_manager import CacheManager
+from core.giveaway_manager import GiveawayManager
 from core.initializer import GuildInitializer
 from config import config
 
@@ -108,6 +109,8 @@ async def run_bot():
         bot.task_manager = TaskManager(data_manager, bot.transaction_manager)
         bot.task_manager.set_cache_manager(bot.cache_manager)
         bot.shop_manager = ShopManager(data_manager, bot.transaction_manager)
+        bot.giveaway_manager = GiveawayManager(data_manager, bot.transaction_manager, bot.shop_manager)
+        bot.giveaway_manager.set_cache_manager(bot.cache_manager)
         
         # Initialize ad claim manager
         try:
@@ -148,6 +151,7 @@ async def run_bot():
         from core.sse_manager import sse_manager
         sse_manager.set_event_loop(asyncio.get_event_loop())
         sse_manager.start()
+        bot.giveaway_manager.set_sse_manager(sse_manager)
 
         # Load cogs AFTER managers are attached
         logger.info("Loading cogs...")
@@ -225,6 +229,12 @@ async def run_bot():
         except Exception as e:
             logger.error(f"✗ Failed to load premium sync cog: {e}")
 
+        try:
+            await bot.load_extension('cogs.giveaways')
+            logger.info("✓ Giveaways cog loaded")
+        except Exception as e:
+            logger.error(f"✗ Failed to load giveaways cog: {e}")
+
 
         # Register persistent views BEFORE on_ready to handle button interactions after bot restarts
         logger.info("Registering persistent views...")
@@ -241,6 +251,18 @@ async def run_bot():
             # Note: task_id will be set when the view is recreated from the message
             bot.add_view(TaskClaimView(task_id=''))
             logger.info("✓ Registered TaskClaimView (regular tasks)")
+            
+            # Register GiveawayEntryViews for active giveaways
+            try:
+                if bot.giveaway_manager:
+                    active_giveaways = data_manager.admin_client.table('giveaways').select('id').eq('status', 'active').execute()
+                    if active_giveaways.data:
+                        for g in active_giveaways.data:
+                            bot.add_view(GiveawayEntryView(giveaway_id=g['id']))
+                        logger.info(f"✓ Registered {len(active_giveaways.data)} GiveawayEntryViews")
+            except Exception as e:
+                logger.error(f"✗ Failed to register GiveawayEntryViews: {e}")
+
         except Exception as e:
             logger.error(f"✗ Failed to register persistent views: {e}")
 

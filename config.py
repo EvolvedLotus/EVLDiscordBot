@@ -65,6 +65,9 @@ class Config:
         self.enable_ai_chat = os.getenv('ENABLE_AI_CHAT', 'true').lower() == 'true'
         self.enable_moderation = os.getenv('ENABLE_MODERATION', 'true').lower() == 'true'
 
+        # Giveaway Settings
+        self.giveaway_embed_delete_delay = int(os.getenv('GIVEAWAY_EMBED_DELETE_DELAY', 30))
+
         # Performance Settings
         self.max_connections = int(os.getenv('MAX_CONNECTIONS', '20'))
         self.connection_timeout = int(os.getenv('CONNECTION_TIMEOUT', '30'))
