@@ -37,8 +37,9 @@ class GiveawayManager:
         """Create a new giveaway and optionally schedule it."""
         try:
             # Validate input rules
+            prize_source = config.get('prize_source', 'custom')
             prize_name = config.get('prize_name', '')
-            if not prize_name or len(prize_name) > 100:
+            if prize_source == 'custom' and (not prize_name or len(prize_name) > 100):
                 raise ValueError("prize_name must be between 1 and 100 characters")
             
             prize_description = config.get('prize_description', '')
@@ -53,7 +54,6 @@ class GiveawayManager:
             if winner_count < 1 or winner_count > 20:
                 raise ValueError("winner_count must be between 1 and 20")
 
-            duration = config.get('duration') # e.g. timedelta or string, expected already parsed datetime or handling here
             ends_at_str = config.get('ends_at')
             if not ends_at_str:
                 raise ValueError("ends_at is required")
@@ -84,7 +84,6 @@ class GiveawayManager:
                 if not required_role_ids:
                     raise ValueError("required_role_ids must be non-empty when mode is role_restricted")
 
-            prize_source = config.get('prize_source', 'custom')
             shop_item_id = config.get('shop_item_id')
             prize_image_url = config.get('prize_image_url')
 
@@ -101,7 +100,11 @@ class GiveawayManager:
                     prize_name = shop_item.get('name', prize_name)
                     prize_description = shop_item.get('description', prize_description)
                     prize_image_url = shop_item.get('image_url', prize_image_url)
+                    
+                    if not prize_name or len(prize_name) > 100:
+                         raise ValueError("Fetched shop item name must be between 1 and 100 characters")
                 except Exception as e:
+                    if isinstance(e, ValueError): raise e
                     raise ValueError(f"Failed to fetch shop item: {e}")
 
             start_at_str = config.get('start_at')
