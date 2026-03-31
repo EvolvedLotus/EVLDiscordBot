@@ -101,9 +101,6 @@ class ServerBoost(commands.Cog):
             
             reward_amount = settings['reward_amount']
             
-            # Ensure user exists in the database
-            self.data_manager.ensure_user_exists(guild_id, user_id)
-            
             # Award coins using transaction manager
             result = self.transaction_manager.add_transaction(
                 guild_id=guild_id,
@@ -183,121 +180,161 @@ class ServerBoost(commands.Cog):
         """Detect when a member boosts the server"""
         # Check if premium_since changed (indicates boost status change)
         if before.premium_since is None and after.premium_since is not None:
-            # User just started boosting
+            # User just started boosting (or re-boosting)
             logger.info(f"🚀 {after.name} started boosting {after.guild.name}")
-            await self.reward_booster(after.guild, after, boost_type='new')
+            
+            # Check for 48-hour grace period
+            try:
+                # Query boost record without a match filter first to handle case-insensitivity or existing data
+                existing = self.data_manager.supabase.table('server_boosts').select('*').match({
+                    'guild_id': str(after.guild.id),
+                    'user_id': str(after.id)
+                }).execute()
+                
+                if existing.data:
+                    boost = existing.data[0]
+                    unboosted_at_str = boost.get('unboosted_at')
+                    
+                    if unboosted_at_str:
+                        unboosted_at = datetime.fromisoformat(unboosted_at_str.replace('Z', '+00:00'))
+                        grace_period = timedelta(hours=48)
+                        
+                        if datetime.now(timezone.utc) - unboosted_at < grace_period:
+                            # WITHIN GRACE PERIOD: Restore boost, keep original boosted_at (streak preserved)
+                            logger.info(f"✅ {after.name} re-boosted within 48h grace period. Streak preserved.")
+                            self.data_manager.supabase.table('server_boosts').update({
+                                'is_active': True,
+                                'unboosted_at': None,
+                                'boost_type': 'renewed'
+                            }).match({
+                                'guild_id': str(after.guild.id),
+                                'user_id': str(after.id)
+                            }).execute()
+                            
+                            # Log restoration to server log
+                            await self.log_boost_event(after.guild, after, "Restored (Grace Period)")
+                            return
+
+                # If no record, or past grace period, treat as a NEW boost streak
+                await self.reward_booster(after.guild, after, boost_type='new')
+                
+            except Exception as e:
+                logger.error(f"Error handling boost grace period: {e}")
+                # Fallback to standard reward procedure
+                await self.reward_booster(after.guild, after, boost_type='new')
         
         elif before.premium_since is not None and after.premium_since is None:
             # User stopped boosting
             logger.info(f"💔 {after.name} stopped boosting {after.guild.name}")
             
-            # Mark boost as inactive in database
+            # Instead of deactivating immediately, set unboosted_at
+            # The background cleanup loop will officially deactivate after 48h.
+            # This allows re-boosting within the grace window to preserve the streak.
             try:
                 self.data_manager.supabase.table('server_boosts').update({
-                    'is_active': False,
-                    'unboosted_at': datetime.now(timezone.utc).isoformat()
+                    'unboosted_at': datetime.now(timezone.utc).isoformat(),
+                    'updated_at': datetime.now(timezone.utc).isoformat()
                 }).match({
                     'guild_id': str(after.guild.id),
                     'user_id': str(after.id)
                 }).execute()
             except Exception as e:
-                logger.error(f"Error marking boost as inactive: {e}")
+                logger.error(f"Error recording boost lapse: {e}")
     
     @tasks.loop(hours=24)
     async def monthly_boost_rewards(self):
         """Check for boosters who should receive their monthly reward"""
         logger.info("Running monthly boost rewards check...")
         
+        # 1. CLEANUP: Permanently deactivate boosts that lapsed > 48 hours ago
         try:
-            # Get all active boosts that haven't been rewarded in the last 30 days
+            grace_cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+            cleanup_res = self.data_manager.supabase.table('server_boosts').update({
+                'is_active': False,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }).match({
+                'is_active': True
+            }).lt('unboosted_at', grace_cutoff.isoformat()).execute()
+            
+            if cleanup_res.data:
+                logger.info(f"🧹 Deactivated {len(cleanup_res.data)} boosts past 48h grace window")
+        except Exception as e:
+            logger.error(f"Error cleaning up lapsed boosts: {e}")
+
+        try:
+            # 2. SCAN: Get active boosts (excluding those in grace period lapse)
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=30)
             
-            result = self.data_manager.supabase.table('server_boosts').select('*').eq(
-                'is_active', True
-            ).lt('last_reward_at', cutoff_date.isoformat()).execute()
+            result = self.data_manager.supabase.table('server_boosts').select('*').match({
+                'is_active': True,
+                'unboosted_at': None  # Only reward those currently boosting
+            }).lt('last_reward_at', cutoff_date.isoformat()).execute()
             
             if not result.data:
-                logger.info("No boosters due for monthly rewards")
+                logger.info("No boosters currently due for monthly rewards")
                 return
             
             rewards_given = 0
-            
             for boost in result.data:
                 guild_id = boost['guild_id']
                 user_id = boost['user_id']
                 
                 try:
-                    # Get guild and member
+                    # Validate guild/member still exist/boost (second line of defense)
                     guild = self.bot.get_guild(int(guild_id))
-                    if not guild:
-                        logger.warning(f"Guild {guild_id} not found")
-                        continue
+                    member = guild.get_member(int(user_id)) if guild else None
                     
-                    member = guild.get_member(int(user_id))
-                    if not member:
-                        logger.warning(f"Member {user_id} not found in guild {guild_id}")
-                        continue
-                    
-                    # Verify they're still boosting
-                    if member.premium_since is None:
-                        # They're no longer boosting, mark as inactive
+                    if not guild or not member or member.premium_since is None:
+                        # Mark as lapsed if they are no longer found or boosting
                         self.data_manager.supabase.table('server_boosts').update({
-                            'is_active': False,
                             'unboosted_at': datetime.now(timezone.utc).isoformat()
-                        }).match({
-                            'guild_id': guild_id,
-                            'user_id': user_id
-                        }).execute()
-                        logger.info(f"Marked boost as inactive for {user_id} in {guild_id}")
+                        }).match({'guild_id': guild_id, 'user_id': user_id}).execute()
                         continue
                     
-                    # Award the monthly reward
+                    # Get reward amount
                     settings = await self.get_boost_settings(guild_id)
-                    if settings['enabled']:
-                        reward_amount = settings['reward_amount']
+                    if not settings.get('enabled', True):
+                        continue
+                    
+                    reward_amount = settings.get('reward_amount', 1000)
+
+                    # 3. ATOMIC REWARD: Use RPC to claim and award in one atomic transaction
+                    # This prevents double-rewards if the bot restarts mid-loop.
+                    claim_result = self.data_manager.admin_client.rpc(
+                        'claim_monthly_boost_reward',
+                        {
+                            'p_guild_id': str(guild_id),
+                            'p_user_id': str(user_id),
+                            'p_amount': reward_amount
+                        }
+                    ).execute()
+
+                    if claim_result.data and claim_result.data.get('success'):
+                        data = claim_result.data
+                        rewards_given += 1
                         
-                        result = self.transaction_manager.add_transaction(
-                            guild_id=guild_id,
-                            user_id=user_id,
-                            amount=reward_amount,
-                            transaction_type='boost_reward',
-                            description="Monthly server boost reward"
-                        )
+                        # Send DM notification
+                        try:
+                            embed = discord.Embed(
+                                title="🎁 Monthly Boost Reward",
+                                description=f"Thank you for continuing to boost **{guild.name}**!",
+                                color=discord.Color.from_rgb(255, 115, 250)
+                            )
+                            embed.add_field(name="💰 Reward", value=f"**{reward_amount:,}** coins", inline=True)
+                            embed.set_footer(text=f"New Balance: {int(data['new_balance']):,} coins")
+                            await member.send(embed=embed)
+                        except:
+                            pass # DMs blocked
                         
-                        if result['success']:
-                            # Update last_reward_at
-                            self.data_manager.supabase.table('server_boosts').update({
-                                'last_reward_at': datetime.now(timezone.utc).isoformat()
-                            }).match({
-                                'guild_id': guild_id,
-                                'user_id': user_id
-                            }).execute()
-                            
-                            # Send DM notification
-                            try:
-                                embed = discord.Embed(
-                                    title="🎁 Monthly Boost Reward",
-                                    description=f"Thank you for continuing to boost **{guild.name}**!",
-                                    color=discord.Color.from_rgb(255, 115, 250)
-                                )
-                                embed.add_field(
-                                    name="💰 Reward",
-                                    value=f"You've received **{reward_amount:,}** coins!",
-                                    inline=False
-                                )
-                                embed.set_footer(text=f"New Balance: {result['new_balance']:,} coins")
-                                
-                                await member.send(embed=embed)
-                            except:
-                                pass  # Silently fail if DMs are disabled
-                            
-                            rewards_given += 1
-                            logger.info(f"✅ Gave monthly boost reward to {member.name} in {guild.name}")
-                
+                        logger.info(f"✅ Atomic reward granted to {member.name} in {guild.name}")
+                    else:
+                        error_msg = claim_result.data.get('error', 'Unknown error') if claim_result.data else 'No response'
+                        logger.debug(f"Skipped {user_id}: {error_msg}")
+
                 except Exception as e:
-                    logger.error(f"Error processing monthly reward for {user_id} in {guild_id}: {e}")
+                    logger.error(f"Error rewarding booster {user_id}: {e}")
             
-            logger.info(f"Monthly boost rewards complete: {rewards_given} rewards given")
+            logger.info(f"Monthly rewards cycle complete: {rewards_given} users rewarded")
             
         except Exception as e:
             logger.error(f"Error in monthly boost rewards task: {e}", exc_info=True)

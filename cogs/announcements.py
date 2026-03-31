@@ -544,25 +544,29 @@ class Announcements(commands.Cog):
                         
                         if now >= scheduled_time:
                             # Time to send!
+                            delay_seconds = (now - scheduled_time).total_seconds()
+                            is_delayed = delay_seconds > 300  # 5 minutes late implies missed/downtime
+                            
                             channel = guild.get_channel(int(item['channel_id']))
                             if channel:
                                 sent_msg = None
                                 if item.get('type') == 'embed':
                                     embed_dict = item.get('embed_dict')
-                                    # Convert timestamp string back to datetime if present in dict, or let discord handle ISO string
-                                    if 'timestamp' in embed_dict:
-                                        # Update timestamp to now? Or keep original?
-                                        # Let's keep original creation time or update to now.
-                                        # embed_dict['timestamp'] = datetime.now().isoformat()
-                                        pass
-                                        
                                     embed = discord.Embed.from_dict(embed_dict)
+                                    
+                                    if is_delayed:
+                                        embed.description = f"⚠️ *Note: This scheduled announcement was delayed by {int(delay_seconds//60)} minutes due to system maintenance.*\n\n" + str(embed.description or "")
+                                        
                                     sent_msg = await channel.send(embed=embed)
                                 else:
                                     # Regular announcement
                                     content = item.get('content', '')
                                     title = item.get('title', 'Announcement')
-                                    msg_content = f"**{title}**\n\n{content}"
+                                    
+                                    if is_delayed:
+                                        msg_content = f"**{title}**\n⚠️ *Delayed transmission ({int(delay_seconds//60)}m)*\n\n{content}"
+                                    else:
+                                        msg_content = f"**{title}**\n\n{content}"
                                     
                                     # Mentions
                                     if item.get('mention_everyone'):

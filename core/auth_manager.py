@@ -19,10 +19,13 @@ logger = logging.getLogger(__name__)
 class AuthManager:
     """Enhanced authentication manager with DB-backed session management and role sync"""
 
-    def __init__(self, data_manager, jwt_secret: str, session_timeout: int = 3600):
+    def __init__(self, data_manager, jwt_secret: str, session_timeout: int = 604800):
         self.data_manager = data_manager
         self.jwt_secret = jwt_secret
         self.session_timeout = session_timeout
+        self.idle_timeout = session_timeout # Default idle matches timeout
+        self.max_lifetime = 30 * 24 * 3600  # 30 days hard expiry
+        self.sync_interval = 900           # 15 minutes sync interval
         
         # Security settings
         self.max_login_attempts = 5
@@ -91,7 +94,9 @@ class AuthManager:
         session_id = secrets.token_hex(32)
         
         try:
-            expires_at = datetime.now(timezone.utc) + timedelta(seconds=self.session_timeout)
+            now = datetime.now(timezone.utc)
+            expires_at = now + timedelta(seconds=self.session_timeout)
+            max_expires_at = now + timedelta(seconds=self.max_lifetime)
             
             # Insert into web_sessions
             self.data_manager.admin_client.table('web_sessions').insert({
@@ -99,7 +104,10 @@ class AuthManager:
                 'user_id': str(user_data.get('id', '')),
                 'user_data': user_data,
                 'expires_at': expires_at.isoformat(),
-                'created_at': datetime.now(timezone.utc).isoformat(),
+                'max_expires_at': max_expires_at.isoformat(),
+                'created_at': now.isoformat(),
+                'last_active_at': now.isoformat(),
+                'last_permission_check': now.isoformat(),
                 'is_valid': True
             }).execute()
 
@@ -130,27 +138,54 @@ class AuthManager:
                 
             session = result.data[0]
             
-            # Parse expires_at (Supabase returns ISO string)
-            # Handle Z format or offset
-            expires_str = session['expires_at']
-            expires_at = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
+            # Parsers
             now = datetime.now(timezone.utc)
             
-            # Check expiry
+            # 1. Check HARD Expiry (Max Lifetime)
+            max_expires_str = session.get('max_expires_at')
+            if max_expires_str:
+                max_expires_at = datetime.fromisoformat(max_expires_str.replace('Z', '+00:00'))
+                if now > max_expires_at:
+                    logger.info(f"Session {session_id} hit hard max lifetime (30d). Invalidating.")
+                    self.destroy_session(session_id)
+                    return None
+            
+            # 2. Check IDLE Expiry
+            expires_str = session['expires_at']
+            expires_at = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
+            
             if now > expires_at:
+                logger.debug(f"Session {session_id} hit idle timeout. Invalidating.")
                 self.destroy_session(session_id)
                 return None
                 
-            # Extend session if active (sliding window) - optimize to not do every request?
-            # Let's simple implementation: Update expiry if < 5 mins left
+            # 3. Update Session Info (Sliding window and Activity timestamp)
+            updates = {
+                'last_active_at': now.isoformat()
+            }
+            
+            # Extend sliding window if more than half-expired
             time_left = (expires_at - now).total_seconds()
-            if time_left < 300:
+            if time_left < (self.session_timeout / 2):
                 new_expires = now + timedelta(seconds=self.session_timeout)
-                self.data_manager.admin_client.table('web_sessions') \
-                    .update({'expires_at': new_expires.isoformat()}) \
-                    .eq('session_id', session_id) \
-                    .execute()
-                logger.debug(f"Session extended for user: {session['user_id']}")
+                updates['expires_at'] = new_expires.isoformat()
+                logger.debug(f"Session {session_id} sliding window extended for user: {session['user_id']}")
+                
+            # Perform update
+            self.data_manager.admin_client.table('web_sessions') \
+                .update(updates) \
+                .eq('session_id', session_id) \
+                .execute()
+            
+            # 4. DISCORD PERMISSION SYNC (Gap 1: Re-validation every 15 min)
+            last_sync_str = session.get('last_permission_check')
+            if last_sync_str:
+                last_sync = datetime.fromisoformat(last_sync_str.replace('Z', '+00:00'))
+                if (now - last_sync).total_seconds() > self.sync_interval:
+                    # Flag that session needs permission sync
+                    user_data = session['user_data'].copy()
+                    user_data['_needs_permission_sync'] = True
+                    return user_data
                 
             return session['user_data']
             
@@ -187,6 +222,20 @@ class AuthManager:
             logger.info(f"Session destroyed: {session_id}")
         except Exception as e:
             logger.error(f"Error destroying session: {e}")
+
+    def refresh_session_user_data(self, session_id: str, new_user_data: Dict[str, Any]):
+        """Update the cached user_data in an active session"""
+        try:
+            self.data_manager.admin_client.table('web_sessions') \
+                .update({
+                    'user_data': new_user_data,
+                    'last_permission_check': datetime.now(timezone.utc).isoformat()
+                }) \
+                .eq('session_id', session_id) \
+                .execute()
+            logger.debug(f"Session data refreshed for session: {session_id}")
+        except Exception as e:
+            logger.error(f"Error refreshing session user data: {e}")
 
     def update_session_info(self, session_id: str, ip_address: str = None, user_agent: str = None):
         """Update session metadata in DB"""

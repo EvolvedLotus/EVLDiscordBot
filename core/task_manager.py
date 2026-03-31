@@ -213,6 +213,21 @@ class TaskManager:
 
             task_to_delete = task_check.data[0]
 
+            # VALIDATION: Check for active submissions before deleting
+            # We should not delete a task if users have pending reviews or accepted claims
+            active_claims = self.data_manager.admin_client.table('user_tasks') \
+                .select('status') \
+                .eq('task_id', task_id) \
+                .eq('guild_id', guild_id) \
+                .in_('status', ['submitted', 'accepted']) \
+                .execute()
+
+            if active_claims.data and len(active_claims.data) > 0:
+                return {
+                    'success': False, 
+                    'error': "Cannot delete task: There are active submissions (Pending Review or Accepted) for this task. Please resolve them first."
+                }
+
             # Delete associated user_tasks first
             self.data_manager.admin_client.table('user_tasks') \
                 .delete() \
@@ -518,38 +533,73 @@ class TaskManager:
             logger.exception(f"Complete task error: {e}")
             return {'success': False, 'error': "Failed to complete task."}
 
-    def reject_task(self, guild_id: int, user_id: int, task_id: str, reason: str = None) -> Dict:
+    async def reject_task(self, guild_id: int, user_id: int, task_id: str, reason: str = None) -> Dict:
         """
-        Reject a submitted task.
-
-        Args:
-            guild_id: Guild ID
-            user_id: User ID
-            task_id: Task ID
-            reason: Rejection reason
-
-        Returns:
-            Result dictionary
+        Reject a submitted task with resubmission cap.
+        Migrated to Supabase with submission attempt limits.
         """
-        def reject_operation(tasks_data, currency_data):
-            user_tasks = tasks_data.get('user_tasks', {}).get(str(user_id), {})
-            user_task = user_tasks.get(task_id)
-
-            if not user_task:
-                return {'success': False, 'error': "Task not found for user."}
-
-            if user_task['status'] != 'submitted':
-                return {'success': False, 'error': f"Task is not submitted (Status: {user_task['status']})."}
-
-            # Reset to in_progress so user can resubmit
-            user_task['status'] = 'in_progress'
-            user_task['notes'] = f"Rejected: {reason}" if reason else "Rejected for review"
-
-            return {'success': True}
+        user_id = str(user_id)
+        guild_id = str(guild_id)
+        task_id = str(task_id)
 
         try:
-            result = self._atomic_task_operation(guild_id, reject_operation)
-            return result
+            async with self.data_manager.atomic_transaction() as conn:
+                # Lock user_task row
+                user_task = await conn.fetchrow(
+                    """SELECT id, status, submission_attempts
+                       FROM user_tasks
+                       WHERE user_id = $1 AND guild_id = $2 AND task_id = $3
+                       FOR UPDATE""",
+                    user_id, guild_id, task_id
+                )
+
+                if not user_task:
+                    return {'success': False, 'error': "Task not found for user."}
+
+                if user_task['status'] != 'submitted':
+                    return {'success': False, 'error': f"Task is not submitted (Status: {user_task['status']})."}
+
+                # Increment attempts
+                current_attempts = user_task.get('submission_attempts', 0)
+                new_attempts = current_attempts + 1
+                max_attempts = 3
+                
+                # Check if hit max limits
+                if new_attempts >= max_attempts:
+                    new_status = 'cancelled'
+                    notes = f"Rejected: {reason}. Maximum submission attempts ({max_attempts}) reached. Task closed." if reason else f"Rejected and closed after {max_attempts} attempts."
+                else:
+                    new_status = 'in_progress'
+                    notes = f"Rejected (Attempt {new_attempts}/{max_attempts}): {reason}" if reason else f"Rejected for review (Attempt {new_attempts}/{max_attempts})"
+
+                # Execute update
+                await conn.execute(
+                    """UPDATE user_tasks
+                       SET status = $1, notes = $2, submission_attempts = $3, updated_at = NOW()
+                       WHERE id = $4""",
+                    new_status, notes, new_attempts, user_task['id']
+                )
+
+            # Invalidate cache
+            if hasattr(self, 'cache_manager') and self.cache_manager:
+                self.cache_manager.invalidate(f"user_tasks:{guild_id}:{user_id}")
+            
+            # Broadcast SSE event
+            if hasattr(self, 'sse_manager') and self.sse_manager:
+                await self.sse_manager.broadcast_event(guild_id, {
+                    'type': 'task_rejected',
+                    'user_id': user_id,
+                    'task_id': task_id,
+                    'status': new_status
+                })
+
+            return {
+                'success': True, 
+                'status': new_status,
+                'attempts': new_attempts,
+                'max_attempts': max_attempts
+            }
+
         except Exception as e:
             logger.error(f"Task rejection failed: {e}")
             return {'success': False, 'error': "Failed to reject task."}

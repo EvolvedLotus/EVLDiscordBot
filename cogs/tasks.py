@@ -1138,44 +1138,21 @@ class TaskReviewView(discord.ui.View):
         guild_id = str(interaction.guild.id)
 
         try:
-            # Load data
-            tasks_data = data_manager.load_guild_data(guild_id, 'tasks')
-            currency_data = data_manager.load_guild_data(guild_id, 'currency')
+            tasks_cog = interaction.client.get_cog('Tasks')
+            task_manager = tasks_cog.task_manager
 
-            task = tasks_data['tasks'].get(str(self.task_id))
-            user_task = tasks_data.get('user_tasks', {}).get(self.user_id, {}).get(str(self.task_id))
-
-            if not task or not user_task:
-                await interaction.followup.send("❌ Task data not found.", ephemeral=True)
+            # Get basic task info for the message
+            task_res = tasks_cog.data_manager.supabase.table('tasks').select('*').eq('guild_id', guild_id).eq('task_id', self.task_id).execute()
+            if not task_res.data:
+                await interaction.followup.send("❌ Task not found.", ephemeral=True)
                 return
+            task = task_res.data[0]
 
             if accept:
-                # Mark as accepted
-                completed_at = datetime.now(timezone.utc)
-                user_task['status'] = 'accepted'
-                user_task['completed_at'] = completed_at.isoformat()
-
-                # Award currency using the currency cog's atomic method
-                currency_cog = self.bot.get_cog('Currency')
-                if currency_cog:
-                    balance_result = currency_cog._add_balance(
-                        int(guild_id),
-                        int(self.user_id),
-                        task['reward'],
-                        f"Completed task: {task['name']}",
-                        transaction_type='task_reward',
-                        metadata={
-                            'task_id': str(self.task_id),
-                            'task_name': task['name'],
-                            'reviewer_id': str(interaction.user.id)
-                        }
-                    )
-
-                    if balance_result is False:
-                        await interaction.followup.send("❌ Failed to award currency - balance update failed.", ephemeral=True)
-                        return
-                else:
-                    await interaction.followup.send("❌ Currency system not available.", ephemeral=True)
+                # Approve via PG Atomicity
+                result = await task_manager.approve_task(int(guild_id), int(self.user_id), int(self.task_id), interaction.user.id)
+                if not result.get('success'):
+                    await interaction.followup.send(f"❌ Failed to accept task: {result.get('error')}", ephemeral=True)
                     return
 
                 # Grant role if specified
@@ -1186,25 +1163,27 @@ class TaskReviewView(discord.ui.View):
                         if member:
                             await member.add_roles(role, reason=f"Completed task: {task['name']}")
 
-                # Update metadata
-                tasks_data['metadata']['total_completed'] = tasks_data.get('metadata', {}).get('total_completed', 0) + 1
-
-                result_msg = f"✅ Task accepted! {task['reward']} coins awarded to <@{self.user_id}>"
+                result_msg = f"✅ Task accepted! {result.get('reward_amount')} coins awarded to <@{self.user_id}>"
                 if task.get('role_name'):
                     result_msg += f" and **{task['role_name']}** role granted."
 
             else:
-                # Reject submission
-                user_task['status'] = 'rejected'
-                user_task['notes'] = f"Rejected by {interaction.user.name}"
-                result_msg = f"❌ Task submission rejected for <@{self.user_id}>. They can resubmit."
-
-            # Save data
-            data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
-            data_manager.save_guild_data(guild_id, 'currency', currency_data)
+                # Reject via PG Atomicity
+                result = await task_manager.reject_task(int(guild_id), int(self.user_id), str(self.task_id), reason=f"Rejected by {interaction.user.name}")
+                if not result.get('success'):
+                    await interaction.followup.send(f"❌ Failed to reject task: {result.get('error')}", ephemeral=True)
+                    return
+                
+                if result.get('status') == 'cancelled':
+                    result_msg = f"❌ Task submission rejected for <@{self.user_id}>. Maximum attempts reached ({result.get('attempts')}/{result.get('max_attempts')}). Claim closed."
+                else:
+                    result_msg = f"❌ Task submission rejected for <@{self.user_id}>. They can resubmit (Attempt {result.get('attempts')}/{result.get('max_attempts')} used)."
 
             # Update proof message
-            await interaction.message.edit(view=None)
+            try:
+                await interaction.message.edit(view=None)
+            except discord.NotFound:
+                pass
 
             # Send result
             await interaction.followup.send(result_msg)
@@ -1219,9 +1198,12 @@ class TaskReviewView(discord.ui.View):
                         color=discord.Color.green() if accept else discord.Color.red()
                     )
                     if accept:
-                        dm_embed.add_field(name="Reward", value=f"{task['reward']} coins", inline=True)
+                        dm_embed.add_field(name="Reward", value=f"{result.get('reward_amount')} coins", inline=True)
                     else:
-                        dm_embed.add_field(name="Note", value="You can resubmit with updated proof.", inline=False)
+                        if not accept and result.get('status') == 'cancelled':
+                            dm_embed.add_field(name="Note", value="Max submission attempts reached. The task claim has been closed.", inline=False)
+                        else:
+                            dm_embed.add_field(name="Note", value="You can review the notes and resubmit with updated proof.", inline=False)
 
                     await member.send(embed=dm_embed)
                 except discord.Forbidden:
@@ -1358,56 +1340,51 @@ class TaskReviewView(discord.ui.View):
 
     @tasks.loop(minutes=5)
     async def check_expired_tasks(self):
-        """Background task to expire old tasks and user submissions."""
+        """Background task to expire old tasks safely using Postgres RPC."""
         now = datetime.now(timezone.utc)
 
-        for guild in self.bot.guilds:
-            guild_id = str(guild.id)
-
-            try:
-                tasks_data = data_manager.load_guild_data(guild_id, 'tasks')
-                settings = tasks_data.get('settings', {})
-
-                if not settings.get('auto_expire_enabled', True):
-                    continue
-
-                changes_made = False
-
-                # Expire active tasks past deadline
-                for task_id, task in tasks_data.get('tasks', {}).items():
-                    if task['status'] == 'active':
-                        expires_at = datetime.fromisoformat(task['expires_at'])
-                        if now > expires_at:
-                            task['status'] = 'expired'
-                            tasks_data['metadata']['total_expired'] = tasks_data.get('metadata', {}).get('total_expired', 0) + 1
-                            changes_made = True
-
-                            # Delete Discord message
+        # 1. First, find all tasks that are ABOUT to be expired, so we can delete their Discord messages
+        try:
+            # Query active tasks that have passed their expiration date
+            # We use the REST API filtering directly
+            expired_tasks_res = self.data_manager.supabase.table('tasks') \
+                .select('guild_id, task_id, channel_id, message_id') \
+                .eq('status', 'active') \
+                .lt('expires_at', now.isoformat()) \
+                .execute()
+                
+            if expired_tasks_res.data:
+                for task in expired_tasks_res.data:
+                    if not task.get('channel_id') or not task.get('message_id'):
+                        continue
+                        
+                    guild_id = task.get('guild_id')
+                    guild = self.bot.get_guild(int(guild_id))
+                    if not guild:
+                        continue
+                        
+                    try:
+                        channel = guild.get_channel(int(task['channel_id']))
+                        if channel:
                             try:
-                                channel = guild.get_channel(int(task['channel_id']))
-                                if channel:
-                                    try:
-                                        message = await channel.fetch_message(int(task['message_id']))
-                                        await message.delete()
-                                    except discord.NotFound:
-                                        pass  # Message already deleted
-                            except Exception as e:
-                                print(f"Error deleting expired task message: {e}")
+                                message = await channel.fetch_message(int(task['message_id']))
+                                await message.delete()
+                            except discord.NotFound:
+                                pass
+                    except Exception as e:
+                        print(f"Error deleting expired task message for {task['task_id']}: {e}")
 
-                # Expire user tasks past deadline
-                for user_id, user_tasks in tasks_data.get('user_tasks', {}).items():
-                    for task_id, user_task in user_tasks.items():
-                        if user_task['status'] in ['claimed', 'in_progress']:
-                            deadline = datetime.fromisoformat(user_task['deadline'])
-                            if now > deadline:
-                                user_task['status'] = 'expired'
-                                changes_made = True
-
-                if changes_made:
-                    data_manager.save_guild_data(guild_id, 'tasks', tasks_data)
-
-            except Exception as e:
-                print(f"Error checking expired tasks for guild {guild_id}: {e}")
+            # 2. Run the atomic Postgres RPC to safely expire tasks and user_tasks
+            # This RPC intentionally EXCLUDES 'submitted' user_tasks from expiration, 
+            # fixing the race condition where a user submits right as it expires.
+            expire_res = self.data_manager.admin_client.rpc('expire_overdue_tasks').execute()
+            
+            # Optionally log if things were expired
+            # if expire_res.data and expire_res.data > 0:
+            #     print(f"Expired {expire_res.data} overdue tasks/submissions across all guilds.")
+                
+        except Exception as e:
+            print(f"Error checking expired tasks globally: {e}")
 
     @check_expired_tasks.before_loop
     async def before_check_expired_tasks(self):

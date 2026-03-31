@@ -375,11 +375,17 @@ class ShopManager:
         user_id: int,
         item_id: str,
         quantity: int = 1,
-        interaction: discord.Interaction = None
+        interaction: discord.Interaction = None,
+        expected_price: int = None
     ) -> dict:
         """
-        Process item purchase with full validation and atomic operations.
-        Returns purchase result dict.
+        ATOMIC purchase via Postgres RPC (process_purchase).
+        Balance deduction, stock decrement, inventory increment, and transaction
+        logging all happen inside a single Postgres transaction with row-level
+        locking. The threading.Lock is no longer the primary safety mechanism.
+        
+        expected_price: The price the user was shown at autocomplete time.
+        If the price changed between then and now, the RPC rejects the purchase.
         """
         # Input validation
         if quantity < 1:
@@ -388,141 +394,90 @@ class ShopManager:
         if quantity > self.MAX_PURCHASE_QUANTITY:
             return {'success': False, 'error': f'Maximum purchase quantity is {self.MAX_PURCHASE_QUANTITY}'}
 
-        # Acquire purchase lock (prevents concurrent purchases by same user)
-        lock_key = (guild_id, user_id)
-        with self._purchase_locks[lock_key]:
-            try:
-                # Load current data
-                currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
-                shop_items = currency_data.get('shop_items', {})
-                inventory = currency_data.setdefault('inventory', {})
-                user_inventory = inventory.setdefault(str(user_id), {})
-                users = currency_data.setdefault('users', {})
-                user_data = users.setdefault(str(user_id), {'balance': 0})
+        # Check role requirements (app-layer only — requires the interaction object)
+        if interaction:
+            item_data = self.get_item(guild_id, item_id)
+            if item_data and item_data.get('role_requirement'):
+                if not self._check_role_requirement(interaction.guild, user_id, item_data['role_requirement']):
+                    return {'success': False, 'error': f"You need the '{item_data['role_requirement']}' role to purchase this item"}
 
-                # Validate item exists and is active
-                if item_id not in shop_items:
-                    return {'success': False, 'error': 'Item not found'}
+        try:
+            # Single atomic RPC: validates price/stock/balance, then does all writes
+            result = self.data_manager.admin_client.rpc(
+                'process_purchase',
+                {
+                    'p_guild_id': str(guild_id),
+                    'p_user_id': str(user_id),
+                    'p_item_id': str(item_id),
+                    'p_quantity': quantity,
+                    'p_expected_price': expected_price  # None = skip price validation
+                }
+            ).execute()
 
-                item = shop_items[item_id]
-                if not item.get('is_active', True):
-                    return {'success': False, 'error': 'Item is not available for purchase'}
+            if not result.data or len(result.data) == 0:
+                return {'success': False, 'error': 'Purchase RPC returned no data'}
 
-                # Check role requirements
-                if item.get('role_requirement') and interaction:
-                    if not self._check_role_requirement(interaction.guild, user_id, item['role_requirement']):
-                        return {'success': False, 'error': f"You need the '{item['role_requirement']}' role to purchase this item"}
+            row = result.data[0]
 
-                # Check stock availability
-                current_stock = item.get('stock', -1)
-                if current_stock != -1 and current_stock < quantity:
-                    return {'success': False, 'error': f'Insufficient stock. Available: {current_stock}'}
-
-                # Calculate total cost
-                total_cost = item['price'] * quantity
-
-                # Check user balance
-                current_balance = user_data['balance']
-                if current_balance < total_cost:
-                    return {'success': False, 'error': f'Insufficient balance. Need {total_cost}, have {current_balance}'}
-
-                # ATOMIC UPDATE PHASE
-                # 1. Log transaction via transaction manager (this updates balance atomically)
-                transaction_result = self.transaction_manager.log_transaction(
-                    guild_id=guild_id,
-                    user_id=user_id,
-                    amount=-total_cost,  # Negative for deduction
-                    balance_before=current_balance,
-                    balance_after=current_balance - total_cost,
-                    transaction_type='shop',
-                    description=f"Purchased {quantity}x {self._get_item_emoji(item)} {item['name']}",
-                    metadata={
-                        'item_id': item_id,
-                        'quantity': quantity,
-                        'item_name': item['name'],
-                        'item_price': item['price']
-                    }
-                )
-
-                if not transaction_result:
-                    return {'success': False, 'error': 'Failed to process payment'}
-
-                new_balance = current_balance - total_cost
-
-                # 2. Update stock (if limited)
-                if current_stock != -1:
-                    with self._stock_locks[guild_id]:
-                        item['stock'] = current_stock - quantity
-                        # Log stock change
-                        stock_history = item.setdefault('metadata', {}).setdefault('stock_history', [])
-                        stock_history.append({
-                            'change': -quantity,
-                            'new_stock': item['stock'],
-                            'timestamp': datetime.now().isoformat(),
-                            'reason': 'purchase'
-                        })
-
-                # 3. Add to inventory
-                current_quantity = user_inventory.get(item_id, 0)
-                user_inventory[item_id] = current_quantity + quantity
-
-                # 4. Update item metadata (sales count)
-                sales_count = item.setdefault('metadata', {}).setdefault('sales_count', 0)
-                item['metadata']['sales_count'] = sales_count + quantity
-
-                # 5. Save all changes
-                success = self.data_manager.save_guild_data(guild_id, 'currency', currency_data)
-                if not success:
-                    # This should not happen in normal operation, but rollback if it does
-                    logger.error(f"Failed to save purchase data for user {user_id} in guild {guild_id}")
-                    return {'success': False, 'error': 'Failed to save purchase data'}
-
-                # Clear caches - both shop manager and data manager
-                self._clear_shop_cache(guild_id)
-                self._clear_inventory_cache(guild_id, user_id)
-                self.data_manager.invalidate_cache(guild_id, 'currency')
-
-                # Trigger SSE updates
-                self._broadcast_event('shop_update', {
-                    'guild_id': guild_id,
-                    'action': 'item_purchased',
-                    'item_id': item_id,
-                    'quantity': quantity,
-                    'user_id': user_id
-                })
-
-                self._broadcast_event('inventory_update', {
-                    'guild_id': guild_id,
-                    'user_id': user_id,
-                    'action': 'item_added',
-                    'item_id': item_id,
-                    'quantity': quantity
-                })
-
-                # Try to sync Discord message (non-blocking)
-                if self.data_manager.bot_instance:
-                    try:
-                        import asyncio
-                        future = asyncio.run_coroutine_threadsafe(
-                            self.sync_discord_message(guild_id, item_id, self.data_manager.bot_instance),
-                            self.data_manager.bot_instance.loop
-                        )
-                        future.result(timeout=5)  # Wait up to 5 seconds
-                    except Exception as e:
-                        logger.warning(f"Failed to sync Discord message for {item_id}: {e}")
-
+            if not row.get('success'):
                 return {
-                    'success': True,
-                    'item': item.copy(),
-                    'quantity': quantity,
-                    'total_cost': total_cost,
-                    'new_balance': new_balance,
-                    'inventory_total': user_inventory[item_id]
+                    'success': False,
+                    'error': row.get('error_message', 'Purchase failed'),
+                    'actual_price': row.get('actual_price')
                 }
 
-            except Exception as e:
-                logger.error(f"Purchase failed for user {user_id}, item {item_id}: {e}")
-                return {'success': False, 'error': str(e)}
+            # Clear caches
+            self._clear_shop_cache(guild_id)
+            self._clear_inventory_cache(guild_id, user_id)
+            self.data_manager.invalidate_cache(guild_id, 'currency')
+
+            # Trigger SSE updates
+            self._broadcast_event('shop_update', {
+                'guild_id': guild_id,
+                'action': 'item_purchased',
+                'item_id': item_id,
+                'quantity': quantity,
+                'user_id': user_id
+            })
+
+            self._broadcast_event('inventory_update', {
+                'guild_id': guild_id,
+                'user_id': user_id,
+                'action': 'item_added',
+                'item_id': item_id,
+                'quantity': quantity
+            })
+
+            # Try to sync Discord message (non-blocking)
+            if self.data_manager.bot_instance:
+                try:
+                    import asyncio
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.sync_discord_message(guild_id, item_id, self.data_manager.bot_instance),
+                        self.data_manager.bot_instance.loop
+                    )
+                    future.result(timeout=5)
+                except Exception as e:
+                    logger.warning(f"Failed to sync Discord message for {item_id}: {e}")
+
+            return {
+                'success': True,
+                'item': {
+                    'name': row.get('item_name', ''),
+                    'emoji': row.get('item_emoji', '🛍️'),
+                    'price': row.get('actual_price', 0)
+                },
+                'quantity': quantity,
+                'total_cost': row.get('total_cost', 0),
+                'new_balance': row.get('new_balance', 0),
+                'new_stock': row.get('new_stock', -1),
+                'inventory_total': row.get('inventory_total', quantity),
+                'transaction_id': str(row.get('transaction_id', ''))
+            }
+
+        except Exception as e:
+            logger.error(f"Purchase failed for user {user_id}, item {item_id}: {e}")
+            return {'success': False, 'error': str(e)}
 
     def check_stock(self, guild_id: int, item_id: str) -> dict:
         """Check item stock status"""
@@ -783,11 +738,38 @@ class ShopManager:
         quantity: int = 1,
         interaction = None
     ) -> dict:
-        """Redeem shop item from inventory"""
-        # Check if item exists
+        """Redeem shop item from inventory.
+        Falls back to archived_shop_items if the item was deleted from the active store,
+        so users can still redeem items they already own.
+        """
+        # Check active items first
         item = self.get_item(guild_id, item_id)
+        is_archived = False
+
         if not item:
-            return {'success': False, 'error': 'Item not found'}
+            # Fallback: check archived items (in-memory cache)
+            currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
+            archived = currency_data.get('archived_shop_items', {})
+            item = archived.get(item_id)
+
+            # Fallback: check archived_shop_items table in DB
+            if not item:
+                try:
+                    result = self.data_manager.admin_client.table('archived_shop_items') \
+                        .select('*') \
+                        .eq('guild_id', str(guild_id)) \
+                        .eq('item_id', item_id) \
+                        .execute()
+                    if result.data and len(result.data) > 0:
+                        item = result.data[0]
+                except Exception as e:
+                    logger.warning(f"Failed to check archived_shop_items for {item_id}: {e}")
+
+            if not item:
+                return {'success': False, 'error': 'Item not found (not in active store or archive)'}
+            
+            is_archived = True
+            logger.info(f"Redeeming archived item '{item_id}' for user {user_id} in guild {guild_id}")
         
         # Inject item_id into item dict for downstream usage
         item['item_id'] = item_id

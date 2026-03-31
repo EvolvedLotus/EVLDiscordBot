@@ -58,27 +58,105 @@ class TransactionManager:
 
             self.indexes[guild_id] = indexes
 
-    def adjust_balance(self, guild_id: int, user_id: int, amount: int, reason: str = "Admin adjustment"):
+    def add_transaction(self, guild_id: int, user_id: int, amount: int, transaction_type: str, description: str, metadata: dict = None) -> dict:
         """
-        Adjust user balance and log transaction.
-        Used by admin API.
+        High-level wrapper to adjust balance and log transaction atomically using RPC.
+        Used by various systems like Giveaways and Boost rewards.
         """
-        # Get current balance
-        currency_data = self.data_manager.load_guild_data(guild_id, 'currency')
-        users = currency_data.get('users', {})
-        user_data = users.get(str(user_id), {})
-        current_balance = user_data.get('balance', 0)
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            result = self.data_manager.admin_client.rpc(
+                'process_balance_change',
+                {
+                    'p_guild_id': str(guild_id),
+                    'p_user_id': str(user_id),
+                    'p_amount': amount,
+                    'p_transaction_type': transaction_type,
+                    'p_description': description,
+                    'p_metadata': metadata or {}
+                }
+            ).execute()
+
+            if not result.data or len(result.data) == 0:
+                logger.error(f"Atomic add_transaction returned no data for user {user_id} in {guild_id}")
+                return None
+
+            row = result.data[0]
+
+            # Invalidate caches
+            if self.cache_manager:
+                self.cache_manager.invalidate(f"balance:{guild_id}:{user_id}")
+                self.cache_manager.invalidate_pattern(f"transactions:{guild_id}:{user_id}:*")
+
+            # Return transaction info formatted like log_transaction returns
+            return {
+                'id': str(row.get('transaction_id')),
+                'amount': amount,
+                'balance_before': row.get('balance_before'),
+                'balance_after': row.get('balance_after'),
+                'type': transaction_type,
+                'description': description,
+                'timestamp': row.get('timestamp')
+            }
+
+        except Exception as e:
+            logger.error(f"Atomic add_transaction failed for user {user_id} in {guild_id}: {e}")
+            raise
+
+    def adjust_balance(self, guild_id: int, user_id: int, amount: int, reason: str = "Admin adjustment", admin_id: str = None, metadata: dict = None):
+        """
+        Adjust user balance atomically via Postgres RPC.
+        For admin adjustments, admin_id and reason are enforced.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Build metadata — enforce admin audit fields for admin adjustments
+        if metadata is None:
+            metadata = {}
         
-        # Log transaction (which updates balance atomically via RPC)
-        return self.log_transaction(
-            guild_id=guild_id,
-            user_id=user_id,
-            amount=amount,
-            balance_before=current_balance,
-            balance_after=current_balance + amount,
-            transaction_type='admin_adjustment',
-            description=reason
-        )
+        if admin_id:
+            metadata['admin_id'] = admin_id
+        
+        metadata.setdefault('source', 'api')
+        metadata.setdefault('reason', reason)
+
+        try:
+            result = self.data_manager.admin_client.rpc(
+                'process_balance_change',
+                {
+                    'p_guild_id': str(guild_id),
+                    'p_user_id': str(user_id),
+                    'p_amount': amount,
+                    'p_transaction_type': 'admin_adjustment',
+                    'p_description': reason,
+                    'p_metadata': metadata
+                }
+            ).execute()
+
+            if not result.data or len(result.data) == 0:
+                logger.error(f"Atomic adjust_balance returned no data for user {user_id} in guild {guild_id}")
+                return None
+
+            row = result.data[0]
+
+            # Invalidate caches
+            if self.cache_manager:
+                self.cache_manager.invalidate(f"balance:{guild_id}:{user_id}")
+                self.cache_manager.invalidate_pattern(f"transactions:{guild_id}:{user_id}:*")
+
+            return {
+                'new_balance': row.get('new_balance'),
+                'transaction_id': str(row.get('transaction_id', '')),
+                'balance_before': row.get('balance_before'),
+                'balance_after': row.get('balance_after')
+            }
+
+        except Exception as e:
+            logger.error(f"Atomic adjust_balance failed for user {user_id} in guild {guild_id}: {e}")
+            raise
 
     def log_transaction(
         self,

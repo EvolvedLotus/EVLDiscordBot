@@ -319,20 +319,21 @@ class DiscordOAuthManager:
         allowed_guilds = user_data.get('allowed_guild_ids', [])
         return guild_id in allowed_guilds
     
-    async def sync_user_guilds(self, user_id: str) -> bool:
+    async def sync_user_guilds(self, user_id: str, session_id: str = None) -> bool:
         """
         Re-sync user's guild ownership (called periodically or on demand)
         
         Args:
             user_id: User ID to sync
+            session_id: Optional session ID to refresh with updated data
             
         Returns:
             True if sync successful
         """
         try:
-            # Get user's current Discord tokens
+            # 1. Get user's current Discord tokens
             result = self.data_manager.admin_client.table('admin_users').select(
-                'discord_id, discord_access_token, discord_refresh_token, discord_token_expires_at'
+                'discord_id, discord_access_token, discord_refresh_token, discord_token_expires_at, discord_username, discord_avatar, is_superadmin'
             ).eq('id', user_id).single().execute()
             
             if not result.data:
@@ -341,7 +342,7 @@ class DiscordOAuthManager:
             user = result.data
             access_token = user['discord_access_token']
             
-            # Check if token needs refresh
+            # 2. Check if token needs refresh
             if user['discord_token_expires_at']:
                 expires_at = datetime.fromisoformat(user['discord_token_expires_at'].replace('Z', '+00:00'))
                 if expires_at < datetime.now(timezone.utc):
@@ -356,15 +357,15 @@ class DiscordOAuthManager:
                             'discord_token_expires_at': (datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])).isoformat()
                         }).eq('id', user_id).execute()
             
-            # Get current owned guilds
+            # 3. Get current owned guilds
             owned_guilds = await self.get_user_guilds(access_token)
             owned_guild_ids = [g['id'] for g in owned_guilds]
             
-            # Filter to bot guilds
+            # 4. Filter to bot guilds
             bot_guild_ids = await self._get_bot_guild_ids()
             valid_guild_ids = [gid for gid in owned_guild_ids if gid in bot_guild_ids]
             
-            # Update database
+            # 5. Update database permissions table
             self.data_manager.admin_client.rpc(
                 'sync_discord_user_guilds',
                 {
@@ -372,6 +373,21 @@ class DiscordOAuthManager:
                     'p_owned_guild_ids': valid_guild_ids
                 }
             ).execute()
+            
+            # 6. If session provided, refresh the session snapshot
+            if session_id:
+                user_data = {
+                    'id': user_id,
+                    'username': user.get('discord_username', 'Unknown'),
+                    'discord_id': user.get('discord_id'),
+                    'discord_avatar': user.get('discord_avatar'),
+                    'is_superadmin': user.get('is_superadmin', False),
+                    'allowed_guild_ids': valid_guild_ids,
+                    'login_type': 'discord',
+                    'role': 'superadmin' if user.get('is_superadmin') else 'server_owner',
+                    'permissions': ['read', 'write', 'delete', 'admin'] if user.get('is_superadmin') else ['read', 'write']
+                }
+                self.auth_manager.refresh_session_user_data(session_id, user_data)
             
             logger.info(f"✅ Synced guilds for user {user_id}: {len(valid_guild_ids)} guilds")
             return True

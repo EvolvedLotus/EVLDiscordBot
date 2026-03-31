@@ -147,7 +147,14 @@ class EmbedsCog(commands.Cog):
                 await message.edit(embed=new_embed)
 
             except discord.NotFound:
-                await interaction.followup.send("❌ Message not found in Discord", ephemeral=True)
+                # Document the orphaned state without discarding user edits
+                embed_data['message_id'] = None
+                embed_data['is_active'] = False
+                self.data_manager.save_guild_data(guild_id, 'embeds', embeds_data)
+                await interaction.followup.send(
+                    "⚠️ The original message was deleted in Discord. The embed edits were saved, but the message link is now permanently detached.", 
+                    ephemeral=True
+                )
                 return
             except discord.Forbidden:
                 await interaction.followup.send("❌ Missing permissions to edit", ephemeral=True)

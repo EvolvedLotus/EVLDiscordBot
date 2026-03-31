@@ -351,7 +351,17 @@ class Moderation(commands.Cog):
             else:
                 deleted = await interaction.channel.purge(limit=amount, before=interaction.created_at)
             await interaction.followup.send(f"Successfully cleared {len(deleted)} messages.", ephemeral=True)
-            self.logger.create_moderation_audit_log(interaction.guild.id, 'clear', 0, interaction.user.id, {'amount': len(deleted), 'channel_id': str(interaction.channel.id)})
+            self.logger.create_moderation_audit_log(
+                interaction.guild.id, 
+                'clear', 
+                0, 
+                interaction.user.id, 
+                details={
+                    'amount': len(deleted), 
+                    'channel_id': str(interaction.channel.id),
+                    'reason': f"Cleared {len(deleted)} messages in <#{interaction.channel.id}>"
+                }
+            )
         except Exception as e:
             await interaction.followup.send("Failed to clear messages.", ephemeral=True)
 

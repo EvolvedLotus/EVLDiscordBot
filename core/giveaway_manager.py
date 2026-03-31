@@ -262,53 +262,55 @@ class GiveawayManager:
                 if tickets < 1:
                     raise ValueError("Must purchase at least 1 ticket")
                 
-                current_tickets = existing_entry['tickets'] if existing_entry else 0
-                max_tickets = giveaway.get('raffle_max_tickets_per_user', 10)
-                if current_tickets + tickets > max_tickets:
-                    raise ValueError(f"You can only purchase {max_tickets - current_tickets} more tickets (max {max_tickets})")
-                    
-                raffle_cost = giveaway.get('raffle_cost', 0)
-                amount_spent = tickets * raffle_cost
+                # Use atomic Postgres RPC to deduct balance and insert tickets in one locked transaction
+                rpc_res = self.data_manager.admin_client.rpc('enter_raffle_giveaway', {
+                    'p_giveaway_id': giveaway_id,
+                    'p_guild_id': str(guild_id),
+                    'p_user_id': str(user_id),
+                    'p_tickets': tickets,
+                    'p_raffle_cost': giveaway.get('raffle_cost', 0),
+                    'p_max_tickets': giveaway.get('raffle_max_tickets_per_user', 10),
+                    'p_reason': f"Giveaway raffle entry ({tickets} tickets)",
+                    'p_transaction_type': 'giveaway_raffle'
+                }).execute()
                 
-                # Charge user
-                if self.transaction_manager:
-                    success, balance_or_err = self.transaction_manager.add_transaction(
-                        str(guild_id), str(user_id), -amount_spent,
-                        reason=f"Giveaway raffle entry ({tickets} tickets)",
-                        transaction_type="giveaway_raffle"
-                    )
-                    if not success:
-                        raise ValueError(f"Insufficient funds: {balance_or_err}")
+                if not rpc_res.data or not rpc_res.data.get('success'):
+                    err_msg = rpc_res.data.get('error', 'Unknown database error') if rpc_res.data else 'Database failure'
+                    raise ValueError(f"Transaction failed: {err_msg}")
+                    
+                amount_spent = tickets * giveaway.get('raffle_cost', 0)
+                upsert_data = rpc_res.data['entry']
 
             elif entry_mode == 'open':
                 if existing_entry:
                     raise ValueError("You have already entered this giveaway")
                     
-            # Upsert entry
-            upsert_data = {
-                'giveaway_id': giveaway_id,
-                'guild_id': str(guild_id),
-                'user_id': str(user_id),
-                'tickets': tickets + (existing_entry['tickets'] if existing_entry else 0),
-                'amount_spent': amount_spent + (existing_entry['amount_spent'] if existing_entry else 0),
-            }
-            
-            if existing_entry:
-                res = self.data_manager.admin_client.table('giveaway_entries').update({
-                    'tickets': upsert_data['tickets'],
-                    'amount_spent': upsert_data['amount_spent']
-                }).eq('id', existing_entry['id']).execute()
-            else:
-                res = self.data_manager.admin_client.table('giveaway_entries').insert({
+            # Upsert entry manually only if not raffle (raffle does it in RPC)
+            if entry_mode != 'raffle':
+                upsert_data = {
                     'giveaway_id': giveaway_id,
                     'guild_id': str(guild_id),
                     'user_id': str(user_id),
-                    'tickets': tickets,
-                    'amount_spent': amount_spent
-                }).execute()
-
-            # Increment denormalized count
-            self.data_manager.admin_client.rpc('increment_giveaway_entries', {'g_id': giveaway_id, 't_count': tickets}).execute()
+                    'tickets': tickets + (existing_entry['tickets'] if existing_entry else 0),
+                    'amount_spent': amount_spent + (existing_entry['amount_spent'] if existing_entry else 0),
+                }
+                
+                if existing_entry:
+                    res = self.data_manager.admin_client.table('giveaway_entries').update({
+                        'tickets': upsert_data['tickets'],
+                        'amount_spent': upsert_data['amount_spent']
+                    }).eq('id', existing_entry['id']).execute()
+                else:
+                    res = self.data_manager.admin_client.table('giveaway_entries').insert({
+                        'giveaway_id': giveaway_id,
+                        'guild_id': str(guild_id),
+                        'user_id': str(user_id),
+                        'tickets': tickets,
+                        'amount_spent': amount_spent
+                    }).execute()
+    
+                # Increment denormalized count (raffle does this inside RPC)
+                self.data_manager.admin_client.rpc('increment_giveaway_entries', {'g_id': giveaway_id, 't_count': tickets}).execute()
             
             if self.cache_manager:
                 self.cache_manager.invalidate(f"giveaway:{giveaway_id}")
@@ -325,7 +327,7 @@ class GiveawayManager:
                     'user_id': str(user_id)
                 }, target_guild=str(guild_id))
 
-            return res.data[0] if res.data else upsert_data
+            return upsert_data
 
         except Exception as e:
             logger.error(f"Error entering giveaway: {e}")
@@ -403,11 +405,15 @@ class GiveawayManager:
             
             pool = []
             unique_users = set()
-            previous_winners = set(giveaway.get('winner_user_ids', [])) if reroll else set()
+            
+            # Formally reconstruct past winners specifically to guarantee their complete exclusion across all successive rerolls
+            past_winners = set(giveaway.get('past_winners', []))
+            if reroll:
+                past_winners.update(giveaway.get('winner_user_ids', []))
             
             for entry in entries.data:
                 u_id = entry['user_id']
-                if reroll and u_id in previous_winners:
+                if reroll and u_id in past_winners:
                     continue
                 unique_users.add(u_id)
                 pool.extend([u_id] * entry['tickets'])
@@ -425,7 +431,8 @@ class GiveawayManager:
             upd = {
                 'status': 'ended',
                 'ended_at': datetime.now(timezone.utc).isoformat(),
-                'winner_user_ids': winners
+                'winner_user_ids': winners,
+                'past_winners': list(past_winners)
             }
             self.data_manager.admin_client.table('giveaways').update(upd).eq('id', giveaway_id).execute()
             giveaway.update(upd)
@@ -433,9 +440,13 @@ class GiveawayManager:
             if self.cache_manager:
                 self.cache_manager.invalidate(f"giveaway:{giveaway_id}")
 
+            # Determine if the drawing is late due to bot downtime
+            ends_at = datetime.fromisoformat(giveaway['ends_at'].replace('Z', '+00:00'))
+            delay_seconds = (datetime.now(timezone.utc) - ends_at).total_seconds()
+            
             # Send announcement
             if self.bot:
-                await self._post_winner_announcement(giveaway)
+                await self._post_winner_announcement(giveaway, is_delayed=(delay_seconds > 300))
                 
                 # Edit live embed to ended state
                 if giveaway.get('message_id'):
@@ -655,7 +666,7 @@ class GiveawayManager:
             
         return embed
 
-    async def _post_winner_announcement(self, giveaway: dict):
+    async def _post_winner_announcement(self, giveaway: dict, is_delayed: bool = False):
         try:
             channel = self.bot.get_channel(int(giveaway['channel_id']))
             if not channel:
@@ -663,14 +674,21 @@ class GiveawayManager:
                 
             winners = giveaway.get('winner_user_ids', [])
             if not winners:
-                await channel.send(f"Giveaway for **{giveaway['prize_name']}** has ended. Unfortunately, there were no entries — no winner drawn.")
+                msg = f"Giveaway for **{giveaway['prize_name']}** has ended. Unfortunately, there were no entries — no winner drawn."
+                if is_delayed:
+                    msg = "⚠️ *Note: This drawing was delayed due to system maintenance.*\n" + msg
+                await channel.send(msg)
                 return
                 
             winners_str = ", ".join([f"<@{w}>" for w in winners])
             from cogs.giveaways import GiveawayReviewView
             view = GiveawayReviewView(giveaway['id'])
             
-            await channel.send(f"🎉 Congratulations {winners_str}! You won the **{giveaway['prize_name']}**!", view=view)
+            content = f"🎉 Congratulations {winners_str}! You won the **{giveaway['prize_name']}**!"
+            if is_delayed:
+                content = "⚠️ *Note: This giveaway drawing was delayed due to system maintenance.*\n" + content
+                
+            await channel.send(content, view=view)
         except discord.Forbidden:
             logger.warning(f"Forbidden to post winner announcement in {giveaway['channel_id']}")
         except Exception as e:

@@ -15,31 +15,47 @@ class ModerationLogger:
 
     def create_moderation_audit_log(self, guild_id: int, action: str, user_id: int, moderator_id: int,
                                    message_id: int = None, details: Dict = None) -> Dict:
-        """Records moderation actions with unique IDs for audits and undo capability"""
+        """Records moderation actions with unique IDs for audits and undo capability in Postgres"""
+        import uuid
+        from datetime import timezone
+        
+        audit_id = f"audit_{guild_id}_{int(datetime.now().timestamp() * 1000)}"
         audit_entry = {
-            'id': f"audit_{guild_id}_{int(datetime.now().timestamp() * 1000)}",
+            'action_id': audit_id,
+            'guild_id': str(guild_id),
+            'user_id': str(user_id),
+            'action_type': action,
+            'moderator_id': str(moderator_id),
+            'reason': (details or {}).get('reason', f"Auto action: {action}"),
+            'created_at': datetime.now(timezone.utc).isoformat()
+        }
+
+        # Store in Supabase
+        try:
+            dm = self.protection_manager.data_manager
+            dm.supabase.table('moderation_actions').insert(audit_entry).execute()
+        except Exception as e:
+            logger.error(f"Failed to record audit log to DB: {e}")
+
+        # Also recreate the legacy dict structure for _log_to_channel parsing
+        legacy_entry = {
+            'id': audit_id,
             'guild_id': guild_id,
             'action': action,
             'user_id': user_id,
             'moderator_id': moderator_id,
             'message_id': message_id,
             'details': details or {},
-            'timestamp': datetime.now().isoformat(),
-            'can_undo': self._can_undo_action(action)
+            'timestamp': datetime.now(timezone.utc).isoformat()
         }
-
-        # Store in memory (would be database in production)
-        self._audit_log.append(audit_entry)
-
-        # Keep only last 1000 entries to prevent memory issues
-        if len(self._audit_log) > 1000:
-            self._audit_log = self._audit_log[-1000:]
-
+        
         # Log to configured channel
-        self._log_to_channel(guild_id, audit_entry)
+        import asyncio
+        if self.bot and self.bot.loop:
+            asyncio.create_task(self._log_to_channel(guild_id, legacy_entry))
 
-        logger.info(f"Moderation audit log created: {audit_entry}")
-        return audit_entry
+        logger.info(f"Moderation audit log created: {legacy_entry}")
+        return legacy_entry
 
     def _can_undo_action(self, action: str) -> bool:
         """Determines if an action can be undone"""
@@ -118,26 +134,48 @@ class ModerationLogger:
 
     def get_audit_logs(self, guild_id: int, user_id: int = None, action: str = None,
                       limit: int = 50) -> List[Dict]:
-        """Retrieves audit logs with optional filtering"""
-        logs = [log for log in self._audit_log if log['guild_id'] == guild_id]
+        """Retrieves audit logs natively from PostgREST with optional filtering"""
+        try:
+            query = self.protection_manager.data_manager.supabase.table('moderation_actions') \
+                .select('*') \
+                .eq('guild_id', str(guild_id)) \
+                .order('created_at', desc=True) \
+                .limit(limit)
 
-        if user_id:
-            logs = [log for log in logs if log['user_id'] == user_id]
+            if user_id:
+                query = query.eq('user_id', str(user_id))
+            if action:
+                query = query.eq('action_type', action)
 
-        if action:
-            logs = [log for log in logs if log['action'] == action]
-
-        # Sort by timestamp descending
-        logs.sort(key=lambda x: x['timestamp'], reverse=True)
-
-        return logs[:limit]
+            res = query.execute()
+            if not res.data:
+                return []
+                
+            # Maps postgres names back to discord log expectations
+            logs = []
+            for r in res.data:
+                logs.append({
+                    'id': r.get('action_id'),
+                    'guild_id': int(r.get('guild_id')),
+                    'action': r.get('action_type'),
+                    'user_id': int(r.get('user_id')),
+                    'moderator_id': int(r.get('moderator_id')),
+                    'details': {'reason': r.get('reason')},
+                    'timestamp': r.get('created_at')
+                })
+            return logs
+        except Exception as e:
+            logger.error(f"Failed to fetch audit logs: {e}")
+            return []
 
     def get_audit_log_by_id(self, audit_id: str) -> Dict:
-        """Retrieves a specific audit log entry"""
-        for log in self._audit_log:
-            if log['id'] == audit_id:
-                return log
-        return None
+        """Retrieves a specific native audit log entry"""
+        try:
+            res = self.protection_manager.data_manager.supabase.table('moderation_actions') \
+                .select('*').eq('action_id', audit_id).execute()
+            return res.data[0] if res.data else None
+        except:
+            return None
 
     def export_moderation_logs(self, guild_id: int, start_date: datetime = None,
                               end_date: datetime = None, format: str = 'json') -> str:

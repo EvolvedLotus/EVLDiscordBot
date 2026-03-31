@@ -10,12 +10,18 @@ class ProtectionManager:
 
     def __init__(self, data_manager: DataManager):
         self.data_manager = data_manager
-        self._cache = {}  # guild_id -> config
+        self._cache = {}  # guild_id -> (config, timestamp)
+        self._cache_ttl = 300  # 5 minutes in seconds
 
     def load_protection_config(self, guild_id: int) -> dict:
         """Loads profanity/link protection settings for a guild"""
+        import time
+        current_time = time.time()
+        
         if guild_id in self._cache:
-            return self._cache[guild_id]
+            cached_config, timestamp = self._cache[guild_id]
+            if current_time - timestamp < self._cache_ttl:
+                return cached_config
 
         config_data = self.data_manager.load_guild_data(guild_id, 'config')
         protection_config = config_data.get('moderation', {})
@@ -44,18 +50,22 @@ class ProtectionManager:
                 'log_channel': None
             }
 
-        self._cache[guild_id] = protection_config
+        if 'warning_ttl_days' not in protection_config:
+            protection_config['warning_ttl_days'] = 30
+
+        self._cache[guild_id] = (protection_config, current_time)
         return protection_config
 
     def save_protection_config(self, guild_id: int, protection_config: dict) -> bool:
         """Persists updated protection settings to DB and updates cache"""
+        import time
         try:
             config_data = self.data_manager.load_guild_data(guild_id, 'config')
             config_data['moderation'] = protection_config
             success = self.data_manager.save_guild_data(guild_id, 'config', config_data)
 
             if success:
-                self._cache[guild_id] = protection_config.copy()
+                self._cache[guild_id] = (protection_config.copy(), time.time())
                 # Broadcast SSE event
                 try:
                     from core.sse_manager import sse_manager

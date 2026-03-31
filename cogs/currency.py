@@ -182,8 +182,13 @@ class ShopConfirmView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
         
-        # Process purchase
-        await self.currency_cog._process_purchase(interaction, self.item_id, 1)
+        # Process purchase with locked-in price
+        await self.currency_cog._process_purchase(
+            interaction, 
+            self.item_id, 
+            1, 
+            expected_price=self.item_data.get('price')
+        )
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.grey)
     async def cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -311,89 +316,55 @@ class Currency(commands.Cog):
 
     def _add_balance(self, guild_id: int, user_id: int, amount: int, description: str, transaction_type: str = 'earn', metadata: dict = None):
         """
-        UPDATED: Two-phase commit implementation for balance updates and transaction logging.
-        Transaction Log is considered the source of truth for history.
-        If transaction logging fails, the entire operation (balance change) must fail and rollback.
-
-        Phase 1 (Prepare): Validate and prepare transaction data
-        Phase 2 (Commit): Log transaction first, then update balance
-        Phase 3 (Rollback): If transaction logging fails, rollback any partial changes
+        ATOMIC balance update using the process_balance_change Postgres RPC.
+        Both the transaction log INSERT and the balance UPDATE happen inside
+        a single Postgres transaction — either both succeed or both roll back.
+        Row-level locking (SELECT FOR UPDATE) prevents race conditions.
         """
         try:
-            # PHASE 1: Prepare - Load data and validate
-            data = self.data_manager.load_guild_data(guild_id, "currency")
-            if not data:
+            result = self.data_manager.admin_client.rpc(
+                'process_balance_change',
+                {
+                    'p_guild_id': str(guild_id),
+                    'p_user_id': str(user_id),
+                    'p_amount': amount,
+                    'p_transaction_type': transaction_type,
+                    'p_description': description,
+                    'p_metadata': metadata or {}
+                }
+            ).execute()
+
+            if not result.data or len(result.data) == 0:
+                logger.error(f"Atomic balance change returned no data for user {user_id} in guild {guild_id}")
                 return False
 
-            user_id_str = str(user_id)
+            row = result.data[0]
+            new_balance = row['new_balance']
 
-            # Initialize user if needed
-            if user_id_str not in data["users"]:
-                self._initialize_user(data, user_id_str)
-
-            user = data["users"][user_id_str]
-            balance_before = user["balance"]
-            balance_after = balance_before + amount
-
-            # Prevent negative balances
-            if balance_after < 0:
-                return False
-
-            # Create transaction data for logging (Phase 1 prepare)
-            transaction_data = {
-                'guild_id': guild_id,
-                'user_id': user_id,
-                'amount': amount,
-                'balance_before': balance_before,
-                'balance_after': balance_after,
-                'transaction_type': transaction_type,
-                'description': description,
-                'metadata': metadata or {}
-            }
-
-            # PHASE 2: Commit - Log transaction FIRST (source of truth)
+            # Broadcast SSE event
             try:
-                transaction_id = self.transaction_manager.log_transaction(**transaction_data)
-                if not transaction_id:
-                    logger.error(f"Transaction logging returned invalid ID for user {user_id} in guild {guild_id}")
-                    return False
+                from core.sse_manager import sse_manager
+                sse_manager.broadcast_event('transaction', {
+                    'guild_id': str(guild_id),
+                    'user_id': str(user_id),
+                    'new_balance': new_balance,
+                    'amount': amount,
+                    'type': transaction_type
+                })
             except Exception as e:
-                logger.critical(f"CRITICAL: Transaction logging failed for user {user_id} in guild {guild_id}: {e}")
-                # Transaction log is source of truth - if it fails, entire operation fails
-                return False
+                logger.warning(f"Failed to broadcast SSE event: {e}")
 
-            # PHASE 3: Apply balance changes only after successful transaction logging
-            try:
-                # Update balance and totals
-                user["balance"] = balance_after
-                if amount > 0:
-                    user["total_earned"] = user.get("total_earned", 0) + amount
-                else:
-                    user["total_spent"] = user.get("total_spent", 0) + abs(amount)
+            # Invalidate caches
+            self._broadcast_cache_invalidation(guild_id, 'currency', user_id)
 
-                # Recalculate total currency
-                data["metadata"]["total_currency"] = sum(u["balance"] for u in data["users"].values())
-
-                # Save currency data
-                if not self.data_manager.save_guild_data(guild_id, "currency", data):
-                    logger.critical(f"CRITICAL: Failed to save currency data after successful transaction log for user {user_id} in guild {guild_id}")
-                    # This is a critical inconsistency - transaction was logged but balance not updated
-                    # In a production system, this would require manual reconciliation
-                    return False
-
-                # Broadcast cache invalidation signal
-                self._broadcast_cache_invalidation(guild_id, 'currency', user_id)
-
-                return balance_after
-
-            except Exception as e:
-                logger.critical(f"CRITICAL: Failed to update balance after successful transaction log for user {user_id} in guild {guild_id}: {e}")
-                # Transaction was logged but balance update failed - critical inconsistency
-                # In production, this would trigger an alert for manual reconciliation
-                return False
+            return new_balance
 
         except Exception as e:
-            logger.error(f"Error in two-phase balance update for user {user_id} in guild {guild_id}: {e}")
+            error_msg = str(e)
+            if 'Insufficient balance' in error_msg:
+                logger.info(f"Insufficient balance for user {user_id} in guild {guild_id}: {error_msg}")
+                return False
+            logger.error(f"Atomic balance change failed for user {user_id} in guild {guild_id}: {e}")
             return False
 
     def _broadcast_cache_invalidation(self, guild_id: int, data_type: str, user_id: int = None):
@@ -506,91 +477,65 @@ class Currency(commands.Cog):
     @app_commands.command(name="daily", description="Claim your daily reward of 100 coins")
     @app_commands.guild_only()
     async def daily(self, interaction: discord.Interaction):
-        """Claim daily reward with CRITICAL EXPLOIT PREVENTION"""
+        """Claim daily reward — ATOMIC + IDEMPOTENT via Postgres RPC.
+        Uses the daily_claims table as an idempotency gate:
+        INSERT ON CONFLICT DO NOTHING prevents double-fire from
+        concurrent requests or network retries.
+        """
         user_id = str(interaction.user.id)
         guild_id = str(interaction.guild_id)
 
-        # ALWAYS use UTC, never local time
-        now = datetime.now(timezone.utc)
-
         try:
-            # Get user data (execute() returns APIResponse synchronously)
-            user_data_result = self.data_manager.supabase.table('users').select('balance, last_daily').eq('user_id', user_id).eq('guild_id', guild_id).execute()
+            # Ensure user exists before RPC call
+            await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
 
-            if not user_data_result.data or len(user_data_result.data) == 0:
-                # Ensure user exists if not found
-                await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
-                user_data = {'balance': 0, 'last_daily': None}
-            else:
-                user_data = user_data_result.data[0]
+            # Single atomic RPC: idempotency check + transaction log + balance update
+            result = self.data_manager.admin_client.rpc(
+                'claim_daily_reward',
+                {
+                    'p_guild_id': guild_id,
+                    'p_user_id': user_id,
+                    'p_reward': 100
+                }
+            ).execute()
 
-            last_daily = user_data.get('last_daily')
-
-            # If last_daily exists and within 24 hours, reject
-            if last_daily:
-                # Ensure last_daily is timezone-aware UTC
-                if isinstance(last_daily, str):
-                    if last_daily.endswith('Z'):
-                        last_daily = datetime.fromisoformat(last_daily.replace('Z', '+00:00'))
-                    else:
-                        last_daily = datetime.fromisoformat(last_daily)
-                    if last_daily.tzinfo is None:
-                        last_daily = last_daily.replace(tzinfo=timezone.utc)
-
-                time_diff = (now - last_daily).total_seconds()
-                if time_diff < 86400:  # 24 hours in seconds
-                    hours_remaining = (86400 - time_diff) / 3600
-                    await interaction.response.send_message(
-                        f"You can claim your daily reward in {hours_remaining:.1f} hours.",
-                        ephemeral=True
-                    )
-                    return
-
-            # ATOMIC TRANSACTION: All or nothing
-            reward = 100
-            new_balance = user_data['balance'] + reward
-
-            # Use transaction manager for atomic update
-            try:
-                transaction_result = self.transaction_manager.log_transaction(
-                    guild_id=int(guild_id),
-                    user_id=int(user_id),
-                    amount=reward,
-                    balance_before=user_data['balance'],
-                    balance_after=new_balance,
-                    transaction_type="daily_reward",
-                    description="Daily reward",
-                    metadata={"source": "discord_command", "command": "/daily"}
-                )
-
-                if not transaction_result:
-                    await interaction.response.send_message(
-                        "Failed to claim daily reward. Please try again.",
-                        ephemeral=True
-                    )
-                    return
-
-                # Update balance and last_daily together in database (execute() is synchronous)
-                update_result = self.data_manager.supabase.table('users').update({
-                    'balance': new_balance,
-                    'last_daily': now.isoformat()
-                }).eq('user_id', user_id).eq('guild_id', guild_id).execute()
-
-                if not update_result.data:
-                    logger.error(f"Failed to update user balance for daily reward: {user_id}")
-                    await interaction.response.send_message(
-                        "Failed to claim daily reward. Please try again.",
-                        ephemeral=True
-                    )
-                    return
-
-            except Exception as e:
-                logger.exception(f"Transaction failed for daily reward: {e}")
+            if not result.data or len(result.data) == 0:
                 await interaction.response.send_message(
                     "Failed to claim daily reward. Please try again.",
                     ephemeral=True
                 )
                 return
+
+            row = result.data[0]
+
+            if row.get('already_claimed'):
+                # Already claimed today — show when next claim is available
+                next_claim = row.get('next_claim_at', '')
+                if next_claim:
+                    try:
+                        next_dt = datetime.fromisoformat(str(next_claim).replace('Z', '+00:00'))
+                        if next_dt.tzinfo is None:
+                            next_dt = next_dt.replace(tzinfo=timezone.utc)
+                        now = datetime.now(timezone.utc)
+                        remaining = (next_dt - now).total_seconds()
+                        hours_remaining = max(0, remaining / 3600)
+                        await interaction.response.send_message(
+                            f"You already claimed your daily reward today! Try again in {hours_remaining:.1f} hours.",
+                            ephemeral=True
+                        )
+                    except Exception:
+                        await interaction.response.send_message(
+                            "You already claimed your daily reward today!",
+                            ephemeral=True
+                        )
+                else:
+                    await interaction.response.send_message(
+                        "You already claimed your daily reward today!",
+                        ephemeral=True
+                    )
+                return
+
+            new_balance = row.get('new_balance', 0)
 
             # Invalidate cache
             self.data_manager.invalidate_cache(int(guild_id), 'currency')
@@ -607,7 +552,7 @@ class Currency(commands.Cog):
                 logger.warning(f"Failed to emit SSE event for daily reward: {e}")
 
             await interaction.response.send_message(
-                f"You claimed your daily reward of {reward} coins! New balance: {new_balance}",
+                f"You claimed your daily reward of 100 coins! New balance: {new_balance}",
                 ephemeral=True
             )
 
@@ -825,128 +770,52 @@ class Currency(commands.Cog):
             ephemeral=True
         )
 
-    async def _process_purchase(self, interaction: discord.Interaction, item_id: str, quantity: int):
-        """Helper to process purchase logic"""
+    async def _process_purchase(self, interaction: discord.Interaction, item_id: str, quantity: int, expected_price: int = None):
+        """Helper to process purchase logic via atomic RPC"""
         # If response not started, defer
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
-            
-        user_id = str(interaction.user.id)
-        guild_id = str(interaction.guild.id)
-        
+
+        user_id = interaction.user.id
+        guild_id = interaction.guild.id
+
         try:
-            # Get item data
-            item_result = self.data_manager.supabase.table('shop_items').select('*').eq('item_id', item_id).eq('guild_id', guild_id).eq('is_active', True).execute()
-            if not item_result.data:
-                await interaction.followup.send("Item not found or inactive.", ephemeral=True)
-                return
-                
-            item_data = item_result.data[0]
-            
-            # Stock check
-            if item_data['stock'] != -1 and item_data['stock'] < quantity:
-                await interaction.followup.send(f"Insufficient stock. Available: {item_data['stock']}", ephemeral=True)
-                return
-                
-            total_cost = item_data['price'] * quantity
-            balance_data = self._get_balance(int(guild_id), interaction.user.id)
-            
-            if balance_data < total_cost:
-                await interaction.followup.send(f"Insufficient balance. Cost: {total_cost}, Balance: {balance_data}", ephemeral=True)
-                return
-
-            # Note: The original code logic for updating DB is preserved here but condensed
-            # Ensure user exists logic is handled by _get_balance or previous checks typically, but good to be safe
-            
-            new_stock = item_data['stock'] - quantity if item_data['stock'] != -1 else -1
-            
-            # ... (Atomic updates logic similar to original Buy command)
-            # For brevity/safety in this refactor, I'm assuming we keep the core logic
-            # Accessing supabase directly as in original
-            
-            # Update User Balance (Calculate locally then update)
-            # Note: We should fetch fresh user data to be sure of balance before update if not using a stored procedure
-            # The original code did: new_balance = user_data['balance'] - total_cost
-            
-            user_res = self.data_manager.supabase.table('users').select('balance').eq('user_id', user_id).eq('guild_id', guild_id).execute()
-            if not user_res.data:
-                await self.data_manager.ensure_user_exists(guild_id, interaction.user.id)
-                user_res = self.data_manager.supabase.table('users').select('balance').eq('user_id', user_id).eq('guild_id', guild_id).execute()
-                
-            current_balance = user_res.data[0]['balance']
-            if current_balance < total_cost:
-                await interaction.followup.send("Insufficient balance (updated).", ephemeral=True)
-                return
-                
-            new_balance = current_balance - total_cost
-
-            # EXECUTE UPDATES
-            if item_data['stock'] != -1:
-                self.data_manager.supabase.table('shop_items').update({'stock': new_stock}).eq('item_id', item_id).eq('guild_id', guild_id).execute()
-                
-            self.data_manager.supabase.table('users').update({'balance': new_balance}).eq('user_id', user_id).eq('guild_id', guild_id).execute()
-            
-            # Update Inventory
-            inventory_data = {'user_id': user_id, 'guild_id': guild_id, 'item_id': item_id, 'quantity': quantity}
-            # Need to get current quantity to increment? Or upsert handles it?
-            # Upsert replaces. We need to increment.
-            # Original code used upsert completely wrong if it meant to increment?
-            # "data['inventory'][user_id_str][item_id] + quantity" - original was checking local cache or something?
-            # Wait, line 813 in original: upsert(inventory_data).
-            # If I have 5, and I buy 1, upsert {qtd: 1} makes me have 1?
-            # YES, THE ORIGINAL CODE WAS BUGGY if it used upsert without reading first!
-            # Let's fix that.
-            
-            # Fetch current inventory
-            inv_res = self.data_manager.supabase.table('inventory').select('quantity').eq('user_id', user_id).eq('guild_id', guild_id).eq('item_id', item_id).execute()
-            current_qty = inv_res.data[0]['quantity'] if inv_res.data else 0
-            new_qty = current_qty + quantity
-            
-            self.data_manager.supabase.table('inventory').upsert({
-                'user_id': user_id, 
-                'guild_id': guild_id, 
-                'item_id': item_id, 
-                'quantity': new_qty
-            }, on_conflict='user_id,guild_id,item_id').execute()
-
-            # Log Transaction
-            self.transaction_manager.log_transaction(
-                user_id=int(user_id),
-                guild_id=int(guild_id),
-                amount=-total_cost,
-                transaction_type="shop_purchase",
-                balance_before=current_balance,
-                balance_after=new_balance,
-                description=f"Purchased {quantity}x {item_data['name']}",
-                metadata={'item_id': item_id, 'quantity': quantity}
+            result = self.shop_manager.purchase_item(
+                guild_id=guild_id,
+                user_id=user_id,
+                item_id=item_id,
+                quantity=quantity,
+                interaction=interaction,
+                expected_price=expected_price
             )
-            
-            # Invalidate Cache & SSE
-            self.data_manager.invalidate_cache(int(guild_id), 'currency')
-            
-            # Emit SSE
-            try:
-                from core.sse_manager import sse_manager
-                sse_manager.broadcast_event(guild_id, {
-                    'type': 'purchase',
-                    'user_id': user_id,
-                    'item_id': item_id,
-                    'quantity': quantity,
-                    'new_balance': new_balance
-                })
-            except:
-                pass
 
-            symbol = self._get_currency_symbol(int(guild_id))
-            emoji = item_data.get('emoji', '🛍️')
-            await interaction.followup.send(
-                f"Successfully purchased {quantity}x {emoji} **{item_data['name']}** for **{total_cost} {symbol}**!\nNew balance: {new_balance} {symbol}",
-                ephemeral=True
+            if not result['success']:
+                error_msg = result.get('error', 'Unknown error occurred')
+                if "Price changed" in error_msg:
+                    await interaction.followup.send(f"❌ {error_msg}", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"❌ Purchase failed: {error_msg}", ephemeral=True)
+                return
+
+            item = result['item']
+            symbol = self._get_currency_symbol(guild_id)
+            emoji = item.get('emoji', '🛍️')
+
+            embed = discord.Embed(
+                title="✅ Purchase Successful!",
+                description=f"You bought **{quantity}x {emoji} {item['name']}**",
+                color=discord.Color.green()
             )
-            
+            embed.add_field(name="Total Cost", value=f"{symbol}{result['total_cost']}")
+            embed.add_field(name="New Balance", value=f"{symbol}{result['new_balance']}")
+            embed.add_field(name="In Inventory", value=f"{result['inventory_total']}x")
+
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+
         except Exception as e:
             logger.exception(f"Purchase error: {e}")
-            await interaction.followup.send("Purchase failed. Please try again.", ephemeral=True)
+            await interaction.followup.send("❌ Purchase failed due to an error. Please try again.", ephemeral=True)
 
     @app_commands.command(name="buy", description="Purchase item with atomic transaction")
     @app_commands.describe(
@@ -959,7 +828,19 @@ class Currency(commands.Cog):
         if quantity <= 0:
             await interaction.response.send_message("Quantity must be positive.", ephemeral=True)
             return
-        await self._process_purchase(interaction, item, quantity)
+
+        # Extract expected price if it was included by autocomplete
+        expected_price = None
+        actual_item_id = item
+        if "::" in item:
+            parts = item.split("::")
+            actual_item_id = parts[0]
+            try:
+                expected_price = int(parts[1])
+            except ValueError:
+                pass
+
+        await self._process_purchase(interaction, actual_item_id, quantity, expected_price=expected_price)
 
     @buy.autocomplete('item')
     async def buy_autocomplete(self, interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
@@ -970,15 +851,15 @@ class Currency(commands.Cog):
             include_out_of_stock=False
         )
         choices = []
-        for item_id, item in items.items():
-            if current.lower() in item['name'].lower():
-                # Handle missing emoji field gracefully
-                emoji = item.get('emoji', '🛍️')  # Default to shopping bag emoji
+        for item_id, item_data in items.items():
+            if current.lower() in item_data['name'].lower():
+                emoji = item_data.get('emoji', '🛍️')
+                # Embed the price-at-time-of-view into the value string
                 choices.append(app_commands.Choice(
-                    name=f"{emoji} {item['name']} - {item['price']}💰",
-                    value=item_id
+                    name=f"{emoji} {item_data['name']} - {item_data['price']}💰",
+                    value=f"{item_id}::{item_data['price']}"
                 ))
-        return choices[:25]  # Discord limit
+        return choices[:25]
 
     @app_commands.command(name="transfer", description="Send coins to another user")
     @app_commands.describe(
@@ -988,7 +869,11 @@ class Currency(commands.Cog):
     )
     @app_commands.guild_only()
     async def transfer_coins(self, interaction: discord.Interaction, user: discord.Member, amount: int, reason: str = ""):
-        """Transfer coins to another user"""
+        """Transfer coins — ATOMIC via Postgres RPC.
+        Uses process_transfer() which locks both user rows with SELECT FOR UPDATE,
+        validates the sender balance inside the DB transaction, and performs all
+        4 writes (2 transaction logs + 2 balance updates) atomically.
+        """
         sender_id = str(interaction.user.id)
         receiver_id = str(user.id)
         guild_id = str(interaction.guild_id)
@@ -1009,65 +894,51 @@ class Currency(commands.Cog):
             return
 
         try:
-            # Get sender balance
-            sender_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', sender_id).eq('guild_id', guild_id).execute()
+            # Ensure receiver exists before the atomic RPC
+            await self.data_manager.ensure_user_exists(guild_id, user.id)
 
-            if not sender_data.data or len(sender_data.data) == 0:
-                await interaction.response.send_message("You don't have an account.", ephemeral=True)
-                return
+            reason_text = reason if reason else "Coin transfer"
 
-            sender_balance = sender_data.data[0]['balance']
+            # Single atomic RPC: locks both rows, validates balance, logs 2 transactions, updates 2 balances
+            result = self.data_manager.admin_client.rpc(
+                'process_transfer',
+                {
+                    'p_guild_id': guild_id,
+                    'p_sender_id': sender_id,
+                    'p_receiver_id': receiver_id,
+                    'p_amount': amount,
+                    'p_description_send': f"Sent {amount} coins to {user.display_name}" + (f" - {reason}" if reason else ""),
+                    'p_description_recv': f"Received {amount} coins from {interaction.user.display_name}" + (f" - {reason}" if reason else ""),
+                    'p_metadata_send': {"recipient_id": receiver_id},
+                    'p_metadata_recv': {"sender_id": sender_id}
+                }
+            ).execute()
 
-            # VALIDATION: Check sufficient balance
-            if sender_balance < amount:
+            if not result.data or len(result.data) == 0:
                 await interaction.response.send_message(
-                    f"Insufficient balance. You have {sender_balance} coins.",
+                    "Failed to transfer coins. Please try again.",
                     ephemeral=True
                 )
                 return
 
-            # Ensure receiver exists
-            await self.data_manager.ensure_user_exists(guild_id, user.id)
-
-            # Get receiver balance
-            receiver_data = self.data_manager.supabase.table('users').select('balance').eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
-            receiver_balance = receiver_data.data[0]['balance'] if receiver_data.data and len(receiver_data.data) > 0 else 0
-
-            # Calculate new balances
-            sender_new_balance = sender_balance - amount
-            receiver_new_balance = receiver_balance + amount
-
-            reason_text = reason if reason else "Coin transfer"
-
-            # Log transactions
-            self.transaction_manager.log_transaction(
-                user_id=int(sender_id),
-                guild_id=int(guild_id),
-                amount=-amount,
-                transaction_type="transfer_sent",
-                balance_before=sender_balance,
-                balance_after=sender_new_balance,
-                description=f"Sent {amount} coins to {user.display_name}" + (f" - {reason}" if reason else ""),
-                metadata={"recipient_id": receiver_id}
-            )
-
-            self.transaction_manager.log_transaction(
-                user_id=int(receiver_id),
-                guild_id=int(guild_id),
-                amount=amount,
-                transaction_type="transfer_received",
-                balance_before=receiver_balance,
-                balance_after=receiver_new_balance,
-                description=f"Received {amount} coins from {interaction.user.display_name}" + (f" - {reason}" if reason else ""),
-                metadata={"sender_id": sender_id}
-            )
-
-            # Update balances
-            self.data_manager.supabase.table('users').update({'balance': sender_new_balance}).eq('user_id', sender_id).eq('guild_id', guild_id).execute()
-            self.data_manager.supabase.table('users').update({'balance': receiver_new_balance}).eq('user_id', receiver_id).eq('guild_id', guild_id).execute()
+            row = result.data[0]
+            sender_new_balance = row['sender_new_balance']
 
             # Invalidate caches
             self.data_manager.invalidate_cache(int(guild_id), 'currency')
+
+            # Broadcast SSE events
+            try:
+                from core.sse_manager import sse_manager
+                sse_manager.broadcast_event('transaction', {
+                    'guild_id': guild_id,
+                    'type': 'transfer',
+                    'sender_id': sender_id,
+                    'receiver_id': receiver_id,
+                    'amount': amount
+                })
+            except Exception as e:
+                logger.warning(f"Failed to broadcast transfer SSE event: {e}")
 
             await interaction.response.send_message(
                 f"Successfully transferred {amount} coins to {user.mention}. Your new balance: {sender_new_balance}" + (f"\nReason: {reason}" if reason else ""),
@@ -1075,8 +946,21 @@ class Currency(commands.Cog):
             )
 
         except Exception as e:
-            logger.exception(f"Transfer command error: {e}")
-            await interaction.response.send_message("Failed to transfer coins. Please try again.", ephemeral=True)
+            error_msg = str(e)
+            if 'Insufficient balance' in error_msg:
+                await interaction.response.send_message(
+                    "Insufficient balance for this transfer.",
+                    ephemeral=True
+                )
+            elif 'Sender account not found' in error_msg:
+                await interaction.response.send_message(
+                    "You don't have an account yet. Try earning some coins first!",
+                    ephemeral=True
+                )
+            else:
+                logger.exception(f"Transfer command error: {e}")
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("Failed to transfer coins. Please try again.", ephemeral=True)
 
     @app_commands.command(name="shop_create", description="Create a shop item (Admin only)")
     @app_commands.describe(

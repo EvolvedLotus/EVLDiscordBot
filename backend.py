@@ -98,6 +98,30 @@ def require_auth(f):
     """Decorator to require valid session"""
     from functools import wraps
 
+def sync_permissions_background(session_token, user_data):
+    """Run permission sync in a background thread"""
+    def _sync():
+        try:
+            # We need a new event loop for this thread or use current one if exists
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Use the global discord_oauth_manager
+            if discord_oauth_manager:
+                loop.run_until_complete(discord_oauth_manager.sync_user_guilds(user_data['id'], session_token))
+                logger.info(f"Background permission sync completed for user {user_data.get('username')}")
+        except Exception as e:
+            logger.error(f"Error in background permission sync: {e}")
+
+    Thread(target=_sync, daemon=True).start()
+
+def require_auth(f):
+    """Decorator to require valid session"""
+    from functools import wraps
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         session_token = request.cookies.get('session_token')
@@ -111,19 +135,16 @@ def require_auth(f):
         if not user:
             return jsonify({'success': False, 'error': 'Invalid or expired session'}), 401
 
-        # Check if session needs refresh (expires in < 1 hour)
-        # if user['session_expires'] - datetime.now(timezone.utc) < timedelta(hours=1):
-            # Refresh session
-            # new_expires = datetime.now(timezone.utc) + timedelta(hours=24)
-            # auth_manager.refresh_session(session_token, new_expires)
+        # Check if permissions need re-validation (Gap 1: periodic re-check)
+        if user.get('_needs_permission_sync'):
+            sync_permissions_background(session_token, user)
+            user.pop('_needs_permission_sync', None)
 
         # Add user to request context
         request.user = user
-
         return f(*args, **kwargs)
 
     return decorated_function
-
 def require_guild_access(f):
     """Decorator to require guild access validation"""
     from functools import wraps
@@ -138,6 +159,11 @@ def require_guild_access(f):
         user = auth_manager.validate_session(session_token)
         if not user:
             return jsonify({'success': False, 'error': 'Invalid or expired session'}), 401
+
+        # Check if permissions need re-validation (Gap 1: periodic re-check)
+        if user.get('_needs_permission_sync'):
+            sync_permissions_background(session_token, user)
+            user.pop('_needs_permission_sync', None)
 
         # Superadmins have access to all guilds
         if user.get('is_superadmin'):
@@ -199,7 +225,7 @@ if IS_PRODUCTION:
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'None'
     app.config['SESSION_COOKIE_PATH'] = '/'
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
     # Railway-specific domain handling
     railway_domain = os.getenv('RAILWAY_PUBLIC_DOMAIN')
@@ -214,7 +240,7 @@ else:
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_PATH'] = '/'
     app.config['SESSION_COOKIE_DOMAIN'] = None
-    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 
 # Import and initialize core managers with robust error handling
 # Critical: Flask MUST start even if managers fail, so healthcheck passes
@@ -1433,12 +1459,66 @@ def get_user(server_id, user_id):
 @csrf.exempt
 @require_guild_access
 def update_balance(server_id, user_id):
+    """CMS balance adjustment — requires admin_id and reason for audit trail."""
     try:
         data = request.get_json()
         amount = data.get('amount', 0)
-        transaction_manager.adjust_balance(server_id, user_id, amount, 'Admin adjustment')
-        return jsonify({'success': True}), 200
+        reason = data.get('reason', '').strip()
+        
+        # Get admin info from session
+        admin_user = request.user
+        admin_id = data.get('admin_id') or str(admin_user.get('id', ''))
+        admin_username = admin_user.get('username', 'Unknown')
+        
+        # MANDATORY: Require reason for manual adjustments
+        if not reason:
+            return jsonify({'error': 'A reason is required for manual balance adjustments.'}), 400
+        
+        if not admin_id:
+            return jsonify({'error': 'Admin ID is required for manual balance adjustments.'}), 400
+        
+        if amount == 0:
+            return jsonify({'error': 'Amount cannot be zero.'}), 400
+        
+        # Build mandatory metadata for audit trail
+        metadata = {
+            'admin_id': admin_id,
+            'admin_username': admin_username,
+            'reason': reason,
+            'source': 'cms_dashboard',
+            'adjustment_type': 'manual'
+        }
+        
+        # Use atomic RPC for the balance change
+        result = data_manager.admin_client.rpc(
+            'process_balance_change',
+            {
+                'p_guild_id': str(server_id),
+                'p_user_id': str(user_id),
+                'p_amount': amount,
+                'p_transaction_type': 'admin_adjustment',
+                'p_description': f"CMS adjustment by {admin_username}: {reason}",
+                'p_metadata': metadata
+            }
+        ).execute()
+        
+        if not result.data or len(result.data) == 0:
+            return jsonify({'error': 'Balance adjustment failed'}), 500
+        
+        row = result.data[0]
+        
+        # Invalidate cache
+        data_manager.invalidate_cache(int(server_id), 'currency')
+        
+        return jsonify({
+            'success': True,
+            'new_balance': row.get('new_balance'),
+            'transaction_id': str(row.get('transaction_id', ''))
+        }), 200
     except Exception as e:
+        error_msg = str(e)
+        if 'Insufficient balance' in error_msg:
+            return jsonify({'error': 'This adjustment would result in a negative balance.'}), 400
         return safe_error_response(e)
 
 @app.route('/api/<server_id>/users/<user_id>/roles', methods=['GET'])

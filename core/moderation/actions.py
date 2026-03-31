@@ -1,6 +1,6 @@
 import logging
 import discord
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List
 from .protection_manager import ProtectionManager
 
@@ -14,7 +14,7 @@ class ModerationActions:
         self.bot = bot
 
     async def warn_user(self, guild_id: int, user_id: int, reason: str, moderator_id: int, auto_generated: bool = False) -> Dict:
-        """Issues a warning to user via DM and logs a strike"""
+        """Issues a warning to user via DM and logs a strike in the database"""
         try:
             guild = self.bot.get_guild(guild_id)
             if not guild:
@@ -23,6 +23,50 @@ class ModerationActions:
             user = guild.get_member(user_id)
             if not user:
                 return {'success': False, 'error': 'User not found in guild'}
+
+            # Generate and add strike using PG
+            import uuid
+            ttl_days = self.protection_manager.load_protection_config(guild_id).get('warning_ttl_days', 30)
+            
+            try:
+                # Add strike logic using Supabase
+                strike_id = str(uuid.uuid4())
+                expires_at = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
+                
+                # We use synchronous execution since most DB managers wrap the REST API sync or async internally
+                # Wait, the data_manager is in the cog not Actions explicitly? Need to access it:
+                dm = self.protection_manager.data_manager
+                dm.supabase.table('strikes').insert({
+                    'strike_id': strike_id,
+                    'guild_id': str(guild_id),
+                    'user_id': str(user_id),
+                    'reason': reason,
+                    'moderator_id': str(moderator_id),
+                    'auto_generated': auto_generated,
+                    'expires_at': expires_at,
+                    'is_active': True 
+                }).execute()
+                
+                # Check thresholds
+                active_strikes_res = dm.supabase.table('strikes') \
+                    .select('id') \
+                    .eq('guild_id', str(guild_id)) \
+                    .eq('user_id', str(user_id)) \
+                    .eq('is_active', True) \
+                    .gt('expires_at', datetime.now(timezone.utc).isoformat()) \
+                    .execute()
+                strike_count = len(active_strikes_res.data) if active_strikes_res.data else 0
+
+                # Escalate
+                if strike_count >= 5:
+                    await user.ban(reason="Strike threshold exceeded (5 strikes)")
+                elif strike_count >= 3:
+                    await user.kick(reason="Strike threshold exceeded (3 strikes)")
+                elif strike_count >= 2:
+                    timeout_until = discord.utils.utcnow() + timedelta(hours=24)
+                    await user.timeout(timeout_until, reason="Strike threshold exceeded (2 strikes)")
+            except Exception as e:
+                logger.error(f"Failed to insert strike or escalate: {e}")
 
             # Send DM warning
             try:
@@ -41,22 +85,8 @@ class ModerationActions:
                 dm_sent = False
                 logger.warning(f"Cannot DM user {user_id} in guild {guild_id}")
 
-            # Log the warning (for now, just log to console - would need database table)
-            warning_record = {
-                'guild_id': guild_id,
-                'user_id': user_id,
-                'reason': reason,
-                'moderator_id': moderator_id,
-                'auto_generated': auto_generated,
-                'dm_sent': dm_sent,
-                'timestamp': datetime.now().isoformat()
-            }
-
-            logger.info(f"Warning issued: {warning_record}")
-
             return {
                 'success': True,
-                'warning_record': warning_record,
                 'dm_sent': dm_sent
             }
 
@@ -64,117 +94,35 @@ class ModerationActions:
             logger.error(f"Failed to warn user {user_id}: {e}")
             return {'success': False, 'error': str(e)}
 
-    async def add_strike(self, user_id, guild_id, reason, moderator_id, auto_generated=False, expires_hours=None):
-        """Add strike with automatic escalation"""
+    def get_user_warnings(self, guild_id: int, user_id: int) -> Dict:
+        """Fetch active strikes honoring the TTL window from DB"""
+        dm = self.protection_manager.data_manager
+        res = dm.supabase.table('strikes') \
+            .select('*') \
+            .eq('guild_id', str(guild_id)) \
+            .eq('user_id', str(user_id)) \
+            .eq('is_active', True) \
+            .gt('expires_at', datetime.now(timezone.utc).isoformat()) \
+            .execute()
+            
+        return {'success': True, 'strikes': res.data if res.data else []}
 
+    async def clear_user_warnings(self, guild_id: int, user_id: int, reason: str, moderator_id: int) -> Dict:
+        """Clear (deactivate) active user warnings natively in DB"""
+        dm = self.protection_manager.data_manager
         try:
-            async with self.data_manager.atomic_transaction() as conn:
-                # Generate unique strike_id
-                import uuid
-                strike_id = str(uuid.uuid4())
-
-                expires_at = None
-                if expires_hours:
-                    expires_at = datetime.now(timezone.utc) + timedelta(hours=expires_hours)
-
-                # Insert strike
-                await conn.execute(
-                    """INSERT INTO strikes (strike_id, guild_id, user_id, reason, moderator_id,
-                                            auto_generated, expires_at, is_active)
-                       VALUES ($1, $2, $3, $4, $5, $6, $7, true)""",
-                    strike_id, guild_id, user_id, reason, moderator_id, auto_generated, expires_at
-                )
-
-                # Get active strike count
-                active_strikes = await conn.fetch(
-                    """SELECT id FROM strikes
-                       WHERE user_id = $1 AND guild_id = $2 AND is_active = true
-                       AND (expires_at IS NULL OR expires_at > NOW())""",
-                    user_id, guild_id
-                )
-
-                strike_count = len(active_strikes)
-
-                # Log audit
-                await self.audit_manager.log_event(
-                    guild_id=guild_id,
-                    event_type='strike_added',
-                    user_id=user_id,
-                    moderator_id=moderator_id,
-                    details={
-                        'strike_id': strike_id,
-                        'reason': reason,
-                        'total_strikes': strike_count,
-                        'auto_generated': auto_generated
-                    },
-                    conn=conn
-                )
-
-                # ESCALATION LOGIC
-                guild = self.bot.get_guild(int(guild_id))
-                member = guild.get_member(int(user_id)) if guild else None
-
-                if not member:
-                    return strike_id
-
-                # Strike thresholds
-                if strike_count >= 5:
-                    # BAN at 5 strikes
-                    await member.ban(reason=f"Strike threshold exceeded (5 strikes)")
-                    await conn.execute(
-                        """INSERT INTO moderation_actions (action_id, guild_id, user_id, action_type,
-                                                            reason, moderator_id)
-                           VALUES ($1, $2, $3, 'ban', $4, $5)""",
-                        str(uuid.uuid4()), guild_id, user_id, "Strike threshold: 5 strikes", moderator_id
-                    )
-
-                elif strike_count >= 3:
-                    # KICK at 3 strikes
-                    await member.kick(reason=f"Strike threshold exceeded (3 strikes)")
-                    await conn.execute(
-                        """INSERT INTO moderation_actions (action_id, guild_id, user_id, action_type,
-                                                            reason, moderator_id)
-                           VALUES ($1, $2, $3, 'kick', $4, $5)""",
-                        str(uuid.uuid4()), guild_id, user_id, "Strike threshold: 3 strikes", moderator_id
-                    )
-
-                elif strike_count >= 2:
-                    # TIMEOUT at 2 strikes (24 hours)
-                    timeout_until = datetime.now(timezone.utc) + timedelta(hours=24)
-                    await member.timeout(timeout_until, reason=f"Strike threshold exceeded (2 strikes)")
-                    await conn.execute(
-                        """INSERT INTO moderation_actions (action_id, guild_id, user_id, action_type,
-                                                            reason, moderator_id, duration_seconds, expires_at)
-                           VALUES ($1, $2, $3, 'timeout', $4, $5, 86400, $6)""",
-                        str(uuid.uuid4()), guild_id, user_id, "Strike threshold: 2 strikes",
-                        moderator_id, timeout_until
-                    )
-
+            dm.supabase.table('strikes') \
+                .update({'is_active': False}) \
+                .eq('guild_id', str(guild_id)) \
+                .eq('user_id', str(user_id)) \
+                .execute()
+            return {'success': True}
         except Exception as e:
-            logger.exception(f"Add strike error: {e}")
-            raise
-
-        return strike_id
-
-    async def remove_strike(self, guild_id: int, user_id: int, strike_id: str, moderator_id: int) -> Dict:
-        """Removes a strike (manual) and logs action"""
-        try:
-            # For now, just log the removal - would need database table
-            removal_record = {
-                'guild_id': guild_id,
-                'user_id': user_id,
-                'strike_id': strike_id,
-                'moderator_id': moderator_id,
-                'timestamp': datetime.now().isoformat()
-            }
-
-            logger.info(f"Strike removed: {removal_record}")
-
-            return {'success': True, 'removal_record': removal_record}
-
-        except Exception as e:
-            logger.error(f"Failed to remove strike {strike_id}: {e}")
+            logger.error(f"Failed to clear warnings: {e}")
             return {'success': False, 'error': str(e)}
+
+    async def pardon_user(self, guild_id: int, user_id: int, reason: str, moderator_id: int) -> Dict:
+        return await self.clear_user_warnings(guild_id, user_id, reason, moderator_id)
 
     async def apply_temporary_mute(self, guild_id: int, user_id: int, duration_seconds: int, reason: str, moderator_id: int) -> Dict:
         """Applies mute role or timeout via Discord API for the specified duration"""
