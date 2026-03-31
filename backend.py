@@ -1502,7 +1502,7 @@ def get_users(server_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/users/<user_id>', methods=['GET'])
+@app.route('/api/servers/<server_id>/users/<user_id>', methods=['GET'])
 @require_guild_access
 def get_user(server_id, user_id):
     try:
@@ -1511,7 +1511,7 @@ def get_user(server_id, user_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/users/<user_id>/balance', methods=['PUT'])
+@app.route('/api/servers/<server_id>/users/<user_id>/balance', methods=['PUT'])
 @csrf.exempt
 @require_guild_access
 def update_balance(server_id, user_id):
@@ -1577,7 +1577,7 @@ def update_balance(server_id, user_id):
             return jsonify({'error': 'This adjustment would result in a negative balance.'}), 400
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/users/<user_id>/roles', methods=['GET'])
+@app.route('/api/servers/<server_id>/users/<user_id>/roles', methods=['GET'])
 @require_guild_access
 def get_user_roles(server_id, user_id):
     """Get roles for a specific user in a guild"""
@@ -1593,15 +1593,15 @@ def get_user_roles(server_id, user_id):
         if not member:
             return jsonify({'error': 'Member not found'}), 404
         
-        # Get role IDs for this user
-        role_ids = [str(role.id) for role in member.roles if role.id != guild.id]  # Exclude @everyone
+        # Get role IDs as objects for this user (compatibility with frontend)
+        roles = [{'id': str(role.id)} for role in member.roles if role.id != guild.id]
         
-        return jsonify({'roles': role_ids}), 200
+        return jsonify({'roles': roles}), 200
     except Exception as e:
         logger.error(f"Error getting user roles: {e}")
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/users/<user_id>/roles', methods=['PUT'])
+@app.route('/api/servers/<server_id>/users/<user_id>/roles', methods=['PUT'])
 @csrf.exempt
 @require_guild_access
 def update_user_roles(server_id, user_id):
@@ -1640,7 +1640,7 @@ def update_user_roles(server_id, user_id):
         return safe_error_response(e)
 
 # ========== TASK MANAGEMENT ==========
-@app.route('/api/<server_id>/tasks', methods=['GET'])
+@app.route('/api/servers/<server_id>/tasks', methods=['GET'])
 @require_guild_access
 def get_tasks(server_id):
     try:
@@ -2061,7 +2061,7 @@ def get_embed(server_id, embed_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/embeds/<embed_id>', methods=['PUT'])
+@app.route('/api/servers/<server_id>/embeds/<embed_id>', methods=['PUT'])
 @csrf.exempt
 @require_guild_access
 def update_embed(server_id, embed_id):
@@ -2077,7 +2077,7 @@ def update_embed(server_id, embed_id):
 @require_guild_access
 def delete_embed(server_id, embed_id):
     try:
-        embed_builder.delete_embed(server_id, embed_id)
+        embed_manager.delete_embed(server_id, embed_id)
         return jsonify({'success': True}), 200
     except Exception as e:
         return safe_error_response(e)
@@ -2257,7 +2257,7 @@ def send_embed_to_channel(server_id, embed_id):
         return safe_error_response(e)
 
 
-@app.route('/api/<server_id>/logs', methods=['GET'])
+@app.route('/api/servers/<server_id>/logs', methods=['GET'])
 @require_guild_access
 def get_logs(server_id):
     try:
@@ -2283,7 +2283,7 @@ def get_logs(server_id):
         return safe_error_response(e)
 
 
-@app.route('/api/<server_id>/bot_status', methods=['POST'])
+@app.route('/api/servers/<server_id>/bot_status', methods=['POST'])
 @csrf.exempt
 @require_guild_access
 def update_bot_status(server_id):
@@ -2875,7 +2875,7 @@ def create_guild_ad_session(server_id):
         return safe_error_response(e)
 
 
-@app.route('/api/<server_id>/ad-claim/stats/<user_id>', methods=['GET'])
+@app.route('/api/servers/<server_id>/ad-claim/stats/<user_id>', methods=['GET'])
 @require_guild_access
 def get_user_ad_stats(server_id, user_id):
     """Get ad viewing statistics for a user"""
@@ -3139,7 +3139,7 @@ def get_channel_schedule(server_id, schedule_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['PUT'])
+@app.route('/api/servers/<server_id>/channel-schedules/<schedule_id>', methods=['PUT'])
 @csrf.exempt
 @require_guild_access
 @require_premium
@@ -3174,7 +3174,7 @@ def update_channel_schedule(server_id, schedule_id):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/<server_id>/channel-schedules/<schedule_id>', methods=['DELETE'])
+@app.route('/api/servers/<server_id>/channel-schedules/<schedule_id>', methods=['DELETE'])
 @csrf.exempt
 @require_guild_access
 @require_premium

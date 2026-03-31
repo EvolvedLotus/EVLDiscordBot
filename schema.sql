@@ -695,17 +695,67 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- RPC: enter_raffle_giveaway
-CREATE OR REPLACE FUNCTION enter_raffle_giveaway(p_giveaway_id UUID, p_guild_id TEXT, p_user_id TEXT, p_tickets INTEGER, p_cost INTEGER) RETURNS JSONB AS $$
+-- RPC: enter_raffle_giveaway (Robust version with ticket limits and locking)
+DROP FUNCTION IF EXISTS enter_raffle_giveaway(UUID, TEXT, TEXT, INTEGER, INTEGER);
+DROP FUNCTION IF EXISTS enter_raffle_giveaway(UUID, TEXT, TEXT, INTEGER, INTEGER, INTEGER);
+CREATE OR REPLACE FUNCTION enter_raffle_giveaway(
+    p_giveaway_id UUID,
+    p_guild_id TEXT,
+    p_user_id TEXT,
+    p_tickets INTEGER,
+    p_raffle_cost INTEGER,
+    p_max_tickets INTEGER DEFAULT 10
+) RETURNS JSONB AS $$
 DECLARE
+    v_user_balance NUMERIC;
+    v_total_cost NUMERIC;
+    v_current_tickets INTEGER;
+    v_new_tickets INTEGER;
     v_res RECORD;
+    v_now TIMESTAMPTZ := NOW();
 BEGIN
-    SELECT * INTO v_res FROM process_balance_change(p_guild_id, p_user_id, -p_cost, 'giveaway_entry', 'Raffle entry');
-    INSERT INTO giveaway_entries (giveaway_id, guild_id, user_id, tickets, amount_spent)
-    VALUES (p_giveaway_id, p_guild_id, p_user_id, p_tickets, p_cost)
-    ON CONFLICT (giveaway_id, user_id) DO UPDATE SET tickets = giveaway_entries.tickets + EXCLUDED.tickets, amount_spent = giveaway_entries.amount_spent + EXCLUDED.amount_spent;
+    -- 1. Lock the user's currency row
+    SELECT balance INTO v_user_balance FROM users WHERE guild_id = p_guild_id AND user_id = p_user_id FOR UPDATE;
+    IF NOT FOUND THEN
+        INSERT INTO users (guild_id, user_id, balance, total_earned, total_spent, is_active)
+        VALUES (p_guild_id, p_user_id, 0, 0, 0, true);
+        v_user_balance := 0;
+    END IF;
+
+    -- Calculate total cost
+    v_total_cost := p_tickets * p_raffle_cost;
+
+    -- 2. Verify funds
+    IF v_user_balance < v_total_cost THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Insufficient balance');
+    END IF;
+
+    -- 3. Lock user's existing giveaway entry
+    SELECT tickets INTO v_current_tickets FROM giveaway_entries WHERE giveaway_id = p_giveaway_id AND user_id = p_user_id FOR UPDATE;
+    IF NOT FOUND THEN v_current_tickets := 0; END IF;
+
+    v_new_tickets := v_current_tickets + p_tickets;
+
+    -- 4. Verify max tickets rule
+    IF v_new_tickets > p_max_tickets THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Exceeds maximum allowed tickets (' || p_max_tickets || ')');
+    END IF;
+
+    -- 5. Delegate to balance change for atomicity and transaction logging
+    SELECT * INTO v_res FROM process_balance_change(p_guild_id, p_user_id, -v_total_cost, 'giveaway_entry', 'Raffle entry for giveaway ' || p_giveaway_id, jsonb_build_object('giveaway_id', p_giveaway_id, 'tickets', p_tickets));
+
+    -- 6. Upsert the giveaway entry
+    INSERT INTO giveaway_entries (giveaway_id, guild_id, user_id, tickets, amount_spent, entered_at)
+    VALUES (p_giveaway_id, p_guild_id, p_user_id, p_tickets, v_total_cost, v_now)
+    ON CONFLICT (giveaway_id, user_id) DO UPDATE SET 
+        tickets = giveaway_entries.tickets + p_tickets, 
+        amount_spent = giveaway_entries.amount_spent + v_total_cost,
+        entered_at = v_now;
+
+    -- 7. Update giveaway counter
     UPDATE giveaways SET total_entries = total_entries + p_tickets WHERE id = p_giveaway_id;
-    RETURN jsonb_build_object('success', true, 'new_balance', v_res.new_balance);
+
+    RETURN jsonb_build_object('success', true, 'new_balance', v_res.new_balance, 'tickets_added', p_tickets, 'total_tickets', v_new_tickets);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -791,16 +841,16 @@ DROP TRIGGER IF EXISTS channel_schedules_timestamp ON channel_schedules;
 CREATE TRIGGER channel_schedules_timestamp BEFORE UPDATE ON channel_schedules FOR EACH ROW EXECUTE FUNCTION update_channel_schedules_timestamp();
 
 -- Grant Public Action permissions
-GRANT EXECUTE ON FUNCTION process_balance_change TO anon;
-GRANT EXECUTE ON FUNCTION process_transfer TO anon;
-GRANT EXECUTE ON FUNCTION claim_daily_reward TO anon;
-GRANT EXECUTE ON FUNCTION claim_monthly_boost_reward TO anon;
-GRANT EXECUTE ON FUNCTION process_purchase TO anon;
-GRANT EXECUTE ON FUNCTION enter_raffle_giveaway TO anon;
-GRANT EXECUTE ON FUNCTION upsert_discord_user TO anon;
-GRANT EXECUTE ON FUNCTION sync_discord_user_guilds TO anon;
-GRANT EXECUTE ON FUNCTION expire_overdue_tasks TO anon;
-GRANT EXECUTE ON FUNCTION increment_giveaway_entries TO anon;
+GRANT EXECUTE ON FUNCTION process_balance_change TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION process_transfer TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION claim_daily_reward TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION claim_monthly_boost_reward TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION process_purchase TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION enter_raffle_giveaway TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION upsert_discord_user TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION sync_discord_user_guilds TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION expire_overdue_tasks TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION increment_giveaway_entries TO anon, authenticated, service_role;
 
 -- Row Level Security
 ALTER TABLE guilds ENABLE ROW LEVEL SECURITY;
@@ -860,3 +910,61 @@ COMMENT ON TABLE custom_ads IS 'Custom advertisements for blog posts and tools';
 COMMENT ON TABLE ad_clients IS 'Registered clients for the ad system';
 COMMENT ON TABLE global_tasks IS 'Configuration for global tasks like ad claiming';
 COMMENT ON TABLE archived_shop_items IS 'Soft-archive for deleted items to allow legacy redemption';
+COMMENT ON COLUMN web_sessions.max_expires_at IS 'Hard expiry timestamp regardless of activity (sliding window stops here)';
+COMMENT ON COLUMN web_sessions.last_active_at IS 'Timestamp of the last request using this session';
+COMMENT ON COLUMN web_sessions.last_permission_check IS 'Timestamp of the last Discord permission re-validation';
+
+-- ADDITIONAL INDEXES
+CREATE INDEX IF NOT EXISTS idx_web_sessions_max_expires ON web_sessions(max_expires_at);
+CREATE INDEX IF NOT EXISTS idx_giveaways_lifecycle ON giveaways (guild_id, status);
+CREATE INDEX IF NOT EXISTS idx_giveaways_embed ON giveaways (guild_id, channel_id, message_id);
+CREATE INDEX IF NOT EXISTS idx_giveaways_scheduler ON giveaways (ends_at) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_giveaway_entries_fetch ON giveaway_entries (giveaway_id);
+
+-- ADDITIONAL TRIGGERS
+DROP TRIGGER IF EXISTS update_giveaways_updated_at ON giveaways;
+CREATE TRIGGER update_giveaways_updated_at BEFORE UPDATE ON giveaways FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ROW LEVEL SECURITY (RLS) - COMPLETION
+ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_claims ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vote_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE discord_oauth_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE server_boosts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE embeds ENABLE ROW LEVEL SECURITY;
+ALTER TABLE channel_schedules ENABLE ROW LEVEL SECURITY;
+
+-- POLICIES (Consolidated "Public Full Access" managed by service role)
+DROP POLICY IF EXISTS "Public Full Access" ON admin_users;
+CREATE POLICY "Public Full Access" ON admin_users FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON daily_claims;
+CREATE POLICY "Public Full Access" ON daily_claims FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON inventory;
+CREATE POLICY "Public Full Access" ON inventory FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON transactions;
+CREATE POLICY "Public Full Access" ON transactions FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON tasks;
+CREATE POLICY "Public Full Access" ON tasks FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON user_tasks;
+CREATE POLICY "Public Full Access" ON user_tasks FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON task_settings;
+CREATE POLICY "Public Full Access" ON task_settings FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON vote_logs;
+CREATE POLICY "Public Full Access" ON vote_logs FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON giveaway_entries;
+CREATE POLICY "Public Full Access" ON giveaway_entries FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON discord_oauth_logs;
+CREATE POLICY "Public Full Access" ON discord_oauth_logs FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON server_boosts;
+CREATE POLICY "Public Full Access" ON server_boosts FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON announcements;
+CREATE POLICY "Public Full Access" ON announcements FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON embeds;
+CREATE POLICY "Public Full Access" ON embeds FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON channel_schedules;
+CREATE POLICY "Public Full Access" ON channel_schedules FOR ALL USING (true);
+

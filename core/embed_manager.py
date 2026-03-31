@@ -162,12 +162,8 @@ class EmbedManager:
             if embed_id not in embeds:
                 return False
                 
-            # Remove embed
-            del embeds[embed_id]
-            
-            # Save data (passing the whole embeds dict to be saved via config/embeds path)
-            # Note: DataManager.save_guild_data logic for 'config' handles 'embeds' key
-            self.data_manager.save_guild_data(guild_id, 'config', {'embeds': embeds})
+            # Remove embed from database directly as save_guild_data only upserts
+            self.data_manager.admin_client.table('embeds').delete().eq('embed_id', embed_id).eq('guild_id', str(guild_id)).execute()
             
             return True
         except Exception as e:
