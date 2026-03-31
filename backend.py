@@ -880,6 +880,7 @@ def get_ad_session(session_id):
         return safe_error_response(e)
 
 @app.route('/api/ad-claim/verify', methods=['POST'])
+@csrf.exempt
 def verify_ad_claim():
     """Verify ad was watched and grant reward"""
     try:
