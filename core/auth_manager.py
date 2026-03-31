@@ -98,26 +98,41 @@ class AuthManager:
             expires_at = now + timedelta(seconds=self.session_timeout)
             max_expires_at = now + timedelta(seconds=self.max_lifetime)
             
-            # Insert into web_sessions
-            self.data_manager.admin_client.table('web_sessions').insert({
-                'session_id': session_id,
-                'user_id': str(user_data.get('id', '')),
-                'user_data': user_data,
-                'expires_at': expires_at.isoformat(),
-                'max_expires_at': max_expires_at.isoformat(),
-                'created_at': now.isoformat(),
-                'last_active_at': now.isoformat(),
-                'last_permission_check': now.isoformat(),
-                'is_valid': True
-            }).execute()
+            # 1. Attempt full insert with session hardening columns
+            try:
+                self.data_manager.admin_client.table('web_sessions').insert({
+                    'session_id': session_id,
+                    'user_id': str(user_data.get('id', '')),
+                    'user_data': user_data,
+                    'expires_at': expires_at.isoformat(),
+                    'max_expires_at': max_expires_at.isoformat(),
+                    'created_at': now.isoformat(),
+                    'last_active_at': now.isoformat(),
+                    'last_permission_check': now.isoformat(),
+                    'is_valid': True
+                }).execute()
+            except Exception as inner_e:
+                # Check for PostgREST "Column not found" error (PGRST204)
+                # If columns are missing, fallback to minimal insert for immediate availability
+                error_msg = str(inner_e)
+                if 'PGRST204' in error_msg or 'last_active_at' in error_msg:
+                    logger.warning(f"⚠️ Partial Schema: Missing session hardening columns in 'web_sessions'. Falling back to minimal session format. PLEASE RUN MIGRATIONS.")
+                    self.data_manager.admin_client.table('web_sessions').insert({
+                        'session_id': session_id,
+                        'user_id': str(user_data.get('id', '')),
+                        'user_data': user_data,
+                        'expires_at': expires_at.isoformat(),
+                        'created_at': now.isoformat(),
+                        'is_valid': True
+                    }).execute()
+                else:
+                    raise inner_e
 
             logger.info(f"Session created for user: {user_data.get('username')} (DB)")
             return session_id
             
         except Exception as e:
             logger.error(f"Failed to create DB session: {e}", exc_info=True)
-            # Fallback to minimal JWT or error? 
-            # For now, return empty which will fail auth, prompting retry/error.
             raise e
 
     def validate_session(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -172,10 +187,26 @@ class AuthManager:
                 logger.debug(f"Session {session_id} sliding window extended for user: {session['user_id']}")
                 
             # Perform update
-            self.data_manager.admin_client.table('web_sessions') \
-                .update(updates) \
-                .eq('session_id', session_id) \
-                .execute()
+            try:
+                self.data_manager.admin_client.table('web_sessions') \
+                    .update(updates) \
+                    .eq('session_id', session_id) \
+                    .execute()
+            except Exception as inner_e:
+                # If only last_active_at check fails, retry without it or simply ignore if update isn't critical
+                if 'PGRST204' in str(inner_e) or 'last_active_at' in str(inner_e):
+                    # Minimal update: only update expires_at if it was included
+                    minimal_updates = {}
+                    if 'expires_at' in updates:
+                        minimal_updates['expires_at'] = updates['expires_at']
+                    
+                    if minimal_updates:
+                        self.data_manager.admin_client.table('web_sessions') \
+                            .update(minimal_updates) \
+                            .eq('session_id', session_id) \
+                            .execute()
+                else:
+                    raise inner_e
             
             # 4. DISCORD PERMISSION SYNC (Gap 1: Re-validation every 15 min)
             last_sync_str = session.get('last_permission_check')

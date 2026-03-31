@@ -445,6 +445,34 @@ CREATE INDEX IF NOT EXISTS idx_ad_views_user ON ad_views(user_id);
 CREATE INDEX IF NOT EXISTS idx_ad_views_created_at ON ad_views(created_at);
 CREATE INDEX IF NOT EXISTS idx_ad_views_expires ON ad_views(expires_at);
 
+-- CUSTOM ADS table (Railway PG / Supabase)
+CREATE TABLE IF NOT EXISTS custom_ads (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    headline TEXT,
+    cta TEXT DEFAULT 'Learn More',
+    url TEXT NOT NULL,
+    image TEXT,
+    ad_type TEXT DEFAULT 'static',
+    color TEXT DEFAULT '#007bff',
+    is_active BOOLEAN DEFAULT true,
+    impressions INTEGER DEFAULT 0,
+    clicks INTEGER DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- AD CLIENTS table (Railway PG / Supabase)
+CREATE TABLE IF NOT EXISTS ad_clients (
+    client_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    priority INTEGER DEFAULT 0,
+    weight INTEGER DEFAULT 100,
+    is_active BOOLEAN DEFAULT true,
+    last_request_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- GLOBAL TASKS table
 CREATE TABLE IF NOT EXISTS global_tasks (
     task_key TEXT PRIMARY KEY,
@@ -787,6 +815,8 @@ ALTER TABLE giveaways ENABLE ROW LEVEL SECURITY;
 ALTER TABLE giveaway_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE web_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ad_views ENABLE ROW LEVEL SECURITY;
+ALTER TABLE custom_ads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ad_clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE global_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE global_task_claims ENABLE ROW LEVEL SECURITY;
 
@@ -805,6 +835,10 @@ DROP POLICY IF EXISTS "Public Full Access" ON web_sessions;
 CREATE POLICY "Public Full Access" ON web_sessions FOR ALL USING (true);
 DROP POLICY IF EXISTS "Public Full Access" ON ad_views;
 CREATE POLICY "Public Full Access" ON ad_views FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON custom_ads;
+CREATE POLICY "Public Full Access" ON custom_ads FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON ad_clients;
+CREATE POLICY "Public Full Access" ON ad_clients FOR ALL USING (true);
 DROP POLICY IF EXISTS "Public Full Access" ON global_tasks;
 CREATE POLICY "Public Full Access" ON global_tasks FOR ALL USING (true);
 DROP POLICY IF EXISTS "Public Full Access" ON global_task_claims;
@@ -822,5 +856,7 @@ COMMENT ON TABLE moderation_actions IS 'Persistent audit log for all manual and 
 COMMENT ON TABLE strikes IS 'Discord user strikes and warnings tracking';
 COMMENT ON TABLE giveaways IS 'Server giveaway state with streak-aware winner tracking';
 COMMENT ON TABLE ad_views IS 'Ad session tracking and verification';
+COMMENT ON TABLE custom_ads IS 'Custom advertisements for blog posts and tools';
+COMMENT ON TABLE ad_clients IS 'Registered clients for the ad system';
 COMMENT ON TABLE global_tasks IS 'Configuration for global tasks like ad claiming';
 COMMENT ON TABLE archived_shop_items IS 'Soft-archive for deleted items to allow legacy redemption';
