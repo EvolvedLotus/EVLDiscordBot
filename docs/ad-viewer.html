@@ -285,6 +285,7 @@
         // Get session ID from URL
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session');
+        const signature = urlParams.get('sig'); // Gap 3: Signature from URL
         let currentAdData = null;
 
         if (!sessionId) {
@@ -339,26 +340,52 @@
         }
 
         function displayMonetagAd() {
-            showStatus('info', 'Loading Monetag ad...');
+            showStatus('success', 'Premium Sponsor Recommendation');
+            
+            const adHtml = `
+                <div class="custom-promo" style="border-color: #764ba2;">
+                    <div class="promo-tag" style="background: #f0ecf9; color: #764ba2;">Monetized Partner</div>
+                    <h2 class="promo-header">Support EvolvedLotus</h2>
+                    <img src="https://evolvedlotus.com/assets/img/monetag_preview.png" class="promo-image" alt="Sponsor" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                    <p class="promo-description">
+                        Watch a quick advertisement from our partner to support our continued development and unlock your reward.
+                    </p>
+                    <button onclick="handleMonetagSDKTrigger()" id="monetagTriggerBtn" class="promo-cta-btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; cursor: pointer; width: 100%;">
+                        ▶ Watch Ad to Earn
+                    </button>
+                </div>
+            `;
 
-            // Trigger Monetag Rewarded Interstitial
-            // Pass the session ID as ymid for tracking
-            if (typeof show_9376937 === 'function') {
-                show_9376937({ ymid: sessionId }).then((result) => {
-                    console.log('Monetag ad completed:', result);
-                    handleAdCompletion();
-                }).catch((error) => {
-                    console.error('Monetag ad error:', error);
-                    showStatus('error', 'The ad failed to load. Please try again later.');
-                    document.getElementById('adContainer').innerHTML = `
-                        <div style="padding: 40px; text-align: center;">
-                            <h2 style="color: #f44336; margin-bottom: 20px;">⚠️ Ad Not Available</h2>
-                            <p>Third-party ad could not be loaded at this time.</p>
-                        </div>
-                    `;
+            document.getElementById('adContainer').innerHTML = adHtml;
+            document.getElementById('adContainer').style.border = `2px solid #764ba2`;
+        }
+
+        async function handleMonetagSDKTrigger() {
+            const btn = document.getElementById('monetagTriggerBtn');
+            if (!btn) return;
+
+            if (typeof show_9376937 !== 'function') {
+                showStatus('error', 'Monetag SDK not loaded. Please disable ad-blockers and refresh.');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '⌛ Preparing Ad...';
+
+            try {
+                // The SDK function resolves when the ad is closed or finished
+                await show_9376937({ 
+                    ymid: sessionId,
+                    requestVar: 'discord_bot_reward'
                 });
-            } else {
-                showStatus('error', 'Monetag SDK not loaded. Please disable ad-blockers.');
+                
+                showStatus('success', 'Ad completed! Verifying your reward...');
+                handleAdCompletion();
+            } catch (error) {
+                console.error('Monetag ad error:', error);
+                showStatus('error', 'The ad failed to load or was interrupted. Please try again.');
+                btn.disabled = false;
+                btn.textContent = '▶ Try Again';
             }
         }
 
@@ -441,7 +468,8 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        session_id: sessionId
+                        session_id: sessionId,
+                        signature: signature // Gap 3: Send signature back
                     })
                 });
 

@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 class AdClaimManager:
     """Manages ad viewing sessions and reward distribution"""
     
-    def __init__(self, data_manager, transaction_manager):
+    def __init__(self, data_manager, transaction_manager, secret_key: str = "dev-secret"):
         self.data_manager = data_manager
         self.transaction_manager = transaction_manager
-        logger.info("✅ AdClaimManager initialized")
+        self.secret_key = secret_key
+        logger.info("✅ AdClaimManager initialized with security signatures")
     
     def create_ad_session(self, user_id: str, guild_id: str, ip_address: str = None, user_agent: str = None) -> Dict:
         """
@@ -43,7 +44,7 @@ class AdClaimManager:
             session_id = self._generate_session_id(user_id, guild_id)
             
             # Decide ad type (60/40 rotation between Custom EvolvedLotus ads and Monetag)
-            ad_type = 'monetag_interstitial'
+            ad_type = 'monetag_direct_link'
             custom_ad = None
             
             if random.random() < 0.6:  # 60% chance for Custom Ad (increased from 50%)
@@ -51,7 +52,11 @@ class AdClaimManager:
                 ad_type = 'custom_promo'
                 logger.info(f"Selected custom ad {custom_ad.get('id')} for session {session_id}")
 
-            # Create ad view record
+            # 15 minute expiry for sessions (Exploit 2: Short TTL)
+            now = datetime.now(timezone.utc)
+            expires_at = now + timedelta(minutes=15)
+            
+            # 3. Create ad view record (Exploit 1: Sessions are bot_created in DB)
             result = self.data_manager.admin_client.table('ad_views').insert({
                 'user_id': user_id,
                 'guild_id': guild_id,
@@ -62,12 +67,16 @@ class AdClaimManager:
                 'reward_granted': False,
                 'ip_address': ip_address,
                 'user_agent': user_agent,
+                'expires_at': expires_at.isoformat(),
                 'metadata': {
                     'created_via': 'api',
-                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'timestamp': now.isoformat(),
                     'custom_ad': custom_ad
                 }
             }).execute()
+            
+            # Generate security signature for frontend (Gap 3: Signed verify request)
+            signature = self.generate_verification_signature(session_id)
             
             if not result.data:
                 raise Exception("Failed to create ad session")
@@ -87,7 +96,8 @@ class AdClaimManager:
             return {
                 'success': True,
                 'session_id': session_id,
-                'viewer_url': f'/ad-viewer?session={session_id}',
+                'viewer_url': f'/ad-viewer?session={session_id}&sig={signature}',
+                'signature': signature, # Provide to caller (e.g. backend)
                 'reward': 10
             }
             
@@ -95,23 +105,52 @@ class AdClaimManager:
             logger.error(f"Error creating ad session: {e}")
             raise
     
-    def verify_ad_view(self, session_id: str, verification_data: Dict = None) -> Dict:
+    def verify_ad_view(self, session_id: str, signature: str = None, verification_data: Dict = None) -> Dict:
         """
         Verify that an ad was viewed and grant reward
         
         Args:
             session_id: The ad session ID
-            verification_data: Optional verification data from Monetag postback
+            signature: Security signature for the session (required for frontend verify)
+            verification_data: Optional verification data (e.g. from Monetag postback)
         
         Returns:
             Dict with verification status and reward info
         """
         try:
+            # 1. SECURITY VALIDATION
+            # If it's a frontend verification, REQUIRE a valid HMAC signature (Gap 3)
+            # Postbacks don't have this, but they have their own verification (e.g. server-to-server)
+            if not verification_data: # This was a direct frontend /verify call
+                if not signature:
+                    return {'success': False, 'error': 'Missing security signature'}
+                
+                expected_sig = self.generate_verification_signature(session_id)
+                if not hmac.compare_digest(signature, expected_sig):
+                    logger.warning(f"Signature mismatch for ad verification: Session {session_id}")
+                    return {'success': False, 'error': 'Invalid request signature'}
+
             # Get ad view record
             result = self.data_manager.admin_client.table('ad_views') \
                 .select('*') \
                 .eq('ad_session_id', session_id) \
                 .execute()
+            
+            if not result.data or len(result.data) == 0:
+                return {
+                    'success': False,
+                    'error': 'Invalid session ID'
+                }
+            
+            ad_view = result.data[0]
+            now = datetime.now(timezone.utc)
+            
+            # 2. EXPIRY VALIDATION (Exploit 2)
+            expires_at_str = ad_view.get('expires_at')
+            if expires_at_str:
+                expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+                if now > expires_at:
+                    return {'success': False, 'error': 'Ad session has expired (15min timeout)'}
             
             if not result.data or len(result.data) == 0:
                 return {
@@ -398,6 +437,14 @@ class AdClaimManager:
         session_hash = hashlib.sha256(data.encode()).hexdigest()[:32]
         
         return f"ad_{session_hash}"
+
+    def generate_verification_signature(self, session_id: str) -> str:
+        """Generate HMAC signature for a session ID to prevent spoofing"""
+        return hmac.new(
+            self.secret_key.encode(),
+            session_id.encode(),
+            hashlib.sha256
+        ).hexdigest()
     
     def handle_monetag_postback(self, postback_data: Dict) -> Dict:
         """

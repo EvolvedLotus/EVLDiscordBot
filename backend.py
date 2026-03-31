@@ -42,15 +42,69 @@ app.config['WTF_CSRF_TIME_LIMIT'] = 3600  # 1 hour
 # CSRF Protection & HTTPS
 csrf = CSRFProtect(app)
 
-# HTTPS Enforcement (Production Only)
-# Note: Railway handles TLS termination at the edge, so we don't force_https
-# (internal health checks use HTTP and would fail with 302 redirects)
-if os.getenv('RAILWAY_ENVIRONMENT') == 'production' or os.getenv('ENVIRONMENT') == 'production':
-    # Security headers without forcing HTTPS redirect (Railway does this at edge)
-    Talisman(app, content_security_policy=None, force_https=False)
-else:
-    # Dev mode: permissive
-    Talisman(app, content_security_policy=None, force_https=False, force_file_save=False)
+# Content Security Policy for Monetag Direct Link SDK
+# Allows libtl.com for scripts/connect and 5gvci.com for workers
+csp = {
+    'default-src': "'self'",
+    'script-src': [
+        "'self'",
+        "'unsafe-inline'",
+        "'unsafe-eval'",
+        "https://libtl.com",
+        "https://*.libtl.com",
+        "https://*.evolvedlotus.com",
+        "https://www.googletagmanager.com",
+        "https://www.google-analytics.com"
+    ],
+    'style-src': [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+        "https://cdnjs.cloudflare.com"
+    ],
+    'font-src': [
+        "'self'",
+        "https://fonts.gstatic.com",
+        "https://cdnjs.cloudflare.com"
+    ],
+    'img-src': [
+        "'self'",
+        "data:",
+        "https://*.libtl.com",
+        "https://*.evolvedlotus.com",
+        "https://*.discordapp.com",
+        "https://cdn.discordapp.com"
+    ],
+    'connect-src': [
+        "'self'",
+        "https://v.libtl.com",
+        "https://libtl.com",
+        "https://*.libtl.com",
+        "https://*.evolvedlotus.com",
+        "https://*.supabase.co",
+        "https://www.google-analytics.com"
+    ],
+    'worker-src': [
+        "'self'",
+        "https://5gvci.com",
+        "https://*.5gvci.com",
+        "blob:"
+    ],
+    'frame-src': [
+        "'self'",
+        "https://*.libtl.com"
+    ]
+}
+
+# Talisman initialization with CSP
+Talisman(app, 
+         content_security_policy=csp, 
+         force_https=False, # Railway handles HTTPS at the edge
+         frame_options='DENY',
+         session_cookie_secure=True,
+         strict_transport_security=True,
+         referrer_policy='no-referrer-when-downgrade'
+)
 
 # Environment detection
 IS_PRODUCTION = (
@@ -306,7 +360,7 @@ def initialize_managers():
         embed_manager = EmbedManager(data_manager)
         sse_manager = _sse_manager # Assign global
         sync_manager = SyncManager(data_manager, audit_manager, sse_manager)
-        ad_claim_manager = AdClaimManager(data_manager, transaction_manager)
+        ad_claim_manager = AdClaimManager(data_manager, transaction_manager, secret_key=app.config['SECRET_KEY'])
         channel_lock_manager = ChannelLockManager(data_manager)
         giveaway_manager = GiveawayManager(data_manager, transaction_manager, shop_manager)
         giveaway_manager.set_cache_manager(cache_manager)
@@ -837,11 +891,13 @@ def verify_ad_claim():
             return jsonify({'error': 'No data provided'}), 400
             
         session_id = data.get('session_id')
+        signature = data.get('signature') # Gap 3
+        
         if not session_id:
             return jsonify({'error': 'Missing session_id'}), 400
         
         # Verify and grant reward
-        result = ad_claim_manager.verify_ad_view(session_id)
+        result = ad_claim_manager.verify_ad_view(session_id, signature=signature)
         
         if result.get('success'):
             return jsonify({
@@ -2855,23 +2911,40 @@ def get_global_task(task_key):
     except Exception as e:
         return safe_error_response(e)
 
-@app.route('/api/monetag/postback', methods=['POST'])
+@app.route('/api/monetag/postback', methods=['GET', 'POST'])
 def monetag_postback():
-    """Handle Monetag ad view postback"""
+    """
+    Handle Monetag ad view postback (Server-to-Server)
+    Supports both legacy format and new Direct Link 'ymid' format
+    """
     try:
-        data = request.get_json() or request.form.to_dict()
+        # Extract data from either GET or POST
+        if request.method == 'POST':
+            data = request.get_json() or request.form.to_dict()
+        else:
+            data = request.args.to_dict()
+            
+        logger.info(f"Received Monetag postback ({request.method}): {data}")
         
-        logger.info(f"Received Monetag postback: {data}")
-        
-        # Process the postback
+        # Handle new format: ymid could be "session_id" or "post_id:session_id"
+        ymid = data.get('ymid')
+        if ymid:
+            if ':' in ymid:
+                # Format: post_id:session_id
+                parts = ymid.split(':')
+                session_id = parts[1]
+                data['session_id'] = session_id
+            else:
+                data['session_id'] = ymid
+
+        # Use ad_claim_manager to verify and reward
         result = ad_claim_manager.handle_monetag_postback(data)
         
-        # Monetag expects a 200 OK response
+        # Monetag expects a 200 OK response even on error to stop retries
         return jsonify(result), 200
         
     except Exception as e:
         logger.error(f"Error processing Monetag postback: {e}")
-        # Still return 200 to Monetag to prevent retries
         return jsonify({'success': False, 'error': str(e)}), 200
 
 
