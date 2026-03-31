@@ -7,6 +7,7 @@ import logging
 import secrets
 import hashlib
 import random
+import hmac
 from core.evolved_lotus_api import evolved_lotus_api
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
@@ -228,13 +229,13 @@ class AdClaimManager:
                 reason=f"Watched ad - Session {session_id[:8]}"
             )
             
-            # Check if transaction was created successfully (has an 'id' field)
-            if transaction and transaction.get('id'):
+            # Check if transaction was created successfully (has an 'transaction_id' field)
+            if transaction and transaction.get('transaction_id'):
                 # Update ad_views record
                 self.data_manager.admin_client.table('ad_views') \
                     .update({
                         'reward_granted': True,
-                        'transaction_id': transaction.get('id')
+                        'transaction_id': transaction.get('transaction_id')
                     }) \
                     .eq('ad_session_id', session_id) \
                     .execute()

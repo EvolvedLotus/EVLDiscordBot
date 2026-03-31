@@ -200,6 +200,24 @@ CREATE TABLE IF NOT EXISTS inventory (
     PRIMARY KEY (guild_id, user_id, item_id)
 );
 
+-- ARCHIVED SHOP ITEMS table
+CREATE TABLE IF NOT EXISTS archived_shop_items (
+    guild_id    TEXT NOT NULL REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    item_id     TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    description TEXT,
+    price       NUMERIC NOT NULL,
+    category    TEXT DEFAULT 'general',
+    emoji       TEXT DEFAULT '🛍️',
+    role_id     TEXT,
+    duration_minutes INTEGER,
+    metadata    JSONB DEFAULT '{}'::jsonb,
+    archived_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    archived_by TEXT,
+    PRIMARY KEY (guild_id, item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_archived_shop_items_guild ON archived_shop_items(guild_id);
+
 -- =====================================================
 -- 4. TASKS & MODERATION
 -- =====================================================
@@ -260,19 +278,36 @@ CREATE TABLE IF NOT EXISTS task_settings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- MODERATION ACTIONS table
-CREATE TABLE IF NOT EXISTS moderation_actions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+-- STRIKES table
+CREATE TABLE IF NOT EXISTS strikes (
+    id SERIAL PRIMARY KEY,
+    strike_id TEXT UNIQUE NOT NULL,
     guild_id TEXT REFERENCES guilds(guild_id) ON DELETE CASCADE,
     user_id TEXT NOT NULL,
-    moderator_id TEXT NOT NULL,
-    action_type TEXT NOT NULL, -- warn, mute, kick, ban, unban, unmute, clear
     reason TEXT,
-    duration INTEGER, -- in minutes, nulll for permanent
-    is_active BOOLEAN DEFAULT true,
+    moderator_id TEXT NOT NULL,
+    auto_generated BOOLEAN DEFAULT FALSE,
     expires_at TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_strikes_user_active_expiry ON strikes(user_id, guild_id, is_active, expires_at);
+
+-- MODERATION ACTIONS table
+CREATE TABLE IF NOT EXISTS moderation_actions (
+    id SERIAL PRIMARY KEY,
+    action_id TEXT UNIQUE NOT NULL,
+    guild_id TEXT REFERENCES guilds(guild_id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    action_type TEXT NOT NULL, -- warn, mute, kick, ban, unban, unmute, clear
+    reason TEXT,
+    moderator_id TEXT NOT NULL,
+    duration_seconds INTEGER,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_mod_actions_guild ON moderation_actions(guild_id, user_id, action_type);
 
 -- =====================================================
 -- 5. FEATURES: GIVEAWAYS, BOOSTS, ANNOUNCEMENTS
@@ -389,15 +424,66 @@ CREATE TABLE IF NOT EXISTS channel_schedules (
     UNIQUE(guild_id, channel_id)
 );
 
--- TOP.GG VOTES table
-CREATE TABLE IF NOT EXISTS topgg_votes (
-    user_id TEXT,
-    guild_id TEXT,
-    voted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    is_weekend BOOLEAN DEFAULT false,
-    query_params JSONB DEFAULT '{}'::jsonb,
-    PRIMARY KEY (user_id, voted_at)
+-- AD VIEWS table
+CREATE TABLE IF NOT EXISTS ad_views (
+    ad_session_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    ad_type TEXT DEFAULT 'monetag_interstitial',
+    is_verified BOOLEAN DEFAULT false,
+    verified_at TIMESTAMP WITH TIME ZONE,
+    reward_amount INTEGER DEFAULT 10,
+    reward_granted BOOLEAN DEFAULT false,
+    transaction_id UUID,
+    ip_address TEXT,
+    user_agent TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_ad_views_user ON ad_views(user_id);
+CREATE INDEX IF NOT EXISTS idx_ad_views_created_at ON ad_views(created_at);
+CREATE INDEX IF NOT EXISTS idx_ad_views_expires ON ad_views(expires_at);
+
+-- GLOBAL TASKS table
+CREATE TABLE IF NOT EXISTS global_tasks (
+    task_key TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    reward_amount NUMERIC DEFAULT 10,
+    is_active BOOLEAN DEFAULT true,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- GLOBAL TASK CLAIMS table
+CREATE TABLE IF NOT EXISTS global_task_claims (
+    claim_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+    guild_id TEXT NOT NULL,
+    task_key TEXT NOT NULL REFERENCES global_tasks(task_key),
+    ad_session_id TEXT REFERENCES ad_views(ad_session_id),
+    reward_amount NUMERIC DEFAULT 10,
+    reward_granted BOOLEAN DEFAULT false,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_global_task_claims_user ON global_task_claims(user_id);
+
+-- TOP.GG VOTE LOGS TABLE
+CREATE TABLE IF NOT EXISTS vote_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id TEXT NOT NULL,
+    vote_type TEXT NOT NULL, -- 'bot' or 'server'
+    target_id TEXT NOT NULL, -- bot ID or server ID that was voted for
+    reward INTEGER NOT NULL DEFAULT 100,
+    is_weekend BOOLEAN DEFAULT false,
+    platform TEXT DEFAULT 'topgg',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_vote_logs_user_id ON vote_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_vote_logs_created_at ON vote_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_vote_logs_user_recent ON vote_logs(user_id, created_at DESC);
 
 -- =====================================================
 -- 6. RPC FUNCTIONS (Atomic Transactions)
@@ -458,6 +544,61 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- RPC: process_transfer
+CREATE OR REPLACE FUNCTION process_transfer(
+    p_guild_id          TEXT,
+    p_sender_id         TEXT,
+    p_receiver_id       TEXT,
+    p_amount            NUMERIC,
+    p_description_send  TEXT,
+    p_description_recv  TEXT,
+    p_metadata_send     JSONB DEFAULT '{}'::jsonb,
+    p_metadata_recv     JSONB DEFAULT '{}'::jsonb
+) RETURNS TABLE (
+    sender_new_balance      NUMERIC,
+    receiver_new_balance    NUMERIC,
+    send_transaction_id     UUID,
+    recv_transaction_id     UUID,
+    sender_balance_before   NUMERIC,
+    receiver_balance_before NUMERIC
+) AS $$
+DECLARE
+    v_sender_balance        NUMERIC;
+    v_receiver_balance      NUMERIC;
+    v_sender_new            NUMERIC;
+    v_receiver_new          NUMERIC;
+    v_send_txn_id           UUID;
+    v_recv_txn_id           UUID;
+    v_now                   TIMESTAMPTZ := NOW();
+BEGIN
+    IF p_sender_id < p_receiver_id THEN
+        SELECT balance INTO v_sender_balance FROM users WHERE guild_id = p_guild_id AND user_id = p_sender_id FOR UPDATE;
+        SELECT balance INTO v_receiver_balance FROM users WHERE guild_id = p_guild_id AND user_id = p_receiver_id FOR UPDATE;
+    ELSE
+        SELECT balance INTO v_receiver_balance FROM users WHERE guild_id = p_guild_id AND user_id = p_receiver_id FOR UPDATE;
+        SELECT balance INTO v_sender_balance FROM users WHERE guild_id = p_guild_id AND user_id = p_sender_id FOR UPDATE;
+    END IF;
+    IF v_sender_balance IS NULL THEN RAISE EXCEPTION 'Sender account not found'; END IF;
+    IF v_receiver_balance IS NULL THEN
+        INSERT INTO users (guild_id, user_id, balance, total_earned, total_spent, is_active)
+        VALUES (p_guild_id, p_receiver_id, 0, 0, 0, true);
+        v_receiver_balance := 0;
+    END IF;
+    v_sender_new := v_sender_balance - p_amount;
+    v_receiver_new := v_receiver_balance + p_amount;
+    IF v_sender_new < 0 THEN RAISE EXCEPTION 'Insufficient balance'; END IF;
+    v_send_txn_id := uuid_generate_v4();
+    v_recv_txn_id := uuid_generate_v4();
+    INSERT INTO transactions (transaction_id, guild_id, user_id, amount, balance_before, balance_after, transaction_type, description, metadata, "timestamp")
+    VALUES (v_send_txn_id, p_guild_id, p_sender_id, -p_amount, v_sender_balance, v_sender_new, 'transfer_sent', p_description_send, p_metadata_send, v_now);
+    INSERT INTO transactions (transaction_id, guild_id, user_id, amount, balance_before, balance_after, transaction_type, description, metadata, "timestamp")
+    VALUES (v_recv_txn_id, p_guild_id, p_receiver_id, p_amount, v_receiver_balance, v_receiver_new, 'transfer_received', p_description_recv, p_metadata_recv, v_now);
+    UPDATE users SET balance = v_sender_new, total_spent = total_spent + p_amount, updated_at = v_now WHERE guild_id = p_guild_id AND user_id = p_sender_id;
+    UPDATE users SET balance = v_receiver_new, total_earned = total_earned + p_amount, updated_at = v_now WHERE guild_id = p_guild_id AND user_id = p_receiver_id;
+    RETURN QUERY SELECT v_sender_new, v_receiver_new, v_send_txn_id, v_recv_txn_id, v_sender_balance, v_receiver_balance;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- RPC: claim_monthly_boost_reward
 CREATE OR REPLACE FUNCTION claim_monthly_boost_reward(p_guild_id TEXT, p_user_id TEXT, p_amount NUMERIC) RETURNS JSONB AS $$
 DECLARE
@@ -470,23 +611,59 @@ BEGIN
     GET DIAGNOSTICS v_updated_count = ROW_COUNT;
     IF v_updated_count = 0 THEN RETURN jsonb_build_object('success', false, 'error', 'Not due for reward'); END IF;
     SELECT * INTO v_res FROM process_balance_change(p_guild_id, p_user_id, p_amount, 'boost_reward', 'Monthly server boost reward');
-    RETURN jsonb_build_object('success', true, 'new_balance', v_res.new_balance, 'transaction_id', v_res.transaction_id);
+    RETURN jsonb_build_object('success', true, 'new_balance', v_res.new_balance, 'transaction_id', v_res.transaction_id, 'balance_before', v_res.balance_before, 'balance_after', v_res.balance_after);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- RPC: purchase_item_atomic
-CREATE OR REPLACE FUNCTION purchase_item_atomic(p_guild_id TEXT, p_user_id TEXT, p_item_id TEXT, p_quantity INTEGER) RETURNS JSONB AS $$
+-- RPC: process_purchase
+CREATE OR REPLACE FUNCTION process_purchase(
+    p_guild_id      TEXT,
+    p_user_id       TEXT,
+    p_item_id       TEXT,
+    p_quantity       INTEGER,
+    p_expected_price NUMERIC DEFAULT NULL
+) RETURNS TABLE (
+    success          BOOLEAN,
+    error_message    TEXT,
+    new_balance      NUMERIC,
+    new_stock        INTEGER,
+    inventory_total  INTEGER,
+    total_cost       NUMERIC,
+    transaction_id   UUID,
+    item_name        TEXT,
+    item_emoji       TEXT,
+    actual_price     NUMERIC
+) AS $$
 DECLARE
-    v_item_price NUMERIC;
-    v_item_name TEXT;
-    v_res RECORD;
+    v_item           RECORD;
+    v_user_balance   NUMERIC;
+    v_total_cost     NUMERIC;
+    v_new_balance    NUMERIC;
+    v_new_stock      INTEGER;
+    v_current_inv    INTEGER;
+    v_new_inv        INTEGER;
+    v_txn_id         UUID;
+    v_now            TIMESTAMPTZ := NOW();
 BEGIN
-    SELECT price, name INTO v_item_price, v_item_name FROM shop_items WHERE guild_id = p_guild_id AND item_id = p_item_id FOR UPDATE;
-    IF NOT FOUND THEN RETURN jsonb_build_object('success', false, 'error', 'Item not found'); END IF;
-    SELECT * INTO v_res FROM process_balance_change(p_guild_id, p_user_id, -(v_item_price * p_quantity), 'shop_purchase', 'Purchased ' || v_item_name);
+    SELECT name, price, stock, is_active, emoji INTO v_item FROM shop_items WHERE guild_id = p_guild_id AND item_id = p_item_id FOR UPDATE;
+    IF NOT FOUND THEN RETURN QUERY SELECT false, 'Item not found'::TEXT, 0::NUMERIC, 0::INTEGER, 0::INTEGER, 0::NUMERIC, NULL::UUID, ''::TEXT, ''::TEXT, 0::NUMERIC; RETURN; END IF;
+    IF NOT v_item.is_active THEN RETURN QUERY SELECT false, 'Item is not active'::TEXT, 0::NUMERIC, 0::INTEGER, 0::INTEGER, 0::NUMERIC, NULL::UUID, ''::TEXT, ''::TEXT, 0::NUMERIC; RETURN; END IF;
+    IF p_expected_price IS NOT NULL AND p_expected_price != v_item.price THEN RETURN QUERY SELECT false, 'Price mismatch'::TEXT, 0::NUMERIC, 0::INTEGER, 0::INTEGER, 0::NUMERIC, NULL::UUID, v_item.name, v_item.emoji, v_item.price; RETURN; END IF;
+    IF v_item.stock != -1 AND v_item.stock < p_quantity THEN RETURN QUERY SELECT false, 'Insufficient stock'::TEXT, 0::NUMERIC, v_item.stock, 0::INTEGER, 0::NUMERIC, NULL::UUID, v_item.name, v_item.emoji, v_item.price; RETURN; END IF;
+    v_total_cost := v_item.price * p_quantity;
+    SELECT balance INTO v_user_balance FROM users WHERE guild_id = p_guild_id AND user_id = p_user_id FOR UPDATE;
+    IF NOT FOUND THEN INSERT INTO users (guild_id, user_id, balance, total_earned, total_spent, is_active) VALUES (p_guild_id, p_user_id, 0, 0, 0, true); v_user_balance := 0; END IF;
+    v_new_balance := v_user_balance - v_total_cost;
+    IF v_new_balance < 0 THEN RETURN QUERY SELECT false, 'Insufficient balance'::TEXT, v_user_balance, 0::INTEGER, 0::INTEGER, v_total_cost, NULL::UUID, v_item.name, v_item.emoji, v_item.price; RETURN; END IF;
+    v_txn_id := uuid_generate_v4();
+    UPDATE users SET balance = v_new_balance, total_spent = total_spent + v_total_cost, updated_at = v_now WHERE guild_id = p_guild_id AND user_id = p_user_id;
+    IF v_item.stock != -1 THEN v_new_stock := v_item.stock - p_quantity; UPDATE shop_items SET stock = v_new_stock, updated_at = v_now WHERE guild_id = p_guild_id AND item_id = p_item_id; ELSE v_new_stock := -1; END IF;
     INSERT INTO inventory (guild_id, user_id, item_id, quantity) VALUES (p_guild_id, p_user_id, p_item_id, p_quantity)
-    ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = inventory.quantity + EXCLUDED.quantity, updated_at = NOW();
-    RETURN jsonb_build_object('success', true, 'new_balance', v_res.new_balance, 'transaction_id', v_res.transaction_id);
+    ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = inventory.quantity + p_quantity, updated_at = v_now;
+    SELECT quantity INTO v_new_inv FROM inventory WHERE guild_id = p_guild_id AND user_id = p_user_id AND item_id = p_item_id;
+    INSERT INTO transactions (transaction_id, guild_id, user_id, amount, balance_before, balance_after, transaction_type, description, metadata, "timestamp")
+    VALUES (v_txn_id, p_guild_id, p_user_id, -v_total_cost, v_user_balance, v_new_balance, 'shop_purchase', 'Purchased ' || p_quantity || 'x ' || v_item.name, jsonb_build_object('item_id', p_item_id, 'quantity', p_quantity), v_now);
+    RETURN QUERY SELECT true, NULL::TEXT, v_new_balance, v_new_stock, v_new_inv, v_total_cost, v_txn_id, v_item.name, v_item.emoji, v_item.price;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -587,23 +764,31 @@ CREATE TRIGGER channel_schedules_timestamp BEFORE UPDATE ON channel_schedules FO
 
 -- Grant Public Action permissions
 GRANT EXECUTE ON FUNCTION process_balance_change TO anon;
+GRANT EXECUTE ON FUNCTION process_transfer TO anon;
 GRANT EXECUTE ON FUNCTION claim_daily_reward TO anon;
 GRANT EXECUTE ON FUNCTION claim_monthly_boost_reward TO anon;
-GRANT EXECUTE ON FUNCTION purchase_item_atomic TO anon;
+GRANT EXECUTE ON FUNCTION process_purchase TO anon;
 GRANT EXECUTE ON FUNCTION enter_raffle_giveaway TO anon;
 GRANT EXECUTE ON FUNCTION upsert_discord_user TO anon;
 GRANT EXECUTE ON FUNCTION sync_discord_user_guilds TO anon;
+GRANT EXECUTE ON FUNCTION expire_overdue_tasks TO anon;
+GRANT EXECUTE ON FUNCTION increment_giveaway_entries TO anon;
 
--- Row Level Security (Generally enabled but permissive for bot service role)
+-- Row Level Security
 ALTER TABLE guilds ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shop_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE archived_shop_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE moderation_actions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE strikes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE giveaways ENABLE ROW LEVEL SECURITY;
 ALTER TABLE giveaway_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE web_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ad_views ENABLE ROW LEVEL SECURITY;
+ALTER TABLE global_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE global_task_claims ENABLE ROW LEVEL SECURITY;
 
 -- Allow all for now (managed by service role)
 DROP POLICY IF EXISTS "Public Full Access" ON guilds;
@@ -612,14 +797,30 @@ DROP POLICY IF EXISTS "Public Full Access" ON users;
 CREATE POLICY "Public Full Access" ON users FOR ALL USING (true);
 DROP POLICY IF EXISTS "Public Full Access" ON shop_items;
 CREATE POLICY "Public Full Access" ON shop_items FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON archived_shop_items;
+CREATE POLICY "Public Full Access" ON archived_shop_items FOR ALL USING (true);
 DROP POLICY IF EXISTS "Public Full Access" ON giveaways;
 CREATE POLICY "Public Full Access" ON giveaways FOR ALL USING (true);
 DROP POLICY IF EXISTS "Public Full Access" ON web_sessions;
 CREATE POLICY "Public Full Access" ON web_sessions FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON ad_views;
+CREATE POLICY "Public Full Access" ON ad_views FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON global_tasks;
+CREATE POLICY "Public Full Access" ON global_tasks FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON global_task_claims;
+CREATE POLICY "Public Full Access" ON global_task_claims FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON moderation_actions;
+CREATE POLICY "Public Full Access" ON moderation_actions FOR ALL USING (true);
+DROP POLICY IF EXISTS "Public Full Access" ON strikes;
+CREATE POLICY "Public Full Access" ON strikes FOR ALL USING (true);
 
 -- Comments
 COMMENT ON TABLE guilds IS 'Core Discord server configuration';
 COMMENT ON TABLE users IS 'Economy and user state';
 COMMENT ON TABLE web_sessions IS 'CMS authentication sessions with TTL and re-validation hardening';
 COMMENT ON TABLE moderation_actions IS 'Persistent audit log for all manual and automated moderation';
+COMMENT ON TABLE strikes IS 'Discord user strikes and warnings tracking';
 COMMENT ON TABLE giveaways IS 'Server giveaway state with streak-aware winner tracking';
+COMMENT ON TABLE ad_views IS 'Ad session tracking and verification';
+COMMENT ON TABLE global_tasks IS 'Configuration for global tasks like ad claiming';
+COMMENT ON TABLE archived_shop_items IS 'Soft-archive for deleted items to allow legacy redemption';
