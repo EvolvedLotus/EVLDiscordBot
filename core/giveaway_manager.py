@@ -521,11 +521,14 @@ class GiveawayManager:
                 
             if self.bot and giveaway.get('message_id'):
                 try:
-                    channel = self.bot.get_channel(int(giveaway['channel_id']))
-                    if channel:
-                        self.bot.loop.create_task(self._delete_cancelled_message(channel, giveaway['message_id']))
-                except Exception:
-                    pass
+                    # Use robust deletion helper
+                    logger.info(f"Attempting to delete giveaway message {giveaway['message_id']} in channel {giveaway['channel_id']}")
+                    self.bot.loop.create_task(self._robust_delete_message(
+                        int(giveaway['channel_id']), 
+                        int(giveaway['message_id'])
+                    ))
+                except Exception as e:
+                    logger.error(f"Failed to queue giveaway message deletion: {e}")
 
             if hasattr(self.data_manager, 'bot') and hasattr(self.data_manager.bot, 'audit_manager') and self.data_manager.bot.audit_manager:
                 self.data_manager.bot.audit_manager.log_event(
@@ -707,7 +710,30 @@ class GiveawayManager:
         try:
             msg = await channel.fetch_message(int(message_id))
             await msg.delete()
+            logger.info(f"Successfully deleted cancelled giveaway message {message_id}")
         except discord.NotFound:
-            pass
+            logger.warning(f"Giveaway message {message_id} already deleted")
         except Exception as e:
-            logger.error(f"Failed to delete cancelled message: {e}")
+            logger.error(f"Failed to delete giveaway message {message_id}: {e}")
+
+    async def _robust_delete_message(self, channel_id: int, message_id: int):
+        """Robustly delete a message by fetching channel first if needed"""
+        try:
+            channel = self.bot.get_channel(channel_id)
+            if not channel:
+                logger.info(f"Channel {channel_id} not in cache, fetching...")
+                channel = await self.bot.fetch_channel(channel_id)
+            
+            if channel:
+                try:
+                    message = await channel.fetch_message(message_id)
+                    await message.delete()
+                    logger.info(f"Successfully deleted message {message_id} in channel {channel_id}")
+                except discord.NotFound:
+                    logger.warning(f"Message {message_id} not found in channel {channel_id}")
+                except discord.Forbidden:
+                    logger.error(f"No permission to delete message {message_id} in channel {channel_id}")
+            else:
+                logger.error(f"Could not find/fetch channel {channel_id} to delete message")
+        except Exception as e:
+            logger.error(f"Error in _robust_delete_message: {e}")

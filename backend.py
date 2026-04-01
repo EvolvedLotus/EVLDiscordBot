@@ -409,6 +409,15 @@ def set_bot_instance(bot):
         giveaway_manager.set_bot(bot)
         logger.info("✓ Bot instance linked to giveaway manager")
 
+    if 'task_manager' in globals() and task_manager:
+        task_manager.set_bot(bot)
+        logger.info("✓ Bot instance linked to task manager")
+
+    if 'shop_manager' in globals() and shop_manager:
+        # ShopManager uses data_manager.bot_instance, but we can set it explicitly if needed
+        # Actually ShopManager doesn't have a set_bot method, it uses dm.bot_instance
+        pass
+
 def set_data_manager(dm):
     """Set the global data manager reference"""
     global data_manager, _data_manager_instance

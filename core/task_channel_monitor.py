@@ -482,17 +482,34 @@ class TaskChannelMonitor:
                 
                 if channel_id:
                     guild = self.bot.get_guild(int(guild_id))
-                    if guild:
-                        channel = guild.get_channel(int(channel_id))
-                        if channel:
-                            try:
-                                message = await channel.fetch_message(int(message_id))
-                                await message.delete()
-                                logger.info(f"Deleted task message {message_id} from channel {channel_id}")
-                            except discord.NotFound:
-                                pass  # Already deleted
-                            except Exception as e:
-                                logger.error(f"Error deleting task message: {e}")
+                    if not guild:
+                        logger.info(f"Guild {guild_id} not in cache, fetching...")
+                        try:
+                            guild = await self.bot.fetch_guild(int(guild_id))
+                        except Exception as e:
+                            logger.error(f"Failed to fetch guild {guild_id}: {e}")
+                            return
+
+                    channel = guild.get_channel(int(channel_id))
+                    if not channel:
+                        logger.info(f"Channel {channel_id} not in cache, fetching...")
+                        try:
+                            channel = await guild.fetch_channel(int(channel_id))
+                        except Exception as e:
+                            logger.error(f"Failed to fetch channel {channel_id}: {e}")
+                            return
+
+                    if channel:
+                        try:
+                            message = await channel.fetch_message(int(message_id))
+                            await message.delete()
+                            logger.info(f"Successfully deleted task message {message_id} from channel {channel_id}")
+                        except discord.NotFound:
+                            logger.debug(f"Task message {message_id} already deleted from Discord")
+                        except discord.Forbidden:
+                            logger.error(f"No permission to delete task message {message_id} in {guild.name}")
+                        except Exception as e:
+                            logger.error(f"Error deleting task message: {e}")
         except Exception as e:
             logger.error(f"Error handling task deleted: {e}")
 
