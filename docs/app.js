@@ -1066,7 +1066,7 @@ async function validateShopIntegrity() {
     }
 }
 
-async function loadTasks() {
+window.loadTasks = async function () {
     if (!currentServerId) return;
     const list = document.getElementById('tasks-list');
     if (!list) return;
@@ -1125,7 +1125,7 @@ async function loadTasks() {
     }
 }
 
-async function deleteTask(taskId) {
+window.deleteTask = async function (taskId) {
     if (!confirm('Are you sure you want to delete this task?')) return;
 
     logCmsAction('delete_task_start', { task_id: taskId });
@@ -1143,7 +1143,7 @@ async function deleteTask(taskId) {
     }
 }
 
-async function editTask(taskId) {
+window.editTask = async function (taskId) {
     if (!currentServerId) return;
 
     try {
