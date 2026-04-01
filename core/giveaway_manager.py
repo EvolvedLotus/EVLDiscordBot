@@ -374,8 +374,9 @@ class GiveawayManager:
             if not giveaway or giveaway['status'] != 'active' or not giveaway.get('message_id'):
                 return
                 
-            channel = self.bot.get_channel(int(giveaway['channel_id']))
+            channel = await self._robust_get_channel(int(giveaway['channel_id']))
             if not channel:
+                logger.warning(f"Could not find channel {giveaway['channel_id']} for embed refresh")
                 return
                 
             try:
@@ -671,8 +672,9 @@ class GiveawayManager:
 
     async def _post_winner_announcement(self, giveaway: dict, is_delayed: bool = False):
         try:
-            channel = self.bot.get_channel(int(giveaway['channel_id']))
+            channel = await self._robust_get_channel(int(giveaway['channel_id']))
             if not channel:
+                logger.warning(f"Could not find channel {giveaway['channel_id']} for winner announcement")
                 return
                 
             winners = giveaway.get('winner_user_ids', [])
@@ -715,6 +717,20 @@ class GiveawayManager:
             logger.warning(f"Giveaway message {message_id} already deleted")
         except Exception as e:
             logger.error(f"Failed to delete giveaway message {message_id}: {e}")
+
+    async def _robust_get_channel(self, channel_id: int):
+        """Get channel from cache or fetch if not found"""
+        if not self.bot:
+            return None
+        
+        channel = self.bot.get_channel(channel_id)
+        if not channel:
+            try:
+                channel = await self.bot.fetch_channel(channel_id)
+            except Exception as e:
+                logger.error(f"Failed to fetch channel {channel_id}: {e}")
+                return None
+        return channel
 
     async def _robust_delete_message(self, channel_id: int, message_id: int):
         """Robustly delete a message by fetching channel first if needed"""

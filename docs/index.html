@@ -830,31 +830,60 @@
     <div id="task-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <span class="close" onclick="document.getElementById('task-modal').style.display='none'">&times;</span>
-            <h2>➕ Add New Task</h2>
+            <h2 id="task-modal-title">➕ Add New Task</h2>
             <div class="modal-body">
                 <form id="task-form" onsubmit="window.saveTask(event)">
                     <input type="hidden" id="task-id">
                     <div class="form-group">
-                        <label for="task-content">Task Description *</label>
-                        <textarea id="task-content" class="form-control" rows="3" required
-                            placeholder="e.g. Follow us on Twitter"></textarea>
+                        <label for="task-name">Task Name *</label>
+                        <input type="text" id="task-name" class="form-control" required placeholder="e.g. Follow EvolvedLotus">
+                    </div>
+                    <div class="form-group">
+                        <label for="task-description">Task Description *</label>
+                        <textarea id="task-description" class="form-control" rows="3" required
+                            placeholder="e.g. Follow us on Twitter and submit a screenshot"></textarea>
                     </div>
                     <div class="form-group">
                         <label for="task-reward">Reward (Coins) *</label>
                         <input type="number" id="task-reward" class="form-control" required min="1" placeholder="500">
                     </div>
+                    <div class="form-row" style="display: flex; gap: 15px;">
+                        <div class="form-group" style="flex: 1;">
+                            <label for="task-duration">Duration (hours, -1 for infinite)</label>
+                            <input type="number" id="task-duration" class="form-control" value="24">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label for="task-max-claims">Max Claims (-1 for unlimited)</label>
+                            <input type="number" id="task-max-claims" class="form-control" value="-1">
+                        </div>
+                    </div>
                     <div class="form-group">
-                        <label for="task-type">Verification Type</label>
-                        <select id="task-type" class="form-control">
-                            <option value="manual">Manual Proof (Screenshot)</option>
-                            <option value="code">Secret Code</option>
-                            <option value="link">Link Visit</option>
+                        <label for="task-category">Category</label>
+                        <select id="task-category" class="form-control">
+                            <option value="general">General</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="special">Special</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                         <label for="task-type">Verification Type</label>
+                         <select id="task-type" class="form-control">
+                             <option value="manual">Manual Proof (Screenshot)</option>
+                             <option value="code">Secret Code</option>
+                             <option value="link">Link Visit</option>
+                         </select>
                     </div>
                     <div class="form-group">
                         <label for="task-target">Target/Code (URL or Secret)</label>
                         <input type="text" id="task-target" class="form-control"
                             placeholder="https://... or SecretCode123">
+                    </div>
+                    <div class="form-group" id="task-global-group" style="display: none;">
+                        <label>
+                            <input type="checkbox" id="task-is-global">
+                            Global Task (Visible in all servers)
+                        </label>
                     </div>
                     <div class="button-group">
                         <button type="submit" class="btn-success">Save Task</button>

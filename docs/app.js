@@ -1174,11 +1174,23 @@ async function editTask(taskId) {
 
         // Populate fields
         document.getElementById('task-id').value = task.task_id;
-        document.getElementById('task-name').value = task.name;
+        document.getElementById('task-name').value = task.name || '';
         document.getElementById('task-description').value = task.description || '';
-        document.getElementById('task-reward').value = task.reward;
+        document.getElementById('task-reward').value = task.reward || 0;
         document.getElementById('task-duration').value = task.duration_hours || 24;
-        document.getElementById('task-max-claims').value = task.max_claims || 0;
+        document.getElementById('task-max-claims').value = task.max_claims || -1;
+        document.getElementById('task-type').value = task.type || 'manual';
+        document.getElementById('task-target').value = task.target || '';
+        document.getElementById('task-category').value = task.category || 'general';
+        
+        const globalCheckbox = document.getElementById('task-is-global');
+        if (globalCheckbox) globalCheckbox.checked = !!task.is_global;
+
+        // Show global option only for superadmins
+        const globalGroup = document.getElementById('task-global-group');
+        if (globalGroup) {
+            globalGroup.style.display = (currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin)) ? 'block' : 'none';
+        }
 
     } catch (error) {
         console.error('Edit task error:', error);
@@ -6126,16 +6138,26 @@ window.saveTask = async function (event) {
     if (event) event.preventDefault();
 
     const taskId = document.getElementById('task-id').value;
-    const content = document.getElementById('task-content').value;
+    const name = document.getElementById('task-name').value;
+    const description = document.getElementById('task-description').value;
     const reward = parseInt(document.getElementById('task-reward').value);
     const type = document.getElementById('task-type').value;
     const target = document.getElementById('task-target').value;
+    const duration_hours = parseInt(document.getElementById('task-duration').value);
+    const max_claims = parseInt(document.getElementById('task-max-claims').value);
+    const category = document.getElementById('task-category').value;
+    const is_global = document.getElementById('task-is-global')?.checked || false;
 
     const payload = {
-        content,
+        name,
+        description,
         reward,
         type,
-        target: target || null
+        target: target || null,
+        duration_hours,
+        max_claims: max_claims === 0 ? null : max_claims,
+        category,
+        is_global
     };
 
     try {
@@ -6158,6 +6180,7 @@ window.saveTask = async function (event) {
             if (typeof window.loadTasks === 'function') window.loadTasks();
         } else {
             if (!response) throw new Error("No response from server");
+            throw new Error(response.error || "Failed to save task");
         }
     } catch (e) {
         console.error("Error saving task:", e);
@@ -7636,10 +7659,24 @@ window.showCreateShopItemModal = function () {
 
 window.showCreateTaskModal = function () {
     window.logCmsAction('show_create_task_modal');
+    document.getElementById('task-modal-title').textContent = '➕ Add New Task';
     document.getElementById('task-modal').style.display = 'block';
     const form = document.getElementById('task-form');
     if (form) form.reset();
     document.getElementById('task-id').value = '';
+    
+    // Default values
+    document.getElementById('task-duration').value = '24';
+    document.getElementById('task-max-claims').value = '-1';
+    document.getElementById('task-category').value = 'general';
+    
+    // Show global option only for superadmins
+    const globalGroup = document.getElementById('task-global-group');
+    if (globalGroup) {
+        globalGroup.style.display = (currentUser && (currentUser.role === 'superadmin' || currentUser.is_superadmin)) ? 'block' : 'none';
+        const globalCheckbox = document.getElementById('task-is-global');
+        if (globalCheckbox) globalCheckbox.checked = false;
+    }
 };
 
 console.log('[CMS] All button handlers successfully overridden and fixed ✅');

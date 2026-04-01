@@ -521,49 +521,59 @@ class TaskChannelMonitor:
 
             guild = self.bot.get_guild(int(guild_id))
             if not guild:
-                return
+                logger.debug(f"Guild {guild_id} not in cache, fetching for task update...")
+                try:
+                    guild = await self.bot.fetch_guild(int(guild_id))
+                except Exception as e:
+                    logger.error(f"Failed to fetch guild {guild_id}: {e}")
+                    return
 
             channel = guild.get_channel(int(task['channel_id']))
             if not channel:
-                return
+                logger.debug(f"Channel {task['channel_id']} not in cache, fetching for task update...")
+                try:
+                    channel = await guild.fetch_channel(int(task['channel_id']))
+                except Exception as e:
+                    logger.error(f"Failed to fetch channel {task['channel_id']}: {e}")
+                    return
 
-            try:
-                message = await channel.fetch_message(int(task['message_id']))
-                
-                # Create updated embed/view
-                from cogs.tasks import TaskClaimView
-                from core.utils import create_embed
-                
-                embed = create_embed(
-                    title=f"📋 {task['name']}",
-                    description=task['description'],
-                    color=0x3498db
-                )
-                
-                embed.add_field(name="💰 Reward", value=f"{task['reward']} coins", inline=True)
-                
-                duration = task.get('duration_hours')
-                duration_text = "Infinite" if duration == -1 else f"{duration} hours"
-                embed.add_field(name="⏱️ Duration", value=duration_text, inline=True)
-                
-                if task.get('max_claims'):
-                    claims = task.get('current_claims', 0)
-                    embed.add_field(name="👥 Claims", value=f"{claims}/{task['max_claims']}", inline=True)
+            if channel:
+                try:
+                    message = await channel.fetch_message(int(task['message_id']))
+                    
+                    # Create updated embed/view
+                    from cogs.tasks import TaskClaimView
+                    from core.utils import create_embed
+                    
+                    embed = create_embed(
+                        title=f"📋 {task['name']}",
+                        description=task['description'],
+                        color=0x3498db
+                    )
+                    
+                    embed.add_field(name="💰 Reward", value=f"{task['reward']} coins", inline=True)
+                    
+                    duration = task.get('duration_hours')
+                    duration_text = "Infinite" if duration == -1 else f"{duration} hours"
+                    embed.add_field(name="⏱️ Duration", value=duration_text, inline=True)
+                    
+                    if task.get('max_claims'):
+                        claims = task.get('current_claims', 0)
+                        embed.add_field(name="👥 Claims", value=f"{claims}/{task['max_claims']}", inline=True)
 
-                if task.get('category'):
-                    embed.add_field(name="📂 Category", value=task['category'], inline=True)
-                
-                view = TaskClaimView(self.bot, task['task_id'], task.get('category'))
-                
-                await message.edit(embed=embed, view=view)
-                logger.info(f"Updated task message {task['message_id']} for task {task['task_id']}")
-                
-            except discord.NotFound:
-                # Message deleted, repost it
-                await self.post_task_message(guild, channel, task)
-            except Exception as e:
-                logger.error(f"Error updating task message: {e}")
-
+                    if task.get('category'):
+                        embed.add_field(name="📂 Category", value=task['category'], inline=True)
+                    
+                    view = TaskClaimView(self.bot, task['task_id'], task.get('category'))
+                    
+                    await message.edit(embed=embed, view=view)
+                    logger.info(f"Updated task message {task['message_id']} for task {task['task_id']}")
+                    
+                except discord.NotFound:
+                    # Message deleted, repost it
+                    await self.post_task_message(guild, channel, task)
+                except Exception as e:
+                    logger.error(f"Error updating task message: {e}")
         except Exception as e:
             logger.error(f"Error handling task updated: {e}")
 
