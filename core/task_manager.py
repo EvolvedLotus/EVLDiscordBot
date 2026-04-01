@@ -33,6 +33,10 @@ class TaskManager:
     async def create_task(self, guild_id, name, description=None, reward=None, duration_hours=None, max_claims=None, is_global=False):
         """Create new task with atomic task_id generation"""
 
+        task_type = 'manual'
+        task_target = None
+        task_category = 'general'
+
         # Handle dictionary input (from API)
         if isinstance(name, dict):
             data = name
@@ -42,6 +46,9 @@ class TaskManager:
             duration_hours = int(data.get('duration_hours', 24))
             max_claims = int(data.get('max_claims')) if data.get('max_claims') else None
             is_global = data.get('is_global', False)
+            task_type = data.get('type', 'manual')
+            task_target = data.get('target')
+            task_category = data.get('category', 'general')
 
         # VALIDATION
         if reward <= 0:
@@ -91,6 +98,9 @@ class TaskManager:
             'max_claims': max_claims,
             'current_claims': 0,
             'status': 'active',
+            'type': task_type,
+            'target': task_target,
+            'category': task_category,
             'is_global': is_global,
             'created_at': datetime.now(timezone.utc).isoformat(),
             'expires_at': expires_at.isoformat() if expires_at else None
@@ -149,8 +159,14 @@ class TaskManager:
                 update_data['duration_hours'] = duration
             if 'max_claims' in updates:
                 update_data['max_claims'] = int(updates['max_claims']) if updates['max_claims'] else None
+            if 'type' in updates:
+                update_data['type'] = updates['type']
+            if 'target' in updates:
+                update_data['target'] = updates['target']
             if 'category' in updates:
                 update_data['category'] = updates['category']
+            if 'is_global' in updates:
+                update_data['is_global'] = bool(updates['is_global'])
             if 'status' in updates:
                 update_data['status'] = updates['status']
             

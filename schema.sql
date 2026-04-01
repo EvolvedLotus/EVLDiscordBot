@@ -230,6 +230,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT,
     reward NUMERIC NOT NULL CHECK (reward >= 0),
     duration_hours INTEGER DEFAULT 24,
+    type TEXT DEFAULT 'manual', -- manual, code, link
+    target TEXT, -- URL or Secret Code
     status TEXT DEFAULT 'active',
     expires_at TIMESTAMP WITH TIME ZONE,
     channel_id TEXT,
@@ -238,6 +240,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     current_claims INTEGER DEFAULT 0,
     assigned_users JSONB DEFAULT '[]'::jsonb,
     category TEXT DEFAULT 'general',
+    is_global BOOLEAN DEFAULT false,
     role_name TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
