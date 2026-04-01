@@ -115,7 +115,7 @@ async def run_bot():
         # Initialize ad claim manager
         try:
             from core.ad_claim_manager import AdClaimManager
-            bot.ad_claim_manager = AdClaimManager(data_manager, bot.transaction_manager)
+            bot.ad_claim_manager = AdClaimManager(data_manager, bot.transaction_manager, secret_key=os.getenv('SECRET_KEY', 'dev-secret'))
             logger.info("✓ Ad claim manager initialized")
         except Exception as e:
             logger.error(f"✗ Failed to initialize ad claim manager: {e}")
