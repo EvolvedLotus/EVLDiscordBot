@@ -59,6 +59,7 @@ class GlobalTaskClaimView(discord.ui.View):
             
             # Get the viewer URL
             session_id = result['session_id']
+            signature = result.get('signature', '')
             
             # Construct the full URL
             import os
@@ -71,7 +72,7 @@ class GlobalTaskClaimView(discord.ui.View):
                 else:
                     backend_url = 'http://localhost:5000'
             
-            viewer_url = f"{backend_url}/ad-viewer.html?session={session_id}"
+            viewer_url = f"{backend_url}/ad-viewer.html?session={session_id}&sig={signature}"
             
             # Create embed with instructions
             embed = discord.Embed(
