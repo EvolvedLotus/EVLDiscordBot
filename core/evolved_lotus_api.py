@@ -64,13 +64,46 @@ class EvolvedLotusAPI:
             {
                 "id": "tool_tweetcraft",
                 "type": "tool",
-                "title": "TweetCraft AI",
-                "headline": "AI-Powered Tweet Replies",
+                "title": "LotusReplies AI",
+                "headline": "Smart Twitter/X Engagement",
                 "description": "Generate contextually relevant tweet replies in different tones instantly. Save hours of time and boost your Twitter engagement!",
-                "cta": "Try TweetCraft AI",
+                "cta": "Try LotusReplies",
                 "url": "https://tools.evolvedlotus.com/twitterreplybot/",
                 "image": "https://tools.evolvedlotus.com/twitterreplybot/favicon.ico",
                 "color": "#1DA1F2"
+            },
+            {
+                "id": "tool_lotuscut",
+                "type": "tool",
+                "title": "LotusCut",
+                "headline": "The Ultimate Video Editing Workflow",
+                "description": "Speed up your video production 10x with advanced cutting tools and smart workflow enhancements.",
+                "cta": "Get LotusCut",
+                "url": "https://tools.evolvedlotus.com/lotuscut/",
+                "image": "https://tools.evolvedlotus.com/favicon.ico",
+                "color": "#FF0050"
+            },
+            {
+                "id": "tool_thisweeksyt",
+                "type": "tool",
+                "title": "ThisWeeksYT",
+                "headline": "Trending YouTube Insights",
+                "description": "Discover trending video ideas and identify what works on YouTube right now with our real-time analytics.",
+                "cta": "Discover Trends",
+                "url": "https://tools.evolvedlotus.com/thisweeksyt/",
+                "image": "https://tools.evolvedlotus.com/thisweeksyt/favicon.ico",
+                "color": "#FF0000"
+            },
+            {
+                "id": "monetifygram",
+                "type": "utility",
+                "title": "Monetifygram",
+                "headline": "Turn your Telegram channel into income",
+                "description": "All-in-one monetization with no setup hassle built natively for Telegram channel creators.",
+                "cta": "Start Earning",
+                "url": "https://monetifygram.biz/",
+                "image": "https://monetifygram.biz/favicon.ico",
+                "color": "#3b82f6"
             }
         ]
         logger.info(f"✅ EvolvedLotusAPI initialized (PostgreSQL: {'Yes' if self.db_url else 'No'}, Blog Rotation: Enabled)")
