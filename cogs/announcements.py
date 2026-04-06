@@ -614,6 +614,8 @@ class Announcements(commands.Cog):
                         changed = True 
 
                 if changed:
+                    # Successfully sent items should be in 'announcements' dict with status 'published'
+                    # so that save_guild_data updates their status in the database.
                     data['scheduled'] = new_scheduled
                     self.bot.data_manager.save_guild_data(guild_id, 'announcements', data)
 

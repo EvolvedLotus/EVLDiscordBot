@@ -1888,6 +1888,9 @@ def create_announcement(server_id):
                 if schedule_time <= current_time:
                      return jsonify({'error': 'Scheduled time must be in the future'}), 400
                      
+                import uuid
+                schedule_id = str(uuid.uuid4())
+                
                 # Prepare schedule data
                 # We'll stick to the "simple" announcement structure for now as the backend api 
                 # for rich embeds is separate or simpler. 
@@ -1895,7 +1898,8 @@ def create_announcement(server_id):
                 # let's support the standard announcement fields.
                 
                 schedule_data = {
-                    'id': f"scheduled_{int(datetime.now().timestamp() * 1000)}",
+                    'id': schedule_id,
+                    'announcement_id': schedule_id,
                     'title': title,
                     'content': content,
                     'channel_id': str(channel_id),

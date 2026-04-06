@@ -405,23 +405,43 @@ class DataManager:
                 data = {'transactions': transactions}
 
             elif data_type == 'announcements':
-                # Get announcements for this guild
+                # Get announcements for this guild (both posted and scheduled)
                 announcements_result = self.admin_client.table('announcements').select('*').eq('guild_id', str(guild_id)).order('created_at', desc=True).execute()
+                
                 announcements = {}
+                scheduled = []
+                
                 for ann in announcements_result.data:
-                    announcements[ann['announcement_id']] = {
+                    item = {
                         'id': ann['announcement_id'],
+                        'announcement_id': ann['announcement_id'],
                         'title': ann['title'],
                         'content': ann['content'],
-                        'embed_data': ann.get('embed_data'),
+                        'embed_data': ann.get('embed_data', {}),
                         'channel_id': ann['channel_id'],
                         'message_id': ann['message_id'],
                         'is_pinned': ann['is_pinned'],
+                        'status': ann.get('status', 'published'),
                         'created_at': self._serialize_datetime_field(ann.get('created_at')),
                         'created_by': ann['created_by']
                     }
+                    
+                    # Store use_embed from embed_data if present
+                    if item['embed_data'] and isinstance(item['embed_data'], dict):
+                        if 'use_embed' in item['embed_data']:
+                            item['use_embed'] = item['embed_data']['use_embed']
+                        if 'scheduled_for' in item['embed_data']:
+                            item['scheduled_for'] = item['embed_data']['scheduled_for']
 
-                data = {'announcements': announcements}
+                    if item['status'] == 'scheduled':
+                        scheduled.append(item)
+                    else:
+                        announcements[ann['announcement_id']] = item
+
+                data = {
+                    'announcements': announcements,
+                    'scheduled': scheduled
+                }
 
             elif data_type == 'embeds':
                 # Get embeds for this guild
@@ -751,6 +771,58 @@ class DataManager:
                                 self.admin_client.table('inventory').delete().eq('guild_id', guild_id_str).eq('user_id', user_id).eq('item_id', item_id).execute()
 
                     logger.info(f"✅ Currency data saved for guild {guild_id_str}")
+
+                elif dtype == "announcements":
+                    # Save announcements to database
+                    announcements_dict = save_data.get('announcements', {})
+                    scheduled_list = save_data.get('scheduled', [])
+                    
+                    # 1. Save published announcements
+                    for ann_id, ann in announcements_dict.items():
+                        # Prepare embed data safely
+                        embed_data = ann.get('embed_data', {})
+                        if 'use_embed' in ann:
+                            if not isinstance(embed_data, dict): embed_data = {}
+                            embed_data['use_embed'] = ann['use_embed']
+
+                        self.admin_client.table('announcements').upsert({
+                            'announcement_id': ann_id,
+                            'guild_id': guild_id_str,
+                            'title': ann.get('title', 'Untitled'),
+                            'content': ann.get('content', ''),
+                            'embed_data': embed_data,
+                            'channel_id': ann.get('channel_id'),
+                            'message_id': ann.get('message_id'),
+                            'is_pinned': ann.get('is_pinned', False),
+                            'status': 'published',
+                            'created_by': ann.get('created_by') or ann.get('author_id')
+                        }, on_conflict='announcement_id').execute()
+
+                    # 2. Save scheduled announcements
+                    for sched in scheduled_list:
+                        s_id = sched.get('id') or sched.get('announcement_id')
+                        if not s_id: continue
+                        
+                        # Prepare embed data with scheduling info
+                        embed_data = sched.get('embed_data', {})
+                        if not isinstance(embed_data, dict): embed_data = {}
+                        if 'use_embed' in sched: embed_data['use_embed'] = sched['use_embed']
+                        if 'scheduled_for' in sched: embed_data['scheduled_for'] = sched['scheduled_for']
+
+                        self.admin_client.table('announcements').upsert({
+                            'announcement_id': s_id,
+                            'guild_id': guild_id_str,
+                            'title': sched.get('title', 'Untitled'),
+                            'content': sched.get('content', ''),
+                            'embed_data': embed_data,
+                            'channel_id': sched.get('channel_id'),
+                            'message_id': None,
+                            'is_pinned': sched.get('is_pinned', False),
+                            'status': 'scheduled',
+                            'created_by': sched.get('author_id') or sched.get('created_by')
+                        }, on_conflict='announcement_id').execute()
+
+                    logger.info(f"✅ Announcements data saved for guild {guild_id_str}")
 
                 else:
                     logger.warning(f"Unknown data type for save_guild_data: {dtype}")

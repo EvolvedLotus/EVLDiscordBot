@@ -22,9 +22,9 @@ class AnnouncementManager:
         self.bot = bot
 
     def _generate_announcement_id(self) -> str:
-        """Generate unique announcement ID"""
-        timestamp = int(datetime.utcnow().timestamp() * 1000)
-        return f"ann_{timestamp}"
+        """Generate unique announcement ID (UUID for Supabase compatibility)"""
+        import uuid
+        return str(uuid.uuid4())
 
     async def create_announcement(
         self,
