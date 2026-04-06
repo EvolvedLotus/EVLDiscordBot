@@ -315,10 +315,6 @@ class GiveawayManager:
             if self.cache_manager:
                 self.cache_manager.invalidate(f"giveaway:{giveaway_id}")
 
-            # Trigger embed refresh asynchronously
-            if self.bot and self.bot.loop:
-                self.bot.loop.create_task(self.refresh_giveaway_embed(giveaway_id))
-
             if self.sse_manager:
                 self.sse_manager.broadcast_event('giveaway_entry', {
                     'giveaway_id': giveaway_id,
@@ -355,9 +351,6 @@ class GiveawayManager:
             if self.cache_manager:
                 self.cache_manager.invalidate(f"giveaway:{giveaway_id}")
 
-            if self.bot and self.bot.loop:
-                self.bot.loop.create_task(self.refresh_giveaway_embed(giveaway_id))
-                
             return {'success': True}
 
         except Exception as e:
@@ -629,21 +622,13 @@ class GiveawayManager:
 
         embed.add_field(name="How to Enter", value=instructions, inline=False)
         embed.add_field(name="Winners", value=f"{giveaway['winner_count']} winner(s) will be drawn", inline=True)
-        embed.add_field(name="Entries", value=f"Live count: {giveaway['total_entries']} entries", inline=True)
+        embed.add_field(name="Entries", value=f"{giveaway['total_entries']} entries", inline=True)
 
         ends_at = datetime.fromisoformat(giveaway['ends_at'].replace('Z', '+00:00'))
-        time_left = ends_at - datetime.now(timezone.utc)
-        
-        if time_left.total_seconds() > 0:
-            days = time_left.days
-            hours, remainder = divmod(time_left.seconds, 3600)
-            minutes, _ = divmod(remainder, 60)
-            time_str = f"{days}d {hours}h {minutes}m" if days > 0 else f"{hours}h {minutes}m"
-        else:
-            time_str = "< 1 minute"
+        timestamp = int(ends_at.timestamp())
             
-        embed.add_field(name="Time Left", value=time_str, inline=True)
-        embed.set_footer(text=f"Giveaway ID: {giveaway['id']} • Ends")
+        embed.add_field(name="Time Left", value=f"<t:{timestamp}:R>", inline=True)
+        embed.set_footer(text="Ends")
         embed.timestamp = ends_at
         
         return embed

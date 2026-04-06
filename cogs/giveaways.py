@@ -152,6 +152,7 @@ class Giveaways(commands.GroupCog, name="giveaway"):
     def __init__(self, bot):
         self.bot = bot
         self.giveaway_manager = None
+        self.last_refresh_hour = -1
         self.lifecycle_loop.start()
 
     def cog_unload(self):
@@ -353,21 +354,16 @@ class Giveaways(commands.GroupCog, name="giveaway"):
         except Exception as e:
              logger.error(f"Lifecycle loop end expired error: {e}")
 
-        # Step 3: Refresh live embeds
+        # Step 3: Refresh giveaway embeds (every 5 hours)
         try:
-            # We fetch all active with messages. Large servers might need limit/offset processing
-            active_m = manager.data_manager.admin_client.table('giveaways').select('id, ends_at').eq('status', 'active').not_.is_('message_id', 'null').execute()
-            # Basic throttling logic
-            for g in active_m.data:
-                ends_dt = datetime.fromisoformat(g['ends_at'].replace('Z', '+00:00'))
-                time_left = (ends_dt - datetime.now(timezone.utc)).total_seconds()
+            # Refresh every 5 hours
+            current_hour = datetime.now(timezone.utc).hour
+            if current_hour % 5 == 0 and self.last_refresh_hour != current_hour:
+                self.last_refresh_hour = current_hour
                 
-                # If less than 10 mins left, refresh every tick (30s)
-                # Ignore ones > 10m unless it matches a mod 10 loop. We will just simplify it here to refresh all for now.
-                # Proper throttling can be added by storing last_refresh or similar.
-                if time_left < 3600:
-                   await manager.refresh_giveaway_embed(g['id'])
-                
+                active_m = manager.data_manager.admin_client.table('giveaways').select('id').eq('status', 'active').not_.is_('message_id', 'null').execute()
+                for g in active_m.data:
+                    await manager.refresh_giveaway_embed(g['id'])
         except Exception as e:
             logger.error(f"Lifecycle loop refresh embed error: {e}")
 
