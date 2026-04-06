@@ -481,7 +481,7 @@ class AnnouncementManager:
 
     def get_announcements(self, guild_id: str) -> List[Dict]:
         """
-        Get all announcements for a guild.
+        Get all announcements for a guild, including scheduled ones.
         
         Args:
             guild_id: Guild ID
@@ -491,15 +491,37 @@ class AnnouncementManager:
         """
         try:
             data = self.data_manager.load_guild_data(guild_id, 'announcements')
+            if not data:
+                return []
+                
             announcements_dict = data.get('announcements', {})
+            scheduled_list = data.get('scheduled', [])
             
             announcements_list = []
+            
+            # Active/Posted announcements
             for ann_id, ann in announcements_dict.items():
-                ann['announcement_id'] = ann_id
-                announcements_list.append(ann)
+                if isinstance(ann, dict):
+                    ann['announcement_id'] = ann_id
+                    ann['status'] = 'posted'
+                    announcements_list.append(ann)
+            
+            # Scheduled announcements
+            for sched in scheduled_list:
+                if isinstance(sched, dict):
+                    sched['status'] = 'scheduled'
+                    # Ensure scheduled ID is consistent
+                    if 'id' in sched and 'announcement_id' not in sched:
+                        sched['announcement_id'] = sched['id']
+                    announcements_list.append(sched)
                 
-            # Sort by creation date (newest first)
-            announcements_list.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+            # Sort by date (scheduled_for for scheduled ones, created_at for posted ones)
+            def get_sort_date(x):
+                # Use ISO string directly for string comparison
+                date_str = x.get('scheduled_for') or x.get('created_at') or ''
+                return date_str
+
+            announcements_list.sort(key=get_sort_date, reverse=True)
             
             return announcements_list
         except Exception as e:

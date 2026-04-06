@@ -1286,16 +1286,21 @@ async function loadAnnouncements() {
 
             data.announcements.forEach(announcement => {
                 const channelName = getChannelDisplay(announcement.channel_id);
-                const createdBy = getUserDisplay(announcement.created_by);
-                const createdDate = new Date(announcement.created_at).toLocaleString();
+                // For scheduled, created_by might be author_name (from schedule_data in backend.py)
+                const createdBy = announcement.status === 'scheduled' ? (announcement.author_name || 'Admin') : getUserDisplay(announcement.created_by);
+                
+                const isScheduled = announcement.status === 'scheduled';
+                const displayDate = isScheduled ? new Date(announcement.scheduled_for).toLocaleString() : new Date(announcement.created_at).toLocaleString();
+                const dateLabel = isScheduled ? '📅 Scheduled for:' : '🕒 Posted:';
 
                 html += `
-                    <div class="announcement-card">
+                    <div class="announcement-card ${isScheduled ? 'announcement-scheduled' : ''}">
                         <div class="announcement-header">
                             <div class="announcement-title">
-                                <span class="announcement-type">📢</span>
+                                <span class="announcement-type">${isScheduled ? '🕒' : '📢'}</span>
                                 <h3>${announcement.title || 'Untitled'}</h3>
-                                ${announcement.is_pinned ? '<span class="pinned-badge">📌 Pinned</span>' : ''}
+                                ${announcement.is_pinned ? '<span class="badge pinned-badge">📌 Pinned</span>' : ''}
+                                ${isScheduled ? '<span class="badge scheduled-badge">✨ Scheduled</span>' : ''}
                             </div>
                             <div class="announcement-actions">
                                 <button onclick="editAnnouncement('${announcement.announcement_id}')" class="btn-small">✏️ Edit</button>
@@ -1308,8 +1313,8 @@ async function loadAnnouncements() {
                         <div class="announcement-meta">
                             <span>📍 ${channelName}</span>
                             <span>👤 ${createdBy}</span>
-                            <span>🕒 ${createdDate}</span>
-                            ${announcement.message_id ? `<a href="https://discord.com/channels/${currentServerId}/${announcement.channel_id}/${announcement.message_id}" target="_blank">🔗 View</a>` : ''}
+                            <span>${dateLabel} ${displayDate}</span>
+                            ${announcement.message_id ? `<a href="https://discord.com/channels/${currentServerId}/${announcement.channel_id}/${announcement.message_id}" target="_blank" class="view-link">🔗 View Message</a>` : ''}
                         </div>
                     </div>
                 `;

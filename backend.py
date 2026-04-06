@@ -2014,11 +2014,22 @@ def update_announcement(server_id, announcement_id):
 @require_guild_access
 def delete_announcement(server_id, announcement_id):
     try:
-        result = data_manager.admin_client.table('announcements') \
+        # 1. Attempt to delete from Supabase (posted announcements)
+        supabase_result = data_manager.admin_client.table('announcements') \
             .delete() \
             .eq('announcement_id', announcement_id) \
             .eq('guild_id', str(server_id)) \
             .execute()
+        
+        # 2. Attempt to delete from scheduled list in JSON (scheduled announcements)
+        announcements_data = data_manager.load_guild_data(str(server_id), 'announcements')
+        if announcements_data and 'scheduled' in announcements_data:
+            initial_count = len(announcements_data['scheduled'])
+            # Filter out the one to delete
+            announcements_data['scheduled'] = [s for s in announcements_data['scheduled'] if s.get('id') != announcement_id and s.get('announcement_id') != announcement_id]
+            
+            if len(announcements_data['scheduled']) < initial_count:
+                data_manager.save_guild_data(str(server_id), 'announcements', announcements_data)
         
         return jsonify({'success': True}), 200
     except Exception as e:
