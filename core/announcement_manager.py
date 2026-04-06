@@ -117,9 +117,9 @@ class AnnouncementManager:
                         embed = self._create_announcement_embed(announcement)
                         message = await channel.send(content=mention_content, embed=embed)
                     else:
-                        # Plain text announcement
-                        final_content = f"{mention_content}\n" if mention_content else ""
-                        final_content += f"**{title}**\n\n{content}"
+                        # Plain text announcement - cleaned up spacing
+                        final_content = f"{mention_content} " if mention_content else ""
+                        final_content += f"**{title}**\n{content}"
                         message = await channel.send(content=final_content)
 
                     # Update with message_id
@@ -268,10 +268,10 @@ class AnnouncementManager:
                                     # For simplicity, we just keep mention content and update embed.
                                     await message.edit(embed=embed)
                                 else:
-                                    # Plain text
+                                    # Plain text - cleaned up spacing
                                     mention_content = self._build_mention_string(guild, announcement.get("mentions"))
-                                    final_content = f"{mention_content}\n" if mention_content else ""
-                                    final_content += f"**{announcement['title']}**\n\n{announcement['content']}"
+                                    final_content = f"{mention_content} " if mention_content else ""
+                                    final_content += f"**{announcement['title']}**\n{announcement['content']}"
                                     await message.edit(content=final_content, embed=None)
                             except discord.NotFound:
                                 # Message deleted - clear message_id

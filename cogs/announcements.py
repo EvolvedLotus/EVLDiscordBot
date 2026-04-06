@@ -587,11 +587,11 @@ class Announcements(commands.Cog):
                                         sent_msg = await channel.send(content=mention_str, embed=embed)
                                     else:
                                         if is_delayed:
-                                            msg_content = f"**{title}**\n⚠️ *Delayed transmission ({int(delay_seconds//60)}m)*\n\n{content}"
+                                            msg_content = f"**{title}**\n⚠️ *Delayed transmission ({int(delay_seconds//60)}m)*\n{content}"
                                         else:
-                                            msg_content = f"**{title}**\n\n{content}"
+                                            msg_content = f"**{title}**\n{content}"
                                         
-                                        # Mentions
+                                        # Mentions - cleaned up spacing
                                         if item.get('mention_everyone'):
                                             msg_content = "@everyone " + msg_content
                                             
