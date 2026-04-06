@@ -1923,7 +1923,11 @@ def create_announcement(server_id):
                 announcements_data['scheduled'].append(schedule_data)
                 
                 # Save back
-                data_manager.save_guild_data(str(server_id), 'announcements', announcements_data)
+                success = data_manager.save_guild_data(str(server_id), 'announcements', announcements_data)
+                
+                if not success:
+                     logger.error(f"❌ Failed to save scheduled announcement to Supabase for guild {server_id}")
+                     return jsonify({'success': False, 'error': 'Failed to save announcement to database. Please check logs.'}), 500
                 
                 return jsonify({
                     'success': True, 

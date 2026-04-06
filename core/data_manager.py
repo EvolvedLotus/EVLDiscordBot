@@ -785,7 +785,7 @@ class DataManager:
                             if not isinstance(embed_data, dict): embed_data = {}
                             embed_data['use_embed'] = ann['use_embed']
 
-                        self.admin_client.table('announcements').upsert({
+                        data_to_upsert = {
                             'announcement_id': ann_id,
                             'guild_id': guild_id_str,
                             'title': ann.get('title', 'Untitled'),
@@ -796,7 +796,14 @@ class DataManager:
                             'is_pinned': ann.get('is_pinned', False),
                             'status': 'published',
                             'created_by': ann.get('created_by') or ann.get('author_id')
-                        }, on_conflict='announcement_id').execute()
+                        }
+
+                        try:
+                            self.admin_client.table('announcements').upsert(data_to_upsert, on_conflict='announcement_id').execute()
+                        except Exception as e:
+                            logger.error(f"❌ SUPABASE ERROR during published upsert: {e}")
+                            logger.error(f"Data being sent: {json.dumps(data_to_upsert, indent=2)}")
+                            raise
 
                     # 2. Save scheduled announcements
                     for sched in scheduled_list:
@@ -809,7 +816,7 @@ class DataManager:
                         if 'use_embed' in sched: embed_data['use_embed'] = sched['use_embed']
                         if 'scheduled_for' in sched: embed_data['scheduled_for'] = sched['scheduled_for']
 
-                        self.admin_client.table('announcements').upsert({
+                        data_to_upsert = {
                             'announcement_id': s_id,
                             'guild_id': guild_id_str,
                             'title': sched.get('title', 'Untitled'),
@@ -820,7 +827,14 @@ class DataManager:
                             'is_pinned': sched.get('is_pinned', False),
                             'status': 'scheduled',
                             'created_by': sched.get('author_id') or sched.get('created_by')
-                        }, on_conflict='announcement_id').execute()
+                        }
+
+                        try:
+                            self.admin_client.table('announcements').upsert(data_to_upsert, on_conflict='announcement_id').execute()
+                        except Exception as e:
+                            logger.error(f"❌ SUPABASE ERROR during scheduled upsert: {e}")
+                            logger.error(f"Data being sent: {json.dumps(data_to_upsert, indent=2)}")
+                            raise # Re-raise to trigger the outer catch and return False
 
                     logger.info(f"✅ Announcements data saved for guild {guild_id_str}")
 
