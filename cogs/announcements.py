@@ -26,6 +26,7 @@ class Announcements(commands.Cog):
         content="Announcement content",
         channel="Channel to post in (defaults to current)",
         mention_everyone="Mention @everyone",
+        use_embed="Use a Discord embed for the announcement",
         pin="Pin the announcement"
     )
     async def announce(
@@ -35,6 +36,7 @@ class Announcements(commands.Cog):
         content: str,
         channel: Optional[discord.TextChannel] = None,
         mention_everyone: bool = False,
+        use_embed: bool = True,
         pin: bool = False
     ):
         """Create and post announcement"""
@@ -60,7 +62,8 @@ class Announcements(commands.Cog):
                 author_name=interaction.user.display_name,
                 announcement_type="general",
                 mentions=mentions,
-                auto_pin=pin
+                auto_pin=pin,
+                use_embed=use_embed
             )
 
             await interaction.followup.send(
@@ -132,6 +135,7 @@ class Announcements(commands.Cog):
         delay_minutes="Delay in minutes before posting",
         channel="Channel to post in (defaults to current)",
         mention_everyone="Mention @everyone",
+        use_embed="Use a Discord embed when posted",
         pin="Pin the announcement when posted"
     )
     async def scheduleannouncement(
@@ -142,6 +146,7 @@ class Announcements(commands.Cog):
         delay_minutes: int,
         channel: Optional[discord.TextChannel] = None,
         mention_everyone: bool = False,
+        use_embed: bool = True,
         pin: bool = False
     ):
         """Schedule an announcement to be posted later"""
@@ -188,6 +193,7 @@ class Announcements(commands.Cog):
                 'author_id': str(interaction.user.id),
                 'author_name': interaction.user.display_name,
                 'mention_everyone': mention_everyone,
+                'use_embed': use_embed,
                 'auto_pin': pin,
                 'status': 'scheduled'
             }
@@ -562,17 +568,34 @@ class Announcements(commands.Cog):
                                     # Regular announcement
                                     content = item.get('content', '')
                                     title = item.get('title', 'Announcement')
+                                    use_embed = item.get('use_embed', False) if 'type' not in item else False # Backwards compat
                                     
-                                    if is_delayed:
-                                        msg_content = f"**{title}**\n⚠️ *Delayed transmission ({int(delay_seconds//60)}m)*\n\n{content}"
-                                    else:
-                                        msg_content = f"**{title}**\n\n{content}"
-                                    
-                                    # Mentions
-                                    if item.get('mention_everyone'):
-                                        msg_content = "@everyone " + msg_content
+                                    if use_embed:
+                                        embed = discord.Embed(
+                                            title=title,
+                                            description=content,
+                                            color=discord.Color.blue(),
+                                            timestamp=datetime.now()
+                                        )
+                                        embed.set_footer(text=f"Authored by {item.get('author_name', 'Unknown')}")
                                         
-                                    sent_msg = await channel.send(msg_content)
+                                        if is_delayed:
+                                            embed.description = f"⚠️ *Note: This scheduled announcement was delayed by {int(delay_seconds//60)} minutes.*\n\n" + str(embed.description)
+                                            
+                                        # Mentions
+                                        mention_str = "@everyone " if item.get('mention_everyone') else ""
+                                        sent_msg = await channel.send(content=mention_str, embed=embed)
+                                    else:
+                                        if is_delayed:
+                                            msg_content = f"**{title}**\n⚠️ *Delayed transmission ({int(delay_seconds//60)}m)*\n\n{content}"
+                                        else:
+                                            msg_content = f"**{title}**\n\n{content}"
+                                        
+                                        # Mentions
+                                        if item.get('mention_everyone'):
+                                            msg_content = "@everyone " + msg_content
+                                            
+                                        sent_msg = await channel.send(msg_content)
 
                                 if sent_msg and item.get('auto_pin'):
                                     try:

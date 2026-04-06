@@ -1863,6 +1863,7 @@ def create_announcement(server_id):
         # Scheduling parameters
         scheduled_for = data.get('scheduled_for') # ISO Format
         delay_minutes = data.get('delay_minutes')
+        use_embed = data.get('use_embed', True)
         
         # Enforce Premium Limits for Scheduling
         if scheduled_for or delay_minutes:
@@ -1904,6 +1905,7 @@ def create_announcement(server_id):
                     'author_name': author_name,
                     'mention_everyone': False, # Backend API might need a param for this
                     'auto_pin': auto_pin,
+                    'use_embed': use_embed,
                     'status': 'scheduled',
                     'type': 'announcement' # Explicitly mark as simple announcement
                 }
@@ -1944,7 +1946,8 @@ def create_announcement(server_id):
                     author_name=author_name,
                     announcement_type=announcement_type,
                     embed_color=embed_color,
-                    auto_pin=auto_pin
+                    auto_pin=auto_pin,
+                    use_embed=use_embed
                 ),
                 _bot_instance.loop
             )
@@ -1990,6 +1993,8 @@ def update_announcement(server_id, announcement_id):
             update_data['channel_id'] = data['channel_id']
         if 'is_pinned' in data:
             update_data['is_pinned'] = data['is_pinned']
+        if 'use_embed' in data:
+            update_data['use_embed'] = data['use_embed']
         
         result = data_manager.admin_client.table('announcements') \
             .update(update_data) \

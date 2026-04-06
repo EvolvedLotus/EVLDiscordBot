@@ -7403,6 +7403,7 @@ window.editAnnouncement = async function (announcementId) {
         document.getElementById('announcement-content').value = item.content || '';
         document.getElementById('announcement-channel').value = item.channel_id || '';
         document.getElementById('announcement-pinned').checked = !!item.is_pinned;
+        document.getElementById('announcement-use-embed').checked = item.use_embed !== undefined ? !!item.use_embed : true;
         document.getElementById('announcement-modal').style.display = 'block';
     } catch (e) {
         showNotification('Load failed: ' + e.message, 'error');
@@ -7434,6 +7435,7 @@ window.saveAnnouncement = async function (event) {
         content: document.getElementById('announcement-content').value,
         channel_id: document.getElementById('announcement-channel').value,
         is_pinned: document.getElementById('announcement-pinned').checked,
+        use_embed: document.getElementById('announcement-use-embed').checked,
         delay_minutes: delay ? parseInt(delay) : undefined,
         scheduled_for: scheduledTime ? new Date(scheduledTime).toISOString() : undefined
     };
@@ -7631,6 +7633,7 @@ window.showCreateAnnouncementModal = function () {
     document.getElementById('announcement-modal-title').textContent = 'Create Announcement';
     document.getElementById('announcement-form').reset();
     document.getElementById('announcement-id').value = '';
+    document.getElementById('announcement-use-embed').checked = true;
     // Populate channels
     const chSelect = document.getElementById('announcement-channel');
     if (chSelect && window.discordDataCache.channels) {

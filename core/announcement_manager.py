@@ -38,7 +38,8 @@ class AnnouncementManager:
         mentions: Dict[str, Any] = None,
         embed_color: str = "#5865F2",
         thumbnail: str = None,
-        auto_pin: bool = False
+        auto_pin: bool = False,
+        use_embed: bool = True
     ) -> Dict[str, Any]:
         """
         Create announcement and post to Discord
@@ -95,6 +96,7 @@ class AnnouncementManager:
                     "created_at": datetime.utcnow().isoformat(),
                     "pinned": False,
                     "mentions": mentions or {"everyone": False, "roles": [], "users": []},
+                    "use_embed": use_embed,
                     "embed": {
                         "color": embed_color,
                         "thumbnail": thumbnail
@@ -105,15 +107,20 @@ class AnnouncementManager:
                 ann_data["announcements"][announcement_id] = announcement
                 self.data_manager.save_guild_data(guild_id, "announcements", ann_data)
 
-                # Create Discord embed
-                embed = self._create_announcement_embed(announcement)
-
                 # Build mention content
                 mention_content = self._build_mention_string(guild, mentions)
 
                 # Post to Discord
                 try:
-                    message = await channel.send(content=mention_content, embed=embed)
+                    if use_embed:
+                        # Create Discord embed
+                        embed = self._create_announcement_embed(announcement)
+                        message = await channel.send(content=mention_content, embed=embed)
+                    else:
+                        # Plain text announcement
+                        final_content = f"{mention_content}\n" if mention_content else ""
+                        final_content += f"**{title}**\n\n{content}"
+                        message = await channel.send(content=final_content)
 
                     # Update with message_id
                     announcement["message_id"] = str(message.id)
@@ -211,7 +218,8 @@ class AnnouncementManager:
         announcement_id: str,
         title: str = None,
         content: str = None,
-        embed_color: str = None
+        embed_color: str = None,
+        use_embed: bool = None
     ) -> Dict[str, Any]:
         """
         Edit existing announcement and sync to Discord
@@ -237,6 +245,8 @@ class AnnouncementManager:
                     announcement["content"] = content
                 if embed_color is not None:
                     announcement["embed"]["color"] = embed_color
+                if use_embed is not None:
+                    announcement["use_embed"] = use_embed
 
                 # Save to data first
                 ann_data["announcements"][announcement_id] = announcement
@@ -250,8 +260,19 @@ class AnnouncementManager:
                         if channel:
                             try:
                                 message = await channel.fetch_message(int(announcement["message_id"]))
-                                embed = self._create_announcement_embed(announcement)
-                                await message.edit(embed=embed)
+                                
+                                if announcement.get("use_embed", True):
+                                    embed = self._create_announcement_embed(announcement)
+                                    # When switching to embed, we might want to clear the main content if it had the title
+                                    # But wait, mention_content is usually there. 
+                                    # For simplicity, we just keep mention content and update embed.
+                                    await message.edit(embed=embed)
+                                else:
+                                    # Plain text
+                                    mention_content = self._build_mention_string(guild, announcement.get("mentions"))
+                                    final_content = f"{mention_content}\n" if mention_content else ""
+                                    final_content += f"**{announcement['title']}**\n\n{announcement['content']}"
+                                    await message.edit(content=final_content, embed=None)
                             except discord.NotFound:
                                 # Message deleted - clear message_id
                                 announcement["message_id"] = None
