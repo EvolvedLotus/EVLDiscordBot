@@ -269,9 +269,7 @@ class GiveawayManager:
                     'p_user_id': str(user_id),
                     'p_tickets': tickets,
                     'p_raffle_cost': giveaway.get('raffle_cost', 0),
-                    'p_max_tickets': giveaway.get('raffle_max_tickets_per_user', 10),
-                    'p_reason': f"Giveaway raffle entry ({tickets} tickets)",
-                    'p_transaction_type': 'giveaway_raffle'
+                    'p_max_tickets': giveaway.get('raffle_max_tickets_per_user', 10)
                 }).execute()
                 
                 if not rpc_res.data or not rpc_res.data.get('success'):
@@ -279,7 +277,7 @@ class GiveawayManager:
                     raise ValueError(f"Transaction failed: {err_msg}")
                     
                 amount_spent = tickets * giveaway.get('raffle_cost', 0)
-                upsert_data = rpc_res.data['entry']
+                upsert_data = rpc_res.data
 
             elif entry_mode == 'open':
                 if existing_entry:
@@ -308,9 +306,15 @@ class GiveawayManager:
                         'tickets': tickets,
                         'amount_spent': amount_spent
                     }).execute()
+                
+                    if res.data:
+                        upsert_data = res.data[0]
     
                 # Increment denormalized count (raffle does this inside RPC)
-                self.data_manager.admin_client.rpc('increment_giveaway_entries', {'g_id': giveaway_id, 't_count': tickets}).execute()
+                try:
+                    self.data_manager.admin_client.rpc('increment_giveaway_entries', {'g_id': giveaway_id, 't_count': tickets}).execute()
+                except Exception as rpc_err:
+                    logger.warning(f"increment_giveaway_entries RPC failed (non-fatal): {rpc_err}")
             
             if self.cache_manager:
                 self.cache_manager.invalidate(f"giveaway:{giveaway_id}")

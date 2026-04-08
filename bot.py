@@ -153,6 +153,7 @@ async def run_bot():
         sse_manager.set_event_loop(asyncio.get_event_loop())
         sse_manager.start()
         bot.giveaway_manager.set_sse_manager(sse_manager)
+        bot.giveaway_manager.set_bot(bot)
 
         # Load cogs AFTER managers are attached
         logger.info("Loading cogs...")
@@ -242,6 +243,7 @@ async def run_bot():
         try:
             from core.task_channel_monitor import GlobalTaskClaimView
             from cogs.tasks import TaskClaimView
+            from cogs.giveaways import GiveawayEntryView
             
             # Register GlobalTaskClaimView for ad claim tasks
             # Note: We'll pass ad_claim_manager when the view is recreated
@@ -416,6 +418,17 @@ async def run_bot():
             logger.info("=" * 60)
             logger.info("🎉 BOT IS FULLY READY AND OPERATIONAL")
             logger.info("=" * 60)
+
+            # Re-register GiveawayEntryViews after ready (catches any giveaways created during downtime)
+            try:
+                from cogs.giveaways import GiveawayEntryView
+                active_gw = data_manager.admin_client.table('giveaways').select('id').eq('status', 'active').not_.is_('message_id', 'null').execute()
+                if active_gw.data:
+                    for g in active_gw.data:
+                        bot.add_view(GiveawayEntryView(giveaway_id=g['id']))
+                    logger.info(f"✅ Re-registered {len(active_gw.data)} GiveawayEntryViews after ready")
+            except Exception as e:
+                logger.error(f"❌ Failed to re-register GiveawayEntryViews on ready: {e}")
 
         @bot.event
         async def on_guild_join(guild):
