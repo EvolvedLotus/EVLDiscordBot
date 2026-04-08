@@ -327,6 +327,9 @@ class GiveawayManager:
                     'user_id': str(user_id)
                 }, target_guild=str(guild_id))
 
+            if self.bot and self.bot.loop:
+                self.bot.loop.create_task(self.refresh_giveaway_embed(giveaway_id))
+
             return upsert_data
 
         except Exception as e:
@@ -354,6 +357,9 @@ class GiveawayManager:
             
             if self.cache_manager:
                 self.cache_manager.invalidate(f"giveaway:{giveaway_id}")
+
+            if self.bot and self.bot.loop:
+                self.bot.loop.create_task(self.refresh_giveaway_embed(giveaway_id))
 
             return {'success': True}
 
