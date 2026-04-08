@@ -39,6 +39,7 @@ class RaffleTicketModal(discord.ui.Modal):
                 str(interaction.user.id),
                 tickets=tickets
             )
+            await self.giveaway_manager.refresh_giveaway_embed(self.giveaway_id)
             await interaction.followup.send(f"✅ You've purchased {tickets} tickets! Total spent: {tickets * self.giveaway.get('raffle_cost', 0)}.", ephemeral=True)
         except ValueError as ve:
             await interaction.followup.send(f"❌ Cannot enter: {ve}", ephemeral=True)
@@ -90,6 +91,7 @@ class GiveawayEntryView(discord.ui.View):
                         return await interaction.followup.send("❌ You do not have the required roles to enter.", ephemeral=True)
                         
                 res = manager.enter_giveaway(self.giveaway_id, str(interaction.guild_id), str(interaction.user.id))
+                await manager.refresh_giveaway_embed(self.giveaway_id)
                 await interaction.followup.send("✅ You've entered the giveaway!", ephemeral=True)
                 
         except ValueError as ve:
@@ -112,6 +114,7 @@ class GiveawayEntryView(discord.ui.View):
             
         try:
             manager.withdraw_entry(self.giveaway_id, str(interaction.guild_id), str(interaction.user.id))
+            await manager.refresh_giveaway_embed(self.giveaway_id)
             await interaction.followup.send("✅ You've withdrawn from the giveaway.", ephemeral=True)
         except ValueError as ve:
             await interaction.followup.send(f"❌ Cannot withdraw: {ve}", ephemeral=True)
