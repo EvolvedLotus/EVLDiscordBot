@@ -101,9 +101,7 @@ class AuditManager:
                 'message_id': message_id,
                 'details': json.dumps(details),
                 'can_undo': can_undo,
-                'created_at': datetime.now(timezone.utc).isoformat(),
-                'ip_address': None,  # Set by calling context
-                'user_agent': None   # Set by calling context
+                'created_at': datetime.now(timezone.utc).isoformat()
             }
 
             # Add to buffer

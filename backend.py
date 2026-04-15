@@ -2090,7 +2090,7 @@ def create_embed(server_id):
 @require_guild_access
 def get_embed(server_id, embed_id):
     try:
-        embed = embed_builder.get_embed(server_id, embed_id)
+        embed = embed_manager.get_embed(server_id, embed_id)
         return jsonify(embed), 200
     except Exception as e:
         return safe_error_response(e)
@@ -2101,7 +2101,7 @@ def get_embed(server_id, embed_id):
 def update_embed(server_id, embed_id):
     try:
         data = request.get_json()
-        embed = embed_builder.update_embed(server_id, embed_id, data)
+        embed = embed_manager.update_embed(server_id, embed_id, data)
         return jsonify(embed), 200
     except Exception as e:
         return safe_error_response(e)
@@ -2252,11 +2252,21 @@ def send_embed_to_channel(server_id, embed_id):
         if not channel:
             return jsonify({'error': 'Channel not found'}), 404
         
+        # Handle possible color formats
+        color_val = embed_data.get('color', '#5865F2')
+        if isinstance(color_val, str) and color_val.startswith('#'):
+            color_int = int(color_val.strip('#'), 16)
+        else:
+            try:
+                color_int = int(color_val) if color_val else 0x5865F2
+            except (ValueError, TypeError):
+                color_int = 0x5865F2
+
         # Build the Discord embed
         embed = discord.Embed(
             title=embed_data.get('title'),
             description=embed_data.get('description'),
-            color=int(embed_data.get('color', '0x5865F2').replace('#', '0x'), 16) if embed_data.get('color') else 0x5865F2
+            color=color_int
         )
         
         if embed_data.get('footer'):
