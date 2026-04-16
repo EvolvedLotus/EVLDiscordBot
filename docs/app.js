@@ -7475,9 +7475,16 @@ window.editEmbed = async function (embedId) {
         document.getElementById('embed-title').value = item.title || '';
         document.getElementById('embed-description').value = item.description || '';
         document.getElementById('embed-color').value = item.color || '#5865F2';
-        document.getElementById('embed-footer').value = item.footer || '';
-        document.getElementById('embed-image-url').value = item.image || '';
-        document.getElementById('embed-thumbnail-url').value = item.thumbnail || '';
+        
+        // Unwrap potential objects from DB
+        const footerValue = item.footer;
+        document.getElementById('embed-footer').value = (typeof footerValue === 'object' && footerValue !== null) ? (footerValue.text || '') : (footerValue || '');
+        
+        const imageValue = item.image || item.image_url;
+        document.getElementById('embed-image-url').value = (typeof imageValue === 'object' && imageValue !== null) ? (imageValue.url || '') : (imageValue || '');
+        
+        const thumbValue = item.thumbnail || item.thumbnail_url;
+        document.getElementById('embed-thumbnail-url').value = (typeof thumbValue === 'object' && thumbValue !== null) ? (thumbValue.url || '') : (thumbValue || '');
         document.getElementById('embed-modal').style.display = 'block';
         if (typeof updateEmbedPreview === 'function') updateEmbedPreview();
     } catch (e) {
@@ -7906,9 +7913,9 @@ window.saveEmbed = async function (event) {
                 title: embedData.title,
                 description: embedData.description,
                 color: colorInt,
-                footer: embedData.footer?.text,
-                image_url: embedData.image?.url,
-                thumbnail_url: embedData.thumbnail?.url
+                footer: embedData.footer, // Send as object {text: ...}
+                image: embedData.image,   // Send as object {url: ...}
+                thumbnail: embedData.thumbnail // Send as object {url: ...}
             };
 
             await apiCall(`/api/servers/${currentServerId}/messages/${channelId}/${messageId}`, {
@@ -7927,9 +7934,9 @@ window.saveEmbed = async function (event) {
                 title: embedData.title,
                 description: embedData.description,
                 color: embedData.color, // Keep as hex string
-                footer: embedData.footer?.text,
-                image_url: embedData.image?.url,
-                thumbnail_url: embedData.thumbnail?.url
+                footer: embedData.footer,    // Send as object {text: ...}
+                image: embedData.image,      // Send as object {url: ...}
+                thumbnail: embedData.thumbnail // Send as object {url: ...}
             };
 
             // Clean undefined
