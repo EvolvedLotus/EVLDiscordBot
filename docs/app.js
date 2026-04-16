@@ -8166,3 +8166,50 @@ window.rerollGiveaway = async function(id) {
     }
 };
 
+// ========== RE-REGISTER LOAD EMBEDS FOR CMS v4.0 ==========
+async function loadEmbeds() {
+    if (!window.currentServerId) return;
+    const list = document.getElementById('embeds-list');
+    if (!list) return;
+    list.innerHTML = '<div class="loading">Loading embeds...</div>';
+
+    try {
+        const data = await apiCall(`/api/servers/${currentServerId}/embeds`);
+
+        if (data && data.embeds && data.embeds.length > 0) {
+            let html = '<div class="embeds-list-container"><div class="embeds-grid">';
+
+            data.embeds.forEach(embed => {
+                const channelName = embed.channel_id || 'Global';
+
+                html += `
+                    <div class="embed-card">
+                        <div class="embed-preview" style="border-left: 4px solid ${embed.color || '#5865F2'}">
+                            <h4>${embed.title || 'Untitled'}</h4>
+                            <p>${embed.description || 'No description'}</p>
+                        </div>
+                        <div class="embed-meta">
+                            <span>📍 ${channelName}</span>
+                            <span>👤 ${embed.created_by || 'Unknown'}</span>
+                        </div>
+                        <div class="embed-actions">
+                            <button onclick="window.editEmbed('${embed.embed_id}')" class="btn-small btn-primary">✏️ Edit</button>
+                            <button onclick="window.sendEmbed('${embed.embed_id}')" class="btn-small btn-success">📤 Send</button>
+                            <button onclick="window.deleteEmbed('${embed.embed_id}')" class="btn-small btn-danger">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div></div>';
+            list.innerHTML = html;
+        } else {
+            list.innerHTML = `<div class="empty-state"><h3>No embeds yet</h3></div>`;
+        }
+    } catch (error) {
+        list.innerHTML = `<div class="error-state">Failed to load: ${error.message}</div>`;
+    }
+}
+window.loadEmbeds = loadEmbeds;
+// Re-map the tab loader too
+window.loadEmbedsTab = () => window.loadEmbeds();
