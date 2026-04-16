@@ -630,7 +630,7 @@ class DataManager:
                             'message_id': embed_data.get('message_id'),
                             'created_by': embed_data.get('created_by'),
                             'updated_at': datetime.now(timezone.utc).isoformat()
-                        }).execute()
+                        }, on_conflict='guild_id,embed_id').execute()
 
                     logger.info(f"✅ Config data saved for guild {guild_id_str}")
 

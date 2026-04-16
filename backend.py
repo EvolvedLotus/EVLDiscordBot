@@ -2080,7 +2080,7 @@ def create_embed(server_id):
             'channel_id': embed_data.get('channel_id'),
             'created_by': request.user.get('id', 'unknown'),
             'created_at': embed_data['created_at']
-        }).execute()
+        }, on_conflict='guild_id,embed_id').execute()
         
         return jsonify(embed_data), 201
     except Exception as e:
