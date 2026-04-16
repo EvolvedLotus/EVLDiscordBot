@@ -2450,9 +2450,13 @@ def get_discord_message(server_id, channel_id, message_id):
                     'embeds': embeds,
                     'created_at': message.created_at.isoformat()
                 }, 200
+            except discord.NotFound:
+                return {'error': 'Message not found.'}, 404
+            except discord.Forbidden:
+                return {'error': 'Bot does not have permission to view this message.'}, 403
             except Exception as e:
                 logger.error(f"Error fetching message {message_id}: {e}")
-                return {'error': f'Failed to fetch message: {str(e)}'}, 404
+                return {'error': f'Failed to fetch message: {str(e)}'}, 500
 
         # Run async function in bot's loop
         import asyncio
@@ -2487,9 +2491,12 @@ def edit_discord_message(server_id, channel_id, message_id):
             try:
                 message = await channel.fetch_message(int(message_id))
                 
+                # Check if bot is the author
+                if message.author.id != _bot_instance.user.id:
+                    return {'error': 'Cannot edit a message authored by another user. You can only edit messages sent by the bot.'}, 403
+                
                 # Format embed from data
                 import discord
-                # Handle possible color formats
                 color_val = data.get('color', '#5865F2')
                 if isinstance(color_val, str) and color_val.startswith('#'):
                     color_int = int(color_val.strip('#'), 16)
@@ -2514,9 +2521,13 @@ def edit_discord_message(server_id, channel_id, message_id):
                     
                 await message.edit(embed=embed)
                 return {'success': True, 'message': 'Message edited successfully'}, 200
+            except discord.NotFound:
+                return {'error': 'Message not found.'}, 404
+            except discord.Forbidden:
+                return {'error': 'Bot does not have permission to edit this message.'}, 403
             except Exception as e:
                 logger.error(f"Error editing message {message_id}: {e}")
-                return {'error': f'Failed to edit message: {str(e)}'}, 404
+                return {'error': f'Failed to edit message: {str(e)}'}, 500
 
         # Run async function in bot's loop
         import asyncio
