@@ -2062,10 +2062,10 @@ def create_embed(server_id):
         embed_data = embed_builder.create_embed(server_id, data)
         
         # Save to database
-        # Prepare JSONB fields
-        footer_data = {'text': embed_data.get('footer')} if embed_data.get('footer') else None
-        thumbnail_data = {'url': embed_data.get('thumbnail_url')} if embed_data.get('thumbnail_url') else None
-        image_data = {'url': embed_data.get('image_url')} if embed_data.get('image_url') else None
+        # Prepare JSONB fields (frontend already sends as {text: ...} or {url: ...})
+        footer_data = embed_data.get('footer')
+        thumbnail_data = embed_data.get('thumbnail')
+        image_data = embed_data.get('image')
 
         data_manager.admin_client.table('embeds').upsert({
             'embed_id': embed_data['embed_id'],
