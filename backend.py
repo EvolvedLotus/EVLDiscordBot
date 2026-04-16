@@ -2270,13 +2270,22 @@ def send_embed_to_channel(server_id, embed_id):
         )
         
         if embed_data.get('footer'):
-            embed.set_footer(text=embed_data['footer'])
+            footer = embed_data['footer']
+            footer_text = footer.get('text', '') if isinstance(footer, dict) else footer
+            if footer_text:
+                embed.set_footer(text=footer_text)
         
         if embed_data.get('thumbnail'):
-            embed.set_thumbnail(url=embed_data['thumbnail'])
+            thumb = embed_data['thumbnail']
+            thumb_url = thumb.get('url', '') if isinstance(thumb, dict) else thumb
+            if thumb_url:
+                embed.set_thumbnail(url=thumb_url)
         
         if embed_data.get('image'):
-            embed.set_image(url=embed_data['image'])
+            img = embed_data['image']
+            img_url = img.get('url', '') if isinstance(img, dict) else img
+            if img_url:
+                embed.set_image(url=img_url)
         
         # Add fields if present
         if embed_data.get('fields'):
@@ -2510,13 +2519,25 @@ def edit_discord_message(server_id, channel_id, message_id):
                 )
                 
                 if data.get('footer'):
-                    footer_text = data['footer']
-                    if isinstance(footer_text, dict):
-                        footer_text = footer_text.get('text', '')
-                    embed.set_footer(text=footer_text)
-                if data.get('image_url'):
+                    footer = data['footer']
+                    footer_text = footer.get('text', '') if isinstance(footer, dict) else footer
+                    if footer_text:
+                        embed.set_footer(text=footer_text)
+                
+                if data.get('image'):
+                    img = data['image']
+                    img_url = img.get('url', '') if isinstance(img, dict) else img
+                    if img_url:
+                        embed.set_image(url=img_url)
+                elif data.get('image_url'):
                     embed.set_image(url=data.get('image_url'))
-                if data.get('thumbnail_url'):
+                    
+                if data.get('thumbnail'):
+                    thumb = data['thumbnail']
+                    thumb_url = thumb.get('url', '') if isinstance(thumb, dict) else thumb
+                    if thumb_url:
+                        embed.set_thumbnail(url=thumb_url)
+                elif data.get('thumbnail_url'):
                     embed.set_thumbnail(url=data.get('thumbnail_url'))
                     
                 await message.edit(embed=embed)
