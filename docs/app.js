@@ -7468,7 +7468,10 @@ window.editEmbed = async function (embedId) {
         if (!item) return showNotification('Embed not found', 'error');
 
         document.getElementById('embed-modal-title').textContent = 'Edit Embed';
-        document.getElementById('embed-id').value = embedId;
+        const idField = document.getElementById('embed-id');
+        idField.value = embedId;
+        delete idField.dataset.messageId;
+        delete idField.dataset.channelId;
         document.getElementById('embed-title').value = item.title || '';
         document.getElementById('embed-description').value = item.description || '';
         document.getElementById('embed-color').value = item.color || '#5865F2';
@@ -7652,7 +7655,10 @@ window.showCreateEmbedModal = function () {
     window.logCmsAction('show_create_embed_modal');
     document.getElementById('embed-modal-title').textContent = 'Create Embed';
     document.getElementById('embed-form').reset();
-    document.getElementById('embed-id').value = '';
+    const embedIdField = document.getElementById('embed-id');
+    embedIdField.value = '';
+    delete embedIdField.dataset.messageId;
+    delete embedIdField.dataset.channelId;
     document.getElementById('embed-modal').style.display = 'block';
     if (typeof updateEmbedPreview === 'function') updateEmbedPreview();
 };
