@@ -7327,6 +7327,11 @@ console.log('✅ Channel Lock Schedules JS loaded');
 
 console.log('[CMS] Applying final button overrides...');
 
+// ========== SERVER ID HELPER ==========
+function getServerId() {
+    return window.currentServerId || (typeof currentServerId !== 'undefined' ? currentServerId : null) || document.getElementById('server-select')?.value;
+}
+
 // ========== ACTIVITY LOGGING HELPER ==========
 async function logCmsAction(action, details = {}, success = true, guildId = null) {
     console.log(`[ACTION] ${action}`, details);
@@ -7337,7 +7342,7 @@ async function logCmsAction(action, details = {}, success = true, guildId = null
                 action,
                 details,
                 success,
-                guild_id: guildId || window.currentServerId || 0
+                guild_id: guildId || getServerId() || 0
             })
         });
     } catch (e) {
@@ -7366,10 +7371,12 @@ window.closeSendEmbedModal = () => closeModal('send-embed-modal');
 
 // ========== SHOP ACTIONS ==========
 window.deleteShopItem = async function (itemId) {
+    const sId = getServerId();
+    if (!sId) return showNotification('No server selected', 'error');
     if (!confirm('Are you sure you want to delete this shop item?')) return;
     logCmsAction('delete_shop_item_start', { item_id: itemId });
     try {
-        await apiCall(`/api/servers/${currentServerId}/shop/${itemId}`, { method: 'DELETE' });
+        await apiCall(`/api/servers/${sId}/shop/${itemId}`, { method: 'DELETE' });
         showNotification('Item deleted', 'success');
         logCmsAction('delete_shop_item_success', { item_id: itemId });
         loadShop();
@@ -7381,10 +7388,12 @@ window.deleteShopItem = async function (itemId) {
 
 // ========== TASK ACTIONS ==========
 window.deleteTask = async function (taskId) {
+    const sId = getServerId();
+    if (!sId) return showNotification('No server selected', 'error');
     if (!confirm('Are you sure you want to delete this task?')) return;
     logCmsAction('delete_task_start', { task_id: taskId });
     try {
-        await apiCall(`/api/servers/${currentServerId}/tasks/${taskId}`, { method: 'DELETE' });
+        await apiCall(`/api/servers/${sId}/tasks/${taskId}`, { method: 'DELETE' });
         showNotification('Task deleted', 'success');
         logCmsAction('delete_task_success', { task_id: taskId });
         loadTasks();
@@ -7396,9 +7405,10 @@ window.deleteTask = async function (taskId) {
 
 // ========== ANNOUNCEMENT ACTIONS ==========
 window.editAnnouncement = async function (announcementId) {
+    const sId = getServerId();
     logCmsAction('edit_announcement_click', { announcement_id: announcementId });
     try {
-        const data = await apiCall(`/api/servers/${currentServerId}/announcements`);
+        const data = await apiCall(`/api/servers/${sId}/announcements`);
         const item = data.announcements.find(a => a.announcement_id === announcementId);
         if (!item) return showNotification('Announcement not found', 'error');
 
@@ -7447,7 +7457,8 @@ window.saveAnnouncement = async function (event) {
     logCmsAction('save_announcement_start', { id, body });
     try {
         const method = id ? 'PUT' : 'POST';
-        const url = id ? `/api/servers/${currentServerId}/announcements/${id}` : `/api/servers/${currentServerId}/announcements`;
+        const sId = getServerId();
+        const url = id ? `/api/servers/${sId}/announcements/${id}` : `/api/servers/${sId}/announcements`;
         await apiCall(url, { method, body: JSON.stringify(body) });
         showNotification(id ? 'Announcement updated' : 'Announcement created', 'success');
         logCmsAction('save_announcement_success', { id });
@@ -7461,9 +7472,10 @@ window.saveAnnouncement = async function (event) {
 
 // ========== EMBED ACTIONS ==========
 window.editEmbed = async function (embedId) {
+    const sId = getServerId();
     logCmsAction('edit_embed_click', { embed_id: embedId });
     try {
-        const data = await apiCall(`/api/servers/${currentServerId}/embeds`);
+        const data = await apiCall(`/api/servers/${sId}/embeds`);
         const item = data.embeds.find(e => e.embed_id === embedId);
         if (!item) return showNotification('Embed not found', 'error');
 
@@ -7493,10 +7505,12 @@ window.editEmbed = async function (embedId) {
 };
 
 window.deleteEmbed = async function (embedId) {
+    const sId = getServerId();
+    if (!sId) return showNotification('No server selected', 'error');
     if (!confirm('Are you sure you want to delete this embed?')) return;
     logCmsAction('delete_embed_start', { embed_id: embedId });
     try {
-        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}`, { method: 'DELETE' });
+        await apiCall(`/api/servers/${sId}/embeds/${embedId}`, { method: 'DELETE' });
         showNotification('Embed deleted', 'success');
         logCmsAction('delete_embed_success', { embed_id: embedId });
         loadEmbeds();
@@ -7534,8 +7548,9 @@ window.confirmSendEmbed = async function (embedId) {
         scheduled_for: scheduledTime ? new Date(scheduledTime).toISOString() : undefined
     };
 
+    const sId = getServerId();
     try {
-        await apiCall(`/api/servers/${currentServerId}/embeds/${embedId}/send`, {
+        await apiCall(`/api/servers/${sId}/embeds/${embedId}/send`, {
             method: 'POST',
             body: JSON.stringify(payload)
         });
@@ -7942,10 +7957,10 @@ window.saveEmbed = async function (event) {
             // Clean undefined
             Object.keys(dbPayload).forEach(key => dbPayload[key] === undefined && delete dbPayload[key]);
 
-            const method = (embedId && embedId !== 'discord-message') ? 'PUT' : 'POST';
+            const sId = getServerId();
             const url = (embedId && embedId !== 'discord-message')
-                ? `/api/servers/${currentServerId}/embeds/${embedId}`
-                : `/api/servers/${currentServerId}/embeds`;
+                ? `/api/servers/${sId}/embeds/${embedId}`
+                : `/api/servers/${sId}/embeds`;
 
             await apiCall(url, { method, body: JSON.stringify(dbPayload) });
             showNotification('Embed saved to database!', 'success');
@@ -8168,13 +8183,14 @@ window.rerollGiveaway = async function(id) {
 
 // ========== RE-REGISTER LOAD EMBEDS FOR CMS v4.0 ==========
 async function loadEmbeds() {
-    if (!window.currentServerId) return;
+    const sId = getServerId();
+    if (!sId) return;
     const list = document.getElementById('embeds-list');
     if (!list) return;
     list.innerHTML = '<div class="loading">Loading embeds...</div>';
 
     try {
-        const data = await apiCall(`/api/servers/${currentServerId}/embeds`);
+        const data = await apiCall(`/api/servers/${sId}/embeds`);
 
         if (data && data.embeds && data.embeds.length > 0) {
             let html = '<div class="embeds-list-container"><div class="embeds-grid">';
