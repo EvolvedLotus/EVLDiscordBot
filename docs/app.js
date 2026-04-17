@@ -7958,9 +7958,11 @@ window.saveEmbed = async function (event) {
             Object.keys(dbPayload).forEach(key => dbPayload[key] === undefined && delete dbPayload[key]);
 
             const sId = getServerId();
-            const url = (embedId && embedId !== 'discord-message')
+            const isEdit = embedId && embedId !== 'discord-message';
+            const url = isEdit
                 ? `/api/servers/${sId}/embeds/${embedId}`
                 : `/api/servers/${sId}/embeds`;
+            const method = isEdit ? 'PUT' : 'POST';
 
             await apiCall(url, { method, body: JSON.stringify(dbPayload) });
             showNotification('Embed saved to database!', 'success');
